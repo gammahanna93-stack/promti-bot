@@ -11,8 +11,10 @@
   "dependencies": {
     "@fal-ai/client": "^1.4.0",
     "axios": "^1.7.7",
-    "dotenv": "^16.4.5",
-    "express": "^4.21.2",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
     "telegraf": "^4.16.3"
-  }
+  },
+  "keywords": [],
+  "type": "commonjs"
 }

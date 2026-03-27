@@ -560,6 +560,40 @@ function buildWfpAcceptResponse(orderReference) {
   };
 }
 
+function normalizeWayForPayCallbackBody(body) {
+  if (!body) return {};
+
+  if (typeof body === "string") {
+    try {
+      return JSON.parse(body);
+    } catch {
+      return {};
+    }
+  }
+
+  if (typeof body === "object" && !Array.isArray(body)) {
+    if (body.merchantAccount && body.orderReference) {
+      return body;
+    }
+
+    const keys = Object.keys(body);
+
+    if (keys.length === 1) {
+      const firstKey = keys[0];
+
+      if (firstKey && firstKey.startsWith("{") && firstKey.endsWith("}")) {
+        try {
+          return JSON.parse(firstKey);
+        } catch {
+          return body;
+        }
+      }
+    }
+  }
+
+  return body;
+}
+
 async function createWayForPayPaymentUrl(userId, packKey) {
   const amount = getPackageAmount(packKey);
   const orderReference = buildOrderReference(userId, packKey);
@@ -692,7 +726,23 @@ function adminMenu() {
     ["⬅️ Назад в основне меню"],
   ]).resize();
 }
+function buildAdminModesKeyboard(group) {
+  const rows = [];
 
+  for (const [key, mode] of Object.entries(db.modes)) {
+    if (mode.group !== group) continue;
+    rows.push([`${mode.label} | ${key}`]);
+  }
+
+  rows.push(["⬅️ Назад в основне меню"]);
+  return Markup.keyboard(rows).resize();
+}
+
+function parseAdminModeKey(text) {
+  if (!text || !text.includes("|")) return null;
+  const parts = text.split("|");
+  return parts[1]?.trim() || null;
+}
 async function sendWelcome(ctx) {
   const text = db.content.welcomeText;
   const photo = db.content.welcomePhoto;
@@ -733,18 +783,23 @@ async function sendModePreview(ctx, modeKey) {
 async function tryGenerateFromPhoto(ctx, photoFileId, promptText) {
   const user = getUser(ctx.from.id);
 
-  if (!user.freeUsed && user.balance <= 0) {
-    user.freeUsed = true;
-    saveDB();
-  } else if (user.balance > 0) {
-    user.balance -= 1;
-    saveDB();
-  } else {
-    return ctx.reply(
-      "У тебе немає доступних генерацій. Купи пакет у меню 💳 Купити",
-      mainMenu()
-    );
-  }
+  let usedFreeGeneration = false;
+let spentBalanceGeneration = false;
+
+if (!user.freeUsed && user.balance <= 0) {
+  user.freeUsed = true;
+  usedFreeGeneration = true;
+  saveDB();
+} else if (user.balance > 0) {
+  user.balance -= 1;
+  spentBalanceGeneration = true;
+  saveDB();
+} else {
+  return ctx.reply(
+    "У тебе немає доступних генерацій. Купи пакет у меню 💳 Купити",
+    mainMenu()
+  );
+}
 
   try {
     await ctx.reply("⏳ Генерую зображення, зачекай...");
@@ -781,41 +836,52 @@ async function tryGenerateFromPhoto(ctx, photoFileId, promptText) {
       caption: `✅ Готово\n\nБаланс: ${user.balance}`,
       ...mainMenu(),
     });
-  } catch (error) {
-    console.error("GENERATION ERROR:", error?.response?.data || error.message);
+  } catch (err) {
+  console.error("GENERATE ERROR:", err?.response?.data || err.message);
 
-    if (user.freeUsed && user.balance >= 0) {
-      user.balance += 1;
-      saveDB();
-    }
+  if (usedFreeGeneration) {
+    user.freeUsed = false;
+    saveDB();
+  } else if (spentBalanceGeneration) {
+    user.balance += 1;
+    saveDB();
+  }
 
-    await ctx.reply(
-      "❌ Сталася помилка під час генерації. Спробуй ще раз або напиши в підтримку.",
-      mainMenu()
-    );
+  return ctx.reply(
+    "❌ Не вдалося згенерувати фото. Спробуй ще раз трохи пізніше.",
+    mainMenu()
   }
 }
 
 async function sendWayForPayOffer(ctx, packKey) {
-  const user = getUser(ctx.from.id);
+  try {
+    const user = getUser(ctx.from.id);
 
-  db.stats.totalPaymentsRequests += 1;
-  db.stats.packageClicks[packKey] += 1;
+    db.stats.totalPaymentsRequests += 1;
+    db.stats.packageClicks[packKey] += 1;
 
-  const { paymentUrl, orderReference } = await createWayForPayPaymentUrl(
-    ctx.from.id,
-    packKey
-  );
+    const { paymentUrl, orderReference } = await createWayForPayPaymentUrl(
+      ctx.from.id,
+      packKey
+    );
 
-  user.pendingPackage = packKey;
-  user.pendingPaymentAt = new Date().toISOString();
-  user.pendingOrderReference = orderReference;
-  saveDB();
+    user.pendingPackage = packKey;
+    user.pendingPaymentAt = new Date().toISOString();
+    user.pendingOrderReference = orderReference;
+    saveDB();
 
-  return ctx.reply(
-    `Обрано пакет:\n${getPackageTitle(packKey)}\n\nНатисни кнопку нижче для оплати.\nПісля успішної оплати фото зарахуються автоматично.`,
-    buyInlineButtons(paymentUrl, packKey)
-  );
+    return ctx.reply(
+      `Обрано пакет:\n${getPackageTitle(packKey)}\n\nНатисни кнопку нижче для оплати.\nПісля успішної оплати фото зарахуються автоматично.`,
+      buyInlineButtons(paymentUrl, packKey)
+    );
+  } catch (error) {
+    console.error("SEND WAYFORPAY OFFER ERROR:", error?.response?.data || error.message);
+
+    return ctx.reply(
+      "❌ Зараз не вдалося створити посилання на оплату. Спробуй ще раз трохи пізніше або напиши в підтримку.",
+      mainMenu()
+    );
+  }
 }
 
 bot.start(async (ctx) => {
@@ -921,7 +987,73 @@ bot.on("text", async (ctx) => {
       );
     }
 
+    if (text === "🎨 Редагувати класичні режими") {
+      ctx.session.adminEditGroup = "classic";
+      ctx.session.awaitingAdminModePick = true;
+      ctx.session.awaitingAdminModePrompt = null;
+
+      return ctx.reply(
+        "Оберіть класичний режим:",
+        buildAdminModesKeyboard("classic")
+      );
+    }
+
+    if (text === "✨ Редагувати ВАУ режими") {
+      ctx.session.adminEditGroup = "wow";
+      ctx.session.awaitingAdminModePick = true;
+      ctx.session.awaitingAdminModePrompt = null;
+
+      return ctx.reply(
+        "Оберіть ВАУ режим:",
+        buildAdminModesKeyboard("wow")
+      );
+    }
+
+    if (ctx.session.awaitingAdminModePick) {
+      const modeKey = parseAdminModeKey(text);
+      const mode = db.modes[modeKey];
+
+      if (!mode) {
+        return ctx.reply("Обери кнопку зі списку");
+      }
+
+      ctx.session.awaitingAdminModePick = false;
+      ctx.session.awaitingAdminModePrompt = modeKey;
+
+      return ctx.reply(
+        `Обрано: ${mode.label}\n\nПоточний промт:\n${mode.prompt}\n\nНадішли новий промт`
+      );
+    }
+
     if (text === "⬅️ Назад в основне меню") {
+  ctx.session.awaitingAdminModePick = false;
+  ctx.session.awaitingAdminModePrompt = null;
+  ctx.session.adminEditGroup = null;
+  return ctx.reply("Повернення", mainMenu());
+}
+
+      if (!mode) {
+        ctx.session.awaitingAdminModePrompt = null;
+        return ctx.reply("Помилка", adminMenu());
+      }
+
+      mode.prompt = text;
+      db.modes[modeKey] = mode;
+      saveDB();
+
+      ctx.session.awaitingAdminModePrompt = null;
+      ctx.session.adminEditGroup = null;
+
+      return ctx.reply(
+        `✅ Оновлено: ${mode.label}\n\nНовий промт:\n${mode.prompt}`,
+        adminMenu()
+      );
+    }
+
+    if (text === "⬅️ Назад в основне меню") {
+      ctx.session.awaitingAdminModePick = false;
+      ctx.session.awaitingAdminModePrompt = null;
+      ctx.session.adminEditGroup = null;
       return ctx.reply("Повернення", mainMenu());
     }
   }
@@ -935,7 +1067,6 @@ bot.on("text", async (ctx) => {
     incrementButtonStat("classic");
     return ctx.reply("🎨 Класичні стилі", buildModesKeyboard("classic"));
   }
-
   if (text === getUI("surprise")) {
     incrementButtonStat("surprise");
     const randomKey = WOW_RANDOM_MODES[Math.floor(Math.random() * WOW_RANDOM_MODES.length)];
@@ -1138,17 +1269,22 @@ app.get("/health", (req, res) => {
 
 app.post("/payment", async (req, res) => {
   try {
-    const data = req.body || {};
-    console.log("WAYFORPAY CALLBACK:", JSON.stringify(data, null, 2));
+    const rawBody = req.body || {};
+    const data = normalizeWayForPayCallbackBody(rawBody);
+
+    console.log("WAYFORPAY CALLBACK RAW:", JSON.stringify(rawBody, null, 2));
+    console.log("WAYFORPAY CALLBACK NORMALIZED:", JSON.stringify(data, null, 2));
 
     const expectedSignature = signWfpCallback(data);
 
-    if (expectedSignature !== data.merchantSignature) {
-      console.error("WAYFORPAY SIGNATURE INVALID");
-      return res
-        .status(200)
-        .json(buildWfpAcceptResponse(data.orderReference || "unknown"));
-    }
+   if (expectedSignature !== data.merchantSignature) {
+  console.error("WAYFORPAY SIGNATURE INVALID");
+  console.error("EXPECTED:", expectedSignature);
+  console.error("RECEIVED:", data.merchantSignature);
+  return res
+    .status(200)
+    .json(buildWfpAcceptResponse(data.orderReference || "unknown"));
+}
 
     const parsed = parseOrderReference(data.orderReference);
     if (!parsed) {

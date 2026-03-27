@@ -2,6 +2,8 @@ require("dotenv").config();
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
+const express = require("express");
 const axios = require("axios");
 const { Telegraf, Markup, session } = require("telegraf");
 const { fal } = require("@fal-ai/client");
@@ -16,17 +18,19 @@ fal.config({
 // ===================== НАЛАШТУВАННЯ =====================
 const ADMINS = [346101852, 688515215];
 
-const LIQPAY_LINKS = {
-  pack10:
-    process.env.LIQPAY_PACK10_URL ||
-    "https://www.liqpay.ua/uk/checkout/sandbox_i99667839774",
-  pack20:
-    process.env.LIQPAY_PACK20_URL ||
-    "https://www.liqpay.ua/uk/checkout/sandbox_i99667839774",
-  pack30:
-    process.env.LIQPAY_PACK30_URL ||
-    "https://www.liqpay.ua/uk/checkout/sandbox_i99667839774",
+const WAYFORPAY = {
+  merchantAccount: process.env.WAYFORPAY_MERCHANT,
+  secretKey: process.env.WAYFORPAY_SECRET,
+  domainName: process.env.WAYFORPAY_DOMAIN || "promti-bot.onrender.com",
+  returnUrl: process.env.WAYFORPAY_RETURN_URL || "https://t.me/Promtiai_bot",
+  serviceUrl:
+    process.env.WAYFORPAY_SERVICE_URL ||
+    "https://promti-bot.onrender.com/payment",
 };
+
+if (!WAYFORPAY.merchantAccount || !WAYFORPAY.secretKey) {
+  throw new Error("WAYFORPAY_MERCHANT and WAYFORPAY_SECRET are required");
+}
 
 const PROMPTS_CHANNEL_URL = "https://t.me/promteamai";
 const SUPPORT_URL = "https://t.me/promteamai?direct";
@@ -427,6 +431,7 @@ function getUser(id) {
       purchasedPhotos: 0,
       pendingPackage: null,
       pendingPaymentAt: null,
+      pendingOrderReference: null,
     };
     db.stats.totalUsers += 1;
     saveDB();
@@ -470,386 +475,380 @@ function getPackageTitle(packKey) {
   return "Пакет";
 }
 
-function getUserStatus(user) {
-  if (isAdmin(user.id)) return "admin";
-
-  const total = Number(user.generationsCount || 0);
-
-  if (total >= 51) return "vip";
-  if (total >= 21) return "premium";
-  if (total >= 6) return "active";
-  return "newbie";
+function getPackageAmount(packKey) {
+  if (packKey === "pack10") return 99;
+  if (packKey === "pack20") return 179;
+  if (packKey === "pack30") return 249;
+  return 0;
 }
 
-function getStatusLabel(status) {
-  switch (status) {
-    case "admin":
-      return "Адміністратор 🛠";
-    case "vip":
-      return "VIP 💠";
-    case "premium":
-      return "Premium 👑";
-    case "active":
-      return "Активний 🔥";
-    default:
-      return "Новачок 🆓";
-  }
+function buildOrderReference(userId, packKey) {
+  return `tg_${userId}_${packKey}_${Date.now()}`;
 }
 
-function getNextStatusInfo(totalGenerations) {
-  if (totalGenerations < 6) {
-    return {
-      next: "Активний 🔥",
-      left: 6 - totalGenerations,
-    };
-  }
-  if (totalGenerations < 21) {
-    return {
-      next: "Premium 👑",
-      left: 21 - totalGenerations,
-    };
-  }
-  if (totalGenerations < 51) {
-    return {
-      next: "VIP 💠",
-      left: 51 - totalGenerations,
-    };
-  }
-  return null;
+function parseOrderReference(orderReference) {
+  const match = /^tg_(\d+)_(pack10|pack20|pack30)_\d+$/.exec(orderReference || "");
+  if (!match) return null;
+
+  return {
+    userId: Number(match[1]),
+    packKey: match[2],
+  };
 }
 
-function formatMyStatusText(user) {
-  const status = getUserStatus(user);
-  const total = Number(user.generationsCount || 0);
-  const next = getNextStatusInfo(total);
+function signWfpPurchase({
+  merchantAccount,
+  merchantDomainName,
+  orderReference,
+  orderDate,
+  amount,
+  currency,
+  productName,
+  productCount,
+  productPrice,
+}) {
+  const values = [
+    merchantAccount,
+    merchantDomainName,
+    orderReference,
+    orderDate,
+    amount,
+    currency,
+    ...productName,
+    ...productCount,
+    ...productPrice,
+  ];
 
-  if (status === "admin") {
-    return `💎 Мій статус
-
-Ваш поточний статус: Адміністратор 🛠
-
-Ваші привілеї:
-• повний доступ до функцій бота
-• генерації без списання лімітів
-• керування текстами, кнопками, режимами та промтами`;
-  }
-
-  if (status === "vip") {
-    return `💎 Мій статус
-
-Ваш поточний статус: VIP 💠
-
-Ваші привілеї:
-• максимальний пріоритет
-• доступ до спеціальних режимів
-• бонусні можливості
-• першочерговий доступ до новинок
-
-Ваш баланс: ${user.balance}
-Всього генерацій: ${total}`;
-  }
-
-  if (status === "premium") {
-    return `💎 Мій статус
-
-Ваш поточний статус: Premium 👑
-
-Ваші привілеї:
-• пріоритетна обробка генерацій
-• ексклюзивні режими
-• ранній доступ до оновлень
-• бонуси та спеціальні пропозиції
-
-Ваш баланс: ${user.balance}
-Всього генерацій: ${total}
-
-До статусу VIP 💠 залишилось: ${next ? next.left : 0} генерацій`;
-  }
-
-  if (status === "active") {
-    return `💎 Мій статус
-
-Ваш поточний статус: Активний 🔥
-
-Ваші привілеї:
-• доступ до платних режимів
-• повний функціонал стандартного користувача
-• участь у системі статусів і бонусів
-
-Ваш баланс: ${user.balance}
-Всього генерацій: ${total}
-
-До статусу Premium 👑 залишилось: ${next ? next.left : 0} генерацій`;
-  }
-
-  return `💎 Мій статус
-
-Ваш поточний статус: Новачок 🆓
-
-Ваші привілеї:
-• 1 безкоштовна генерація
-• доступ до базових режимів
-• можливість протестувати якість сервісу
-
-Ваш баланс: ${user.balance}
-Всього генерацій: ${total}
-
-До статусу Активний 🔥 залишилось: ${next ? next.left : 0} генерацій`;
+  return crypto
+    .createHmac("md5", WAYFORPAY.secretKey)
+    .update(values.join(";"), "utf8")
+    .digest("hex");
 }
 
-function canUseSurprise(user) {
-  const status = getUserStatus(user);
-  return ["active", "premium", "vip", "admin"].includes(status);
+function signWfpCallback(data) {
+  const values = [
+    data.merchantAccount || "",
+    data.orderReference || "",
+    data.amount || "",
+    data.currency || "",
+    data.authCode || "",
+    data.cardPan || "",
+    data.transactionStatus || "",
+    data.reasonCode || "",
+  ];
+
+  return crypto
+    .createHmac("md5", WAYFORPAY.secretKey)
+    .update(values.join(";"), "utf8")
+    .digest("hex");
 }
 
-function canUseSecretModes(user) {
-  const status = getUserStatus(user);
-  return ["premium", "vip", "admin"].includes(status);
+function buildWfpAcceptResponse(orderReference) {
+  const time = Math.floor(Date.now() / 1000);
+  const status = "accept";
+
+  const signature = crypto
+    .createHmac("md5", WAYFORPAY.secretKey)
+    .update([orderReference, status, time].join(";"), "utf8")
+    .digest("hex");
+
+  return {
+    orderReference,
+    status,
+    time,
+    signature,
+  };
 }
 
-function generatePromptFromIdea(userText) {
-  const text = (userText || "").toLowerCase();
+async function createWayForPayPaymentUrl(userId, packKey) {
+  const amount = getPackageAmount(packKey);
+  const orderReference = buildOrderReference(userId, packKey);
+  const orderDate = Math.floor(Date.now() / 1000);
+  const currency = "UAH";
+  const productName = [getPackageTitle(packKey)];
+  const productCount = [1];
+  const productPrice = [amount];
 
-  if (text.includes("естет") || text.includes("гарно") || text.includes("красиво")) {
-    return "dreamy aesthetic portrait, soft cinematic light, elegant composition, stylish social media vibe, realistic skin, preserve identity";
-  }
-  if (text.includes("ніж") || text.includes("романт") || text.includes("soft") || text.includes("пастел")) {
-    return "soft romantic portrait, pastel tones, delicate beauty styling, dreamy atmosphere, elegant feminine mood, preserve identity";
-  }
-  if (text.includes("дорог") || text.includes("люкс") || text.includes("багат") || text.includes("premium")) {
-    return "luxury editorial portrait, rich lifestyle aesthetic, expensive outfit, premium background, confident expression, preserve identity";
-  }
-  if (text.includes("темн") || text.includes("драма") || text.includes("dark") || text.includes("тін")) {
-    return "dark cinematic portrait, moody shadows, dramatic contrast, mysterious atmosphere, elegant intensity, preserve identity";
-  }
-  if (text.includes("бізнес") || text.includes("ділов") || text.includes("linkedin") || text.includes("офіс")) {
-    return "professional corporate portrait, polished business style, clean background, confident pose, high-end linkedin headshot, preserve identity";
-  }
-  if (text.includes("тренд") || text.includes("tiktok") || text.includes("viral") || text.includes("інста")) {
-    return "viral social media trend portrait, glossy trendy styling, fashion-forward composition, modern tiktok aesthetic, preserve identity";
+  const payload = {
+    transactionType: "CREATE_INVOICE",
+    merchantAccount: WAYFORPAY.merchantAccount,
+    merchantDomainName: WAYFORPAY.domainName,
+    merchantTransactionType: "AUTO",
+    merchantTransactionSecureType: "AUTO",
+    apiVersion: 1,
+    language: "UA",
+    serviceUrl: WAYFORPAY.serviceUrl,
+    returnUrl: WAYFORPAY.returnUrl,
+    orderReference,
+    orderDate,
+    amount,
+    currency,
+    productName,
+    productPrice,
+    productCount,
+  };
+
+  payload.merchantSignature = signWfpPurchase({
+    merchantAccount: payload.merchantAccount,
+    merchantDomainName: payload.merchantDomainName,
+    orderReference: payload.orderReference,
+    orderDate: payload.orderDate,
+    amount: payload.amount,
+    currency: payload.currency,
+    productName: payload.productName,
+    productCount: payload.productCount,
+    productPrice: payload.productPrice,
+  });
+
+  const response = await axios.post("https://api.wayforpay.com/api", payload, {
+    headers: { "Content-Type": "application/json" },
+    timeout: 30000,
+  });
+
+  const data = response.data || {};
+
+  const paymentUrl = data.invoiceUrl || data.url || data.href || null;
+
+  if (!paymentUrl) {
+    throw new Error(`WayForPay did not return payment URL: ${JSON.stringify(data)}`);
   }
 
-  return "stylish high-end portrait, cinematic lighting, fashionable social media aesthetic, realistic face, preserve identity";
+  db.payments.push({
+    provider: "wayforpay",
+    orderReference,
+    userId,
+    packKey,
+    amount,
+    paymentUrl,
+    status: "created",
+    createdAt: new Date().toISOString(),
+  });
+
+  saveDB();
+
+  return { paymentUrl, orderReference };
 }
 
-function findModeByLabel(label) {
-  return Object.entries(db.modes).find(([, mode]) => mode.label === label);
+function getStatusByGenerations(count) {
+  if (count >= 51) return { name: "VIP", emoji: "💠" };
+  if (count >= 21) return { name: "Premium", emoji: "👑" };
+  if (count >= 6) return { name: "Активний", emoji: "🔥" };
+  return { name: "Новачок", emoji: "🆓" };
 }
 
-function clearInteractiveStates(ctx) {
-  ctx.session.awaitingWelcomeText = false;
-  ctx.session.awaitingWelcomePhoto = false;
-  ctx.session.awaitingInfoText = false;
-  ctx.session.awaitingHelpText = false;
-  ctx.session.awaitingPackagesText = false;
-  ctx.session.awaitingStatusesText = false;
-  ctx.session.awaitingIdeaPrompt = false;
-  ctx.session.awaitingModeEdit = null;
-  ctx.session.awaitingUiTextKey = null;
-  ctx.session.selectedModeKey = null;
-  ctx.session.mode = null;
-  ctx.session.customPrompt = null;
+function isSecretUnlocked(user) {
+  return user.generationsCount >= 20;
 }
 
-// ===================== МЕНЮ =====================
+function getAllModesForDisplay() {
+  return db.modes;
+}
+
+function modeInlineButtons(modeKey) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("✅ Обрати", `mode_${modeKey}`)],
+    [Markup.button.callback(getUI("back"), "back_to_menu")],
+  ]);
+}
+
+function buildModesKeyboard(group) {
+  const rows = [];
+
+  for (const [key, mode] of Object.entries(getAllModesForDisplay())) {
+    if (mode.group !== group) continue;
+    rows.push([Markup.button.callback(mode.label, `show_${key}`)]);
+  }
+
+  rows.push([Markup.button.callback(getUI("back"), "back_to_menu")]);
+  return Markup.inlineKeyboard(rows);
+}
+
+function buyInlineButtons(paymentUrl, packKey) {
+  return Markup.inlineKeyboard([
+    [Markup.button.url(`💳 Оплатити ${getPackageTitle(packKey)}`, paymentUrl)],
+    [Markup.button.callback("🔄 Перевірити оплату", `checkpay_${packKey}`)],
+    [Markup.button.url("🆘 Підтримка", SUPPORT_URL)],
+  ]);
+}
+
 function mainMenu() {
   return Markup.keyboard([
     [getUI("wowMenu"), getUI("classicMenu")],
     [getUI("surprise"), getUI("ideaToPrompt")],
     [getUI("customPrompt"), getUI("packages")],
     [getUI("buy"), getUI("balance")],
-    [getUI("statuses"), getUI("info")],
-    [getUI("promptIdeas"), getUI("support")],
-  ]).resize();
-}
-
-function statusesMenu() {
-  return Markup.keyboard([
-    [getUI("myStatus"), getUI("statusesInfo")],
-    [getUI("back")],
-  ]).resize();
-}
-
-function buildModesMenu(group) {
-  const rows = [];
-  const list = Object.entries(db.modes).filter(([, mode]) => mode.group === group);
-
-  for (let i = 0; i < list.length; i += 2) {
-    const row = [list[i][1].label];
-    if (list[i + 1]) row.push(list[i + 1][1].label);
-    rows.push(row);
-  }
-
-  rows.push([getUI("surprise")]);
-  rows.push([getUI("back")]);
-
-  return Markup.keyboard(rows).resize();
-}
-
-function buyMenu() {
-  return Markup.keyboard([
-    ["10 фото — 99 грн", "20 фото — 179 грн"],
-    ["30 фото — 249 грн"],
-    [getUI("back")],
+    [getUI("statuses"), getUI("support")],
+    [getUI("info")],
   ]).resize();
 }
 
 function adminMenu() {
   return Markup.keyboard([
-    ["📈 Статистика", "👤 Мій ID"],
-    ["➕ Видати фото", "👥 Користувачі"],
-    ["📝 Змінити вітання", "🖼 Змінити фото"],
-    ["ℹ️ Змінити інфо", "❓ Змінити help"],
-    ["📦 Змінити пакети", "💳 Нарахувати покупку"],
-    ["💎 Змінити статуси", "🎭 Керувати режимами"],
-    ["🔤 Змінити тексти кнопок", "📋 Контент"],
-    ["↩️ Назад"],
+    ["📊 Статистика", "➕ Продаж вручну"],
+    ["✏️ Редагувати /info", "✏️ Редагувати /help"],
+    ["✏️ Редагувати пакети", "✏️ Редагувати статуси"],
+    ["✏️ Редагувати тексти кнопок"],
+    ["🎨 Редагувати класичні режими", "✨ Редагувати ВАУ режими"],
+    ["⬅️ Назад в основне меню"],
   ]).resize();
 }
 
-function adminModesMenu() {
-  const rows = Object.entries(db.modes).map(([key, mode]) => [
-    `${mode.label} | ${key}`,
-  ]);
-  rows.push(["↩️ Назад"]);
-  return Markup.keyboard(rows).resize();
-}
-
-function adminModeActionsMenu() {
-  return Markup.keyboard([
-    ["👁 Показати поточний промт"],
-    ["📝 Змінити промт"],
-    ["✏️ Змінити назву кнопки"],
-    ["🔐 Змінити доступ"],
-    ["↩️ Назад"],
-  ]).resize();
-}
-
-function adminUiTextsMenu() {
-  return Markup.keyboard([
-    ["wowMenu", "classicMenu"],
-    ["surprise", "ideaToPrompt"],
-    ["customPrompt", "packages"],
-    ["buy", "balance"],
-    ["promptIdeas", "support"],
-    ["info", "statuses"],
-    ["myStatus", "statusesInfo"],
-    ["back"],
-    ["↩️ Назад"],
-  ]).resize();
-}
-
-function buyInlineButtons(packKey) {
-  return Markup.inlineKeyboard([
-    [Markup.button.url(`💳 Оплатити ${getPackageTitle(packKey)}`, LIQPAY_LINKS[packKey])],
-    [Markup.button.callback("✅ Я оплатив(ла)", `paid_${packKey}`)],
-    [Markup.button.url("🆘 Підтримка", SUPPORT_URL)],
-  ]);
-}
-
-// ===================== TELEGRAM FILE -> DATA URL =====================
-async function getImage(ctx, fileId) {
-  const file = await ctx.telegram.getFile(fileId);
-  const url = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
-
-  const res = await axios.get(url, {
-    responseType: "arraybuffer",
-    timeout: 120000,
-  });
-
-  return `data:image/jpeg;base64,${Buffer.from(res.data).toString("base64")}`;
-}
-
-// ===================== START =====================
-bot.start(async (ctx) => {
-  ensureSession(ctx);
-  touchUser(ctx);
-  clearInteractiveStates(ctx);
-
+async function sendWelcome(ctx) {
   const text = db.content.welcomeText;
+  const photo = db.content.welcomePhoto;
 
-  if (db.content.welcomePhoto) {
-    return ctx.replyWithPhoto(db.content.welcomePhoto, {
-      caption: text,
-      ...mainMenu(),
-    });
+  if (photo) {
+    try {
+      await ctx.replyWithPhoto(photo, {
+        caption: text,
+        ...mainMenu(),
+      });
+      return;
+    } catch (e) {
+      console.error("WELCOME PHOTO ERROR:", e.message);
+    }
   }
 
-  return ctx.reply(text, mainMenu());
-});
+  await ctx.reply(text, mainMenu());
+}
 
-// ===================== СЛУЖБОВІ КОМАНДИ =====================
-bot.command("myid", (ctx) => {
+async function sendModePreview(ctx, modeKey) {
+  const user = getUser(ctx.from.id);
+  const mode = db.modes[modeKey];
+  if (!mode) return;
+
+  if (mode.access === "secret" && !isSecretUnlocked(user)) {
+    return ctx.reply(
+      "🔒 Цей режим відкривається після 20 генерацій.",
+      mainMenu()
+    );
+  }
+
+  return ctx.reply(
+    `${mode.label}\n\nПромт:\n${mode.prompt}`,
+    modeInlineButtons(modeKey)
+  );
+}
+
+async function tryGenerateFromPhoto(ctx, photoFileId, promptText) {
+  const user = getUser(ctx.from.id);
+
+  if (!user.freeUsed && user.balance <= 0) {
+    user.freeUsed = true;
+    saveDB();
+  } else if (user.balance > 0) {
+    user.balance -= 1;
+    saveDB();
+  } else {
+    return ctx.reply(
+      "У тебе немає доступних генерацій. Купи пакет у меню 💳 Купити",
+      mainMenu()
+    );
+  }
+
+  try {
+    await ctx.reply("⏳ Генерую зображення, зачекай...");
+
+    const file = await ctx.telegram.getFile(photoFileId);
+    const url = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+
+    const result = await fal.subscribe("fal-ai/flux-lora/image-to-image", {
+      input: {
+        image_url: url,
+        prompt: promptText,
+        strength: 0.8,
+        num_inference_steps: 28,
+        guidance_scale: 6,
+        image_size: "portrait_4_3",
+        num_images: 1,
+      },
+      logs: true,
+    });
+
+    const imageUrl =
+      result?.data?.images?.[0]?.url ||
+      result?.images?.[0]?.url ||
+      result?.data?.output?.[0]?.url ||
+      null;
+
+    if (!imageUrl) throw new Error("No image in response");
+
+    user.generationsCount += 1;
+    db.stats.totalGenerations += 1;
+    saveDB();
+
+    await ctx.replyWithPhoto(imageUrl, {
+      caption: `✅ Готово\n\nБаланс: ${user.balance}`,
+      ...mainMenu(),
+    });
+  } catch (error) {
+    console.error("GENERATION ERROR:", error?.response?.data || error.message);
+
+    if (user.freeUsed && user.balance >= 0) {
+      user.balance += 1;
+      saveDB();
+    }
+
+    await ctx.reply(
+      "❌ Сталася помилка під час генерації. Спробуй ще раз або напиши в підтримку.",
+      mainMenu()
+    );
+  }
+}
+
+async function sendWayForPayOffer(ctx, packKey) {
+  const user = getUser(ctx.from.id);
+
+  db.stats.totalPaymentsRequests += 1;
+  db.stats.packageClicks[packKey] += 1;
+
+  const { paymentUrl, orderReference } = await createWayForPayPaymentUrl(
+    ctx.from.id,
+    packKey
+  );
+
+  user.pendingPackage = packKey;
+  user.pendingPaymentAt = new Date().toISOString();
+  user.pendingOrderReference = orderReference;
+  saveDB();
+
+  return ctx.reply(
+    `Обрано пакет:\n${getPackageTitle(packKey)}\n\nНатисни кнопку нижче для оплати.\nПісля успішної оплати фото зарахуються автоматично.`,
+    buyInlineButtons(paymentUrl, packKey)
+  );
+}
+
+bot.start(async (ctx) => {
   touchUser(ctx);
-  return ctx.reply(`Твій Telegram ID: ${ctx.from.id}`);
+  return sendWelcome(ctx);
 });
 
-bot.command("info", (ctx) => {
-  touchUser(ctx);
-  return ctx.reply(db.content.infoText, mainMenu());
-});
-
-bot.command("help", (ctx) => {
+bot.command("help", async (ctx) => {
   touchUser(ctx);
   return ctx.reply(db.content.helpText, mainMenu());
 });
 
-bot.command("admin", (ctx) => {
+bot.command("info", async (ctx) => {
   touchUser(ctx);
-  ensureSession(ctx);
-  clearInteractiveStates(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
-  return ctx.reply("Адмін-меню:", adminMenu());
+  return ctx.reply(db.content.infoText, mainMenu());
 });
 
-bot.command("add", async (ctx) => {
+bot.command("admin", async (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
-  const parts = ctx.message.text.trim().split(/\s+/);
-  const userId = Number(parts[1]);
-  const amount = Number(parts[2]);
-
-  if (!userId || !amount) {
-    return ctx.reply("Формат: /add ID КІЛЬКІСТЬ");
-  }
-
-  const user = getUser(userId);
-  user.balance += amount;
-  db.stats.totalManualCredits += amount;
-  saveDB();
-
-  await ctx.reply(`✅ Додано ${amount} фото користувачу ${userId}. Баланс: ${user.balance}`);
-
-  try {
-    await bot.telegram.sendMessage(
-      userId,
-      `🎉 Вам нараховано ${amount} фото.\nЗараз на балансі: ${user.balance}`,
-      mainMenu()
-    );
-  } catch (e) {}
+  if (!isAdmin(ctx.from.id)) return;
+  return ctx.reply("Адмін-меню", adminMenu());
 });
 
 bot.command("sale", async (ctx) => {
   touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return;
 
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
-  const parts = ctx.message.text.trim().split(/\s+/);
+  const parts = ctx.message.text.split(" ");
   const userId = Number(parts[1]);
   const packKey = parts[2];
 
   if (!userId || !["pack10", "pack20", "pack30"].includes(packKey)) {
-    return ctx.reply("Формат: /sale ID pack10|pack20|pack30");
+    return ctx.reply("Формат: /sale USER_ID pack10|pack20|pack30");
   }
 
   const user = getUser(userId);
@@ -859,504 +858,99 @@ bot.command("sale", async (ctx) => {
   user.purchasedPhotos += photos;
   user.pendingPackage = null;
   user.pendingPaymentAt = null;
+  user.pendingOrderReference = null;
 
+  db.stats.totalManualCredits += 1;
   db.stats.packageSales[packKey] += 1;
   db.payments.push({
+    provider: "manual",
     userId,
     packKey,
     photos,
     amountText: formatMoneyFromPackageKey(packKey),
-    status: "manual_confirmed",
     createdAt: new Date().toISOString(),
-    adminId: ctx.from.id,
+    byAdmin: ctx.from.id,
+    status: "credited",
   });
-
   saveDB();
-
-  await ctx.reply(
-    `✅ Підтверджено покупку для ${userId}: ${getPackageTitle(packKey)}. Баланс: ${user.balance}`
-  );
 
   try {
     await bot.telegram.sendMessage(
       userId,
-      `✅ Вашу оплату підтверджено.
-Пакет: ${getPackageTitle(packKey)}
-Додано фото: ${photos}
-
-Зараз на балансі: ${user.balance}`,
+      `✅ Тобі зараховано пакет ${getPackageTitle(packKey)}\nБаланс: ${user.balance}`,
       mainMenu()
     );
-  } catch (e) {}
-});
-
-// ===================== АДМІН-ПАНЕЛЬ =====================
-bot.hears("📈 Статистика", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
-  const totalRevenue =
-    db.stats.packageSales.pack10 * 99 +
-    db.stats.packageSales.pack20 * 179 +
-    db.stats.packageSales.pack30 * 249;
-
-  const activeUsers = Object.values(db.users).filter((u) => u.generationsCount > 0).length;
-  const totalBalance = Object.values(db.users).reduce((sum, u) => sum + (u.balance || 0), 0);
-
-  const byLevels = {
-    "Новачок 🆓": 0,
-    "Активний 🔥": 0,
-    "Premium 👑": 0,
-    "VIP 💠": 0,
-    "Адміністратор 🛠": 0,
-  };
-
-  Object.values(db.users).forEach((u) => {
-    byLevels[getStatusLabel(getUserStatus(u))] += 1;
-  });
-
-  return ctx.reply(
-    `📈 Статистика бота
-
-👥 Усього користувачів: ${db.stats.totalUsers}
-🙋 Активних користувачів: ${activeUsers}
-🖼 Усього генерацій: ${db.stats.totalGenerations}
-💳 Запитів на оплату: ${db.stats.totalPaymentsRequests}
-➕ Ручно нараховано фото: ${db.stats.totalManualCredits}
-📦 Залишок фото у всіх користувачів: ${totalBalance}
-
-💰 Продажі пакетів:
-10 фото — 99 грн: ${db.stats.packageSales.pack10}
-20 фото — 179 грн: ${db.stats.packageSales.pack20}
-30 фото — 249 грн: ${db.stats.packageSales.pack30}
-
-💵 Умовний дохід: ${totalRevenue} грн
-
-🏅 Рівні:
-Новачок: ${byLevels["Новачок 🆓"]}
-Активний: ${byLevels["Активний 🔥"]}
-Premium: ${byLevels["Premium 👑"]}
-VIP: ${byLevels["VIP 💠"]}
-Адмін: ${byLevels["Адміністратор 🛠"]}`,
-    adminMenu()
-  );
-});
-
-bot.hears("👥 Користувачі", (ctx) => {
-  touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
-  const users = Object.values(db.users)
-    .sort((a, b) => new Date(b.lastActiveAt) - new Date(a.lastActiveAt))
-    .slice(0, 15);
-
-  if (!users.length) {
-    return ctx.reply("Користувачів поки немає.", adminMenu());
-  }
-
-  const text = users
-    .map((u, i) => {
-      const name = u.firstName || u.username || "Без імені";
-      return `${i + 1}. ${name} | ID: ${u.id}
-Статус: ${getStatusLabel(getUserStatus(u))}
-Баланс: ${u.balance}
-Генерацій: ${u.generationsCount}
-Остання активність: ${u.lastActiveAt}`;
-    })
-    .join("\n\n");
-
-  return ctx.reply(`👥 Останні користувачі:\n\n${text}`, adminMenu());
-});
-
-bot.hears("📝 Змінити вітання", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  clearInteractiveStates(ctx);
-  ctx.session.awaitingWelcomeText = true;
-  return ctx.reply("Надішли новий вітальний текст одним повідомленням.");
-});
-
-bot.hears("🖼 Змінити фото", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  clearInteractiveStates(ctx);
-  ctx.session.awaitingWelcomePhoto = true;
-  return ctx.reply("Надішли нове вітальне фото одним зображенням.");
-});
-
-bot.hears("ℹ️ Змінити інфо", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  clearInteractiveStates(ctx);
-  ctx.session.awaitingInfoText = true;
-  return ctx.reply("Надішли новий текст для кнопки ℹ️ Інформація одним повідомленням.");
-});
-
-bot.hears("❓ Змінити help", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  clearInteractiveStates(ctx);
-  ctx.session.awaitingHelpText = true;
-  return ctx.reply("Надішли новий текст для /help одним повідомленням.");
-});
-
-bot.hears("📦 Змінити пакети", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  clearInteractiveStates(ctx);
-  ctx.session.awaitingPackagesText = true;
-  return ctx.reply("Надішли новий текст для кнопки 📦 Пакети одним повідомленням.");
-});
-
-bot.hears("💎 Змінити статуси", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  clearInteractiveStates(ctx);
-  ctx.session.awaitingStatusesText = true;
-  return ctx.reply(
-  `Надішли новий текст для розділу статусів.
-
-⚙️ Цей текст відображається в кнопці:
-"ℹ️ Інформація про статус"
-
-Його можна повністю змінювати через адмін-панель.
-
-Поточний текст:
-
-${db.content.statusesInfoText}`,
-  );
-});
-
-bot.hears("🎭 Керувати режимами", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  clearInteractiveStates(ctx);
-  return ctx.reply("Обери режим для редагування 👇", adminModesMenu());
-});
-
-bot.hears("🔤 Змінити тексти кнопок", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  clearInteractiveStates(ctx);
-  return ctx.reply("Оберіть ключ кнопки, яку хочете змінити 👇", adminUiTextsMenu());
-});
-
-bot.hears("📋 Контент", (ctx) => {
-  touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  return ctx.reply(
-    `📋 Поточний контент
-
-Вітання:
-${db.content.welcomeText}
-
-Інформація:
-${db.content.infoText.substring(0, 500)}${db.content.infoText.length > 500 ? "..." : ""}
-
-Help:
-${db.content.helpText.substring(0, 400)}${db.content.helpText.length > 400 ? "..." : ""}
-
-Пакети:
-${db.content.packagesText.substring(0, 400)}${db.content.packagesText.length > 400 ? "..." : ""}
-
-Статуси:
-${db.content.statusesInfoText.substring(0, 400)}${db.content.statusesInfoText.length > 400 ? "..." : ""}
-
-Фото:
-${db.content.welcomePhoto ? "є" : "немає"}`,
-    adminMenu()
-  );
-});
-
-bot.hears("➕ Видати фото", (ctx) => {
-  touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  return ctx.reply(
-    `Щоб видати фото вручну, використай команду:
-
-/add ID КІЛЬКІСТЬ
-
-Наприклад:
-/add 123456789 20`,
-    adminMenu()
-  );
-});
-
-bot.hears("💳 Нарахувати покупку", (ctx) => {
-  touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
-  return ctx.reply(
-    `Для ручного підтвердження оплати використай:
-
-/sale ID pack10
-/sale ID pack20
-/sale ID pack30`,
-    adminMenu()
-  );
-});
-
-bot.hears("👤 Мій ID", (ctx) => {
-  touchUser(ctx);
-  return ctx.reply(`Твій Telegram ID: ${ctx.from.id}`, isAdmin(ctx.from.id) ? adminMenu() : mainMenu());
-});
-
-// ===================== КУПІВЛЯ =====================
-async function sendLiqPayOffer(ctx, packKey) {
-  const user = getUser(ctx.from.id);
-  user.pendingPackage = packKey;
-  user.pendingPaymentAt = new Date().toISOString();
-
-  db.stats.totalPaymentsRequests += 1;
-  db.stats.packageClicks[packKey] += 1;
-  saveDB();
-
-  return ctx.reply(
-    `Обрано пакет:
-${getPackageTitle(packKey)}
-
-Натисни кнопку нижче для оплати.
-Після оплати натисни "Я оплатив(ла)".
-Якщо фото не зарахуються автоматично — напиши в підтримку.`,
-    buyInlineButtons(packKey)
-  );
-}
-
-bot.action(/^paid_(pack10|pack20|pack30)$/, async (ctx) => {
-  try {
-    const packKey = ctx.match[1];
-    const user = getUser(ctx.from.id);
-
-    user.pendingPackage = packKey;
-    user.pendingPaymentAt = new Date().toISOString();
-    saveDB();
-
-    await ctx.answerCbQuery("Заявку зафіксовано");
-
-    await ctx.reply(
-      `✅ Я зафіксував твою заявку на перевірку оплати.
-
-Пакет: ${getPackageTitle(packKey)}
-Твій ID: ${ctx.from.id}
-
-Якщо фото не нарахуються швидко, напиши в підтримку:
-${SUPPORT_URL}`,
-      mainMenu()
-    );
-
-    for (const adminId of ADMINS) {
-      try {
-        await bot.telegram.sendMessage(
-          adminId,
-          `💳 Нова заявка на перевірку оплати
-
-Користувач: ${ctx.from.first_name || ""}
-Username: ${ctx.from.username ? "@" + ctx.from.username : "-"}
-ID: ${ctx.from.id}
-Пакет: ${getPackageTitle(packKey)}
-
-Для підтвердження:
-/sale ${ctx.from.id} ${packKey}`
-        );
-      } catch (e) {}
-    }
   } catch (e) {
-    console.error("PAID ACTION ERROR:", e);
+    console.error("MANUAL CREDIT SEND ERROR:", e.message);
   }
+
+  return ctx.reply("✅ Продаж зараховано.");
 });
 
-// ===================== ОБРОБКА ТЕКСТУ =====================
-bot.on("text", async (ctx, next) => {
-  touchUser(ctx);
+bot.on("text", async (ctx) => {
   ensureSession(ctx);
-
+  const user = touchUser(ctx);
   const text = ctx.message.text;
 
-  if (text === getUI("back") || text === "↩️ Назад") {
-    clearInteractiveStates(ctx);
-
-    if (isAdmin(ctx.from.id)) {
-      return ctx.reply("Повертаю меню 👇", mainMenu());
-    }
-
-    return ctx.reply("Повертаю звичайне меню ✨", mainMenu());
-  }
-
-  // ---------- admin editing states ----------
-  if (isAdmin(ctx.from.id)) {
-    if (ctx.session.awaitingWelcomeText) {
-      db.content.welcomeText = text;
-      ctx.session.awaitingWelcomeText = false;
-      saveDB();
-      return ctx.reply("✅ Вітальний текст оновлено.", adminMenu());
-    }
-
-    if (ctx.session.awaitingInfoText) {
-      db.content.infoText = text;
-      ctx.session.awaitingInfoText = false;
-      saveDB();
-      return ctx.reply("✅ Текст інформації оновлено.", adminMenu());
-    }
-
-    if (ctx.session.awaitingHelpText) {
-      db.content.helpText = text;
-      ctx.session.awaitingHelpText = false;
-      saveDB();
-      return ctx.reply("✅ Текст help оновлено.", adminMenu());
-    }
-
-    if (ctx.session.awaitingPackagesText) {
-      db.content.packagesText = text;
-      ctx.session.awaitingPackagesText = false;
-      saveDB();
-      return ctx.reply("✅ Текст пакетів оновлено.", adminMenu());
-    }
-
-    if (ctx.session.awaitingStatusesText) {
-      db.content.statusesInfoText = text;
-      ctx.session.awaitingStatusesText = false;
-      saveDB();
-      return ctx.reply("✅ Текст статусів оновлено.", adminMenu());
-    }
-
-    if (ctx.session.awaitingUiTextKey) {
-      const key = ctx.session.awaitingUiTextKey;
-      db.uiTexts[key] = text;
-      ctx.session.awaitingUiTextKey = null;
-      saveDB();
-      return ctx.reply(`✅ Текст кнопки "${key}" оновлено.`, adminMenu());
-    }
-
-    if (ctx.session.awaitingModeEdit) {
-      const modeKey = ctx.session.selectedModeKey;
-
-      const cancelTexts = [
-        getUI("info"),
-        getUI("statuses"),
-        getUI("myStatus"),
-        getUI("statusesInfo"),
-        getUI("balance"),
-        getUI("buy"),
-        getUI("packages"),
-        getUI("support"),
-        getUI("wowMenu"),
-        getUI("classicMenu"),
-        getUI("customPrompt"),
-        getUI("ideaToPrompt"),
-        getUI("promptIdeas"),
-      ];
-
-      if (cancelTexts.includes(text)) {
-        ctx.session.awaitingModeEdit = null;
-        ctx.session.selectedModeKey = null;
-        return next();
-      }
-
-      if (!modeKey || !db.modes[modeKey]) {
-        ctx.session.awaitingModeEdit = null;
-        ctx.session.selectedModeKey = null;
-        return ctx.reply("❌ Режим не знайдено.", adminMenu());
-      }
-
-      if (ctx.session.awaitingModeEdit === "prompt") {
-        db.modes[modeKey].prompt = text;
-        ctx.session.awaitingModeEdit = null;
-        saveDB();
-        return ctx.reply("✅ Промт оновлено.", adminModeActionsMenu());
-      }
-
-      if (ctx.session.awaitingModeEdit === "label") {
-        db.modes[modeKey].label = text;
-        ctx.session.awaitingModeEdit = null;
-        saveDB();
-        return ctx.reply("✅ Назву кнопки оновлено.", adminModeActionsMenu());
-      }
-
-      if (ctx.session.awaitingModeEdit === "access") {
-        const accessValue = text.trim().toLowerCase();
-
-        if (!["all", "secret"].includes(accessValue)) {
-          return ctx.reply('Доступ має бути тільки "all" або "secret".');
-        }
-
-        db.modes[modeKey].access = accessValue;
-        ctx.session.awaitingModeEdit = null;
-        saveDB();
-        return ctx.reply("✅ Рівень доступу оновлено.", adminModeActionsMenu());
-      }
-    }
-  }
-
-  // ---------- custom prompt / idea ----------
-  if (ctx.session.awaitingIdeaPrompt) {
-    const generatedPrompt = generatePromptFromIdea(text);
-    ctx.session.mode = "custom";
-    ctx.session.customPrompt = generatedPrompt;
-    ctx.session.awaitingIdeaPrompt = false;
-
+  if (ctx.session.awaitingCustomPrompt) {
+    ctx.session.awaitingCustomPrompt = false;
+    ctx.session.customPrompt = text;
     return ctx.reply(
-      `🧠 Я зібрав для тебе промт:
-
-${generatedPrompt}
-
-Тепер надішли фото 📸`
+      "Тепер надішли фото для генерації за своїм промтом.",
+      mainMenu()
     );
   }
 
-  if (ctx.session.mode === "custom" && !text.startsWith("/") && !findModeByLabel(text)) {
-    const reservedTexts = [
-      getUI("wowMenu"),
-      getUI("classicMenu"),
-      getUI("surprise"),
-      getUI("ideaToPrompt"),
-      getUI("customPrompt"),
-      getUI("packages"),
-      getUI("buy"),
-      getUI("balance"),
-      getUI("promptIdeas"),
-      getUI("support"),
-      getUI("info"),
-      getUI("statuses"),
-      getUI("myStatus"),
-      getUI("statusesInfo"),
-      getUI("back"),
-    ];
+  if (ctx.session.awaitingIdea) {
+    ctx.session.awaitingIdea = false;
 
-    if (!reservedTexts.includes(text)) {
-      ctx.session.customPrompt = text;
-      return ctx.reply("Промт збережено ✅\nТепер надішли фото.");
+    const idea = text;
+    const generatedPrompt = `Create an advanced high-quality AI photo prompt based on this idea: ${idea}. Preserve identity if a face is provided.`;
+
+    return ctx.reply(`🧠 Готовий промт:\n\n${generatedPrompt}`, mainMenu());
+  }
+
+  if (isAdmin(ctx.from.id)) {
+    if (text === "📊 Статистика") {
+      const totalPayments = db.payments.length;
+      const usersCount = Object.keys(db.users).length;
+
+      return ctx.reply(
+        `📊 Статистика\n\nКористувачів: ${usersCount}\nГенерацій: ${db.stats.totalGenerations}\nЗапитів на оплату: ${db.stats.totalPaymentsRequests}\nПродажів вручну: ${db.stats.totalManualCredits}\nВсього оплат у базі: ${totalPayments}`,
+        adminMenu()
+      );
+    }
+
+    if (text === "⬅️ Назад в основне меню") {
+      return ctx.reply("Повернення", mainMenu());
     }
   }
 
-  // ---------- dynamic main buttons ----------
-  if (text === getUI("info")) {
-    incrementButtonStat("info");
-    return ctx.reply(db.content.infoText, mainMenu());
+  if (text === getUI("wowMenu")) {
+    incrementButtonStat("wow");
+    return ctx.reply("✨ ВАУ режими", buildModesKeyboard("wow"));
+  }
+
+  if (text === getUI("classicMenu")) {
+    incrementButtonStat("classic");
+    return ctx.reply("🎨 Класичні стилі", buildModesKeyboard("classic"));
+  }
+
+  if (text === getUI("surprise")) {
+    incrementButtonStat("surprise");
+    const randomKey = WOW_RANDOM_MODES[Math.floor(Math.random() * WOW_RANDOM_MODES.length)];
+    return sendModePreview(ctx, randomKey);
+  }
+
+  if (text === getUI("ideaToPrompt")) {
+    incrementButtonStat("promptIdea");
+    ctx.session.awaitingIdea = true;
+    return ctx.reply("Напиши ідею, і я перетворю її на промт.");
+  }
+
+  if (text === getUI("customPrompt")) {
+    ctx.session.awaitingCustomPrompt = true;
+    return ctx.reply("Напиши свій промт.");
   }
 
   if (text === getUI("packages")) {
@@ -1364,388 +958,302 @@ ${generatedPrompt}
     return ctx.reply(db.content.packagesText, mainMenu());
   }
 
-  if (text === getUI("promptIdeas")) {
-    incrementButtonStat("promptsIdeas");
+  if (text === getUI("buy")) {
+    incrementButtonStat("buy");
     return ctx.reply(
-      "💡 Ідеї промтів тут:",
-      Markup.inlineKeyboard([[Markup.button.url("Перейти в канал", PROMPTS_CHANNEL_URL)]])
+      "💳 Обери пакет:\n\n10 фото — 99 грн\n20 фото — 179 грн\n30 фото — 249 грн",
+      Markup.keyboard([
+        ["10 фото — 99 грн", "20 фото — 179 грн"],
+        ["30 фото — 249 грн"],
+        [getUI("back")],
+      ]).resize()
+    );
+  }
+
+  if (text === "10 фото — 99 грн") return sendWayForPayOffer(ctx, "pack10");
+  if (text === "20 фото — 179 грн") return sendWayForPayOffer(ctx, "pack20");
+  if (text === "30 фото — 249 грн") return sendWayForPayOffer(ctx, "pack30");
+
+  if (text === getUI("balance")) {
+    incrementButtonStat("balance");
+    return ctx.reply(
+      `📊 Твій баланс: ${user.balance}\nЗгенеровано всього: ${user.generationsCount}`,
+      mainMenu()
     );
   }
 
   if (text === getUI("support")) {
     incrementButtonStat("support");
-    return ctx.reply(
-      "🆘 Якщо щось пішло не так, напиши в підтримку:",
-      Markup.inlineKeyboard([[Markup.button.url("Відкрити чат підтримки", SUPPORT_URL)]])
-    );
+    return ctx.reply(`🆘 Підтримка: ${SUPPORT_URL}`, mainMenu());
   }
 
-  if (text === getUI("balance")) {
-    incrementButtonStat("balance");
-
-    const user = getUser(ctx.from.id);
-
-    if (isAdmin(ctx.from.id)) {
-      return ctx.reply("📊 Статус: адмін\nГенерації: безліміт ✅", mainMenu());
-    }
-
-    return ctx.reply(
-      `📊 Твій баланс
-
-Фото: ${user.balance}
-Статус: ${getStatusLabel(getUserStatus(user))}
-Згенеровано: ${user.generationsCount}
-Куплено фото: ${user.purchasedPhotos}
-Безкоштовне фото використано: ${user.freeUsed ? "так" : "ні"}
-
-Якщо ти вже оплатив(ла), але фото ще не зараховані — напиши в підтримку:
-${SUPPORT_URL}`,
-      mainMenu()
-    );
-  }
-
-  if (text === getUI("buy")) {
-    incrementButtonStat("buy");
-
-    if (isAdmin(ctx.from.id)) {
-      return ctx.reply("✅ Ти адмін, для тебе генерації безкоштовні.", mainMenu());
-    }
-
-    return ctx.reply(
-      `💳 Пакети фото:
-
-10 фото — 99 грн
-20 фото — 179 грн
-30 фото — 249 грн
-
-Обери пакет:`,
-      buyMenu()
-    );
+  if (text === getUI("info")) {
+    incrementButtonStat("info");
+    return ctx.reply(db.content.infoText, mainMenu());
   }
 
   if (text === getUI("statuses")) {
     incrementButtonStat("statuses");
-    return ctx.reply("Оберіть розділ 👇", statusesMenu());
+    return ctx.reply(
+      `💎 Статуси\n\n${getUI("myStatus")}\n${getUI("statusesInfo")}`,
+      Markup.keyboard([
+        [getUI("myStatus"), getUI("statusesInfo")],
+        [getUI("back")],
+      ]).resize()
+    );
   }
 
   if (text === getUI("myStatus")) {
     incrementButtonStat("myStatus");
-    const user = getUser(ctx.from.id);
-    return ctx.reply(formatMyStatusText(user), statusesMenu());
+    const status = getStatusByGenerations(user.generationsCount);
+    return ctx.reply(
+      `${status.emoji} Твій статус: ${status.name}\n\nЗгенеровано: ${user.generationsCount}`,
+      mainMenu()
+    );
   }
 
   if (text === getUI("statusesInfo")) {
     incrementButtonStat("statusesInfo");
-    return ctx.reply(db.content.statusesInfoText, statusesMenu());
+    return ctx.reply(db.content.statusesInfoText, mainMenu());
   }
 
-  if (text === getUI("wowMenu")) {
-    incrementButtonStat("wow");
-    return ctx.reply("✨ Обери ВАУ-режим:", buildModesMenu("wow"));
+  if (text === getUI("back")) {
+    return ctx.reply("Повернення в меню", mainMenu());
   }
 
-  if (text === getUI("classicMenu")) {
-    incrementButtonStat("classic");
-    return ctx.reply("🎨 Обери класичний стиль:", buildModesMenu("classic"));
+  return ctx.reply("Оберіть дію з меню 👇", mainMenu());
+});
+
+bot.on("photo", async (ctx) => {
+  ensureSession(ctx);
+  const user = touchUser(ctx);
+
+  const photo = ctx.message.photo?.[ctx.message.photo.length - 1];
+  if (!photo) return;
+
+  if (ctx.session.selectedModeKey) {
+    const mode = db.modes[ctx.session.selectedModeKey];
+    ctx.session.selectedModeKey = null;
+    if (!mode) return;
+    return tryGenerateFromPhoto(ctx, photo.file_id, mode.prompt);
   }
 
-  if (text === getUI("surprise")) {
-    incrementButtonStat("surprise");
+  if (ctx.session.customPrompt) {
+    const prompt = ctx.session.customPrompt;
+    ctx.session.customPrompt = null;
+    return tryGenerateFromPhoto(ctx, photo.file_id, prompt);
+  }
+
+  return ctx.reply(
+    "Спочатку обери режим або напиши свій промт.",
+    mainMenu()
+  );
+});
+
+bot.action(/^show_(.+)$/, async (ctx) => {
+  try {
+    const modeKey = ctx.match[1];
+    await ctx.answerCbQuery();
+    return sendModePreview(ctx, modeKey);
+  } catch (e) {
+    console.error("SHOW MODE ERROR:", e);
+  }
+});
+
+bot.action(/^mode_(.+)$/, async (ctx) => {
+  try {
+    const modeKey = ctx.match[1];
+    const mode = db.modes[modeKey];
+    if (!mode) return;
+
+    ctx.session.selectedModeKey = modeKey;
+    await ctx.answerCbQuery("Режим обрано");
+    return ctx.reply(
+      `✅ Обрано режим: ${mode.label}\n\nТепер надішли фото.`,
+      mainMenu()
+    );
+  } catch (e) {
+    console.error("SELECT MODE ERROR:", e);
+  }
+});
+
+bot.action("back_to_menu", async (ctx) => {
+  await ctx.answerCbQuery();
+  return ctx.reply("Повернення в меню", mainMenu());
+});
+
+bot.action(/^checkpay_(pack10|pack20|pack30)$/, async (ctx) => {
+  try {
+    const packKey = ctx.match[1];
     const user = getUser(ctx.from.id);
 
-    if (!canUseSurprise(user)) {
+    const lastPayment = [...db.payments]
+      .reverse()
+      .find(
+        (p) =>
+          p.userId === ctx.from.id &&
+          p.packKey === packKey &&
+          ["created", "approved", "credited"].includes(p.status)
+      );
+
+    if (!lastPayment) {
+      await ctx.answerCbQuery("Платіж ще не знайдено");
+      return;
+    }
+
+    if (lastPayment.status === "credited") {
+      await ctx.answerCbQuery("Оплату вже підтверджено ✅");
       return ctx.reply(
-        "🔒 Режим сюрпризу відкривається з рівня Активний.\nЗроби ще кілька генерацій і він стане доступним ✨",
+        `✅ Оплата підтверджена.\nПакет ${getPackageTitle(packKey)} уже зараховано.\nБаланс: ${user.balance}`,
         mainMenu()
       );
     }
 
-    const randomMode =
-      WOW_RANDOM_MODES[Math.floor(Math.random() * WOW_RANDOM_MODES.length)];
-    ctx.session.mode = randomMode;
-    ctx.session.customPrompt = null;
-    ctx.session.awaitingIdeaPrompt = false;
-
-    return ctx.reply("🎲 Я обрав для тебе вау-режим. Надішли фото 📸");
-  }
-
-  if (text === getUI("customPrompt")) {
-    clearInteractiveStates(ctx);
-    ctx.session.mode = "custom";
-    return ctx.reply("Напиши промт текстом, а потім надішли фото.");
-  }
-
-  if (text === getUI("ideaToPrompt")) {
-    incrementButtonStat("promptIdea");
-    clearInteractiveStates(ctx);
-    ctx.session.mode = "idea_prompt";
-    ctx.session.awaitingIdeaPrompt = true;
-
+    await ctx.answerCbQuery("Оплата ще обробляється");
     return ctx.reply(
-      `Напиши свою ідею простими словами.
-Наприклад:
-- хочу щось естетичне
-- хочу дорогий стиль
-- хочу ніжний образ
-- хочу темну атмосферу`
-    );
-  }
-
-  // ---------- packages buttons ----------
-  if (text === "10 фото — 99 грн") return sendLiqPayOffer(ctx, "pack10");
-  if (text === "20 фото — 179 грн") return sendLiqPayOffer(ctx, "pack20");
-  if (text === "30 фото — 249 грн") return sendLiqPayOffer(ctx, "pack30");
-
-  // ---------- admin: choose mode ----------
-  if (isAdmin(ctx.from.id)) {
-    const adminModeFound = Object.entries(db.modes).find(
-      ([key, mode]) => text === `${mode.label} | ${key}`
-    );
-
-    if (adminModeFound) {
-      const [modeKey] = adminModeFound;
-      clearInteractiveStates(ctx);
-      ctx.session.selectedModeKey = modeKey;
-
-      return ctx.reply(
-        `Режим: ${db.modes[modeKey].label}
-Ключ: ${modeKey}
-Доступ: ${db.modes[modeKey].access}
-
-Оберіть дію 👇`,
-        adminModeActionsMenu()
-      );
-    }
-
-    if (text === "👁 Показати поточний промт") {
-      const modeKey = ctx.session.selectedModeKey;
-      if (!modeKey || !db.modes[modeKey]) {
-        return ctx.reply("Спочатку обери режим 👇", adminModesMenu());
-      }
-
-      return ctx.reply(
-        `Поточний промт для "${db.modes[modeKey].label}":
-
-${db.modes[modeKey].prompt}`,
-        adminModeActionsMenu()
-      );
-    }
-
-    if (text === "📝 Змінити промт") {
-      const modeKey = ctx.session.selectedModeKey;
-      if (!modeKey || !db.modes[modeKey]) {
-        return ctx.reply("Спочатку обери режим 👇", adminModesMenu());
-      }
-
-      ctx.session.awaitingModeEdit = "prompt";
-      return ctx.reply(
-        `Надішли новий промт для "${db.modes[modeKey].label}"
-
-Поточний промт:
-${db.modes[modeKey].prompt}`,
-        Markup.removeKeyboard()
-      );
-    }
-
-    if (text === "✏️ Змінити назву кнопки") {
-      const modeKey = ctx.session.selectedModeKey;
-      if (!modeKey || !db.modes[modeKey]) {
-        return ctx.reply("Спочатку обери режим 👇", adminModesMenu());
-      }
-
-      ctx.session.awaitingModeEdit = "label";
-      return ctx.reply(
-        `Надішли нову назву кнопки для режиму "${db.modes[modeKey].label}"`,
-        Markup.removeKeyboard()
-      );
-    }
-
-    if (text === "🔐 Змінити доступ") {
-      const modeKey = ctx.session.selectedModeKey;
-      if (!modeKey || !db.modes[modeKey]) {
-        return ctx.reply("Спочатку обери режим 👇", adminModesMenu());
-      }
-
-      ctx.session.awaitingModeEdit = "access";
-      return ctx.reply(
-        `Надішли новий доступ для "${db.modes[modeKey].label}"
-
-Доступні значення:
-all
-secret`,
-        Markup.removeKeyboard()
-      );
-    }
-
-    const uiKeys = [
-      "wowMenu",
-      "classicMenu",
-      "surprise",
-      "ideaToPrompt",
-      "customPrompt",
-      "packages",
-      "buy",
-      "balance",
-      "promptIdeas",
-      "support",
-      "info",
-      "statuses",
-      "myStatus",
-      "statusesInfo",
-      "back",
-    ];
-
-    if (uiKeys.includes(text)) {
-      clearInteractiveStates(ctx);
-      ctx.session.awaitingUiTextKey = text;
-      return ctx.reply(
-        `Поточне значення "${text}":
-${getUI(text)}
-
-Надішли новий текст:`,
-        Markup.removeKeyboard()
-      );
-    }
-  }
-
-  // ---------- dynamic modes ----------
-  const foundMode = findModeByLabel(text);
-  if (foundMode) {
-    const [modeKey, mode] = foundMode;
-    const user = getUser(ctx.from.id);
-
-    if (mode.access === "secret" && !canUseSecretModes(user)) {
-      return ctx.reply(
-        "🔒 Цей режим доступний від статусу Premium 👑\nГенеруй більше фото, щоб відкрити секретні стилі ✨",
-        buildModesMenu(mode.group)
-      );
-    }
-
-    clearInteractiveStates(ctx);
-    ctx.session.mode = modeKey;
-
-    return ctx.reply(`Обрано режим: ${mode.label}\nНадішли фото 📸`);
-  }
-
-  return next();
-});
-
-// ===================== ОБРОБКА ФОТО =====================
-bot.on("photo", async (ctx) => {
-  try {
-    touchUser(ctx);
-    ensureSession(ctx);
-
-    const user = getUser(ctx.from.id);
-
-    if (ctx.session.awaitingWelcomePhoto && isAdmin(ctx.from.id)) {
-      const photo = ctx.message.photo[ctx.message.photo.length - 1];
-      db.content.welcomePhoto = photo.file_id;
-      ctx.session.awaitingWelcomePhoto = false;
-      saveDB();
-      return ctx.reply("✅ Вітальне фото оновлено.", adminMenu());
-    }
-
-    let prompt = "";
-
-    if (ctx.session.mode === "custom") {
-      if (!ctx.session.customPrompt) {
-        return ctx.reply("Спочатку напиши промт текстом.");
-      }
-      prompt = ctx.session.customPrompt;
-    } else {
-      if (!ctx.session.mode || !db.modes[ctx.session.mode]) {
-        return ctx.reply("Спочатку обери режим через /start");
-      }
-      prompt = db.modes[ctx.session.mode].prompt;
-    }
-
-    let spentPaidPhoto = false;
-    let spentFreeTry = false;
-
-    if (!isAdmin(ctx.from.id)) {
-      if (!user.freeUsed) {
-        user.freeUsed = true;
-        spentFreeTry = true;
-      } else if (user.balance <= 0) {
-        saveDB();
-        return ctx.reply(
-          "❌ Ліміт вичерпано.\nНатисни 💳 Купити",
-          Markup.keyboard([
-            [getUI("buy"), getUI("balance")],
-            [getUI("packages"), getUI("support")],
-            [getUI("info"), getUI("back")],
-          ]).resize()
-        );
-      } else {
-        user.balance -= 1;
-        spentPaidPhoto = true;
-      }
-    }
-
-    saveDB();
-
-    await ctx.reply("Генерую... ⏳");
-
-    const photo = ctx.message.photo[ctx.message.photo.length - 1];
-    const image = await getImage(ctx, photo.file_id);
-
-    const result = await fal.subscribe("fal-ai/nano-banana-2/edit", {
-      input: {
-        prompt,
-        image_urls: [image],
-        resolution: "1K",
-      },
-      logs: true,
-    });
-
-    const url = result?.data?.images?.[0]?.url;
-
-    if (!url) {
-      if (!isAdmin(ctx.from.id)) {
-        if (spentPaidPhoto) user.balance += 1;
-        if (spentFreeTry) user.freeUsed = false;
-        saveDB();
-      }
-      return ctx.reply("Помилка: сервіс не повернув зображення");
-    }
-
-    user.generationsCount += 1;
-    db.stats.totalGenerations += 1;
-    saveDB();
-
-    const statusLabel = getStatusLabel(getUserStatus(user));
-
-    ctx.session.mode = null;
-    ctx.session.customPrompt = null;
-    ctx.session.awaitingIdeaPrompt = false;
-
-    if (isAdmin(ctx.from.id)) {
-      return ctx.replyWithPhoto(
-        { url },
-        { caption: `Готово ✨\n\nАдмін-режим: безліміт ✅` }
-      );
-    }
-
-    return ctx.replyWithPhoto(
-      { url },
-      {
-        caption: `Готово ✨
-
-Статус: ${statusLabel}
-Залишилось фото: ${user.balance}`,
-      }
+      `⏳ Платіж ще не підтверджений.\n\nЯкщо ти вже оплатив(ла), зачекай 10–30 секунд і натисни ще раз.\nЯкщо буде затримка — напиши в підтримку:\n${SUPPORT_URL}`,
+      mainMenu()
     );
   } catch (e) {
-    console.error("FAL ERROR:", e);
-    await ctx.reply("Сталася помилка генерації 😢");
+    console.error("CHECKPAY ACTION ERROR:", e);
   }
 });
 
-// ===================== STOP =====================
 bot.catch((err) => {
   console.error("BOT ERROR:", err);
 });
 
-bot.launch();
-console.log("🔥 AI бот запущений");
+const app = express();
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+app.get("/", (req, res) => {
+  res.status(200).send("Bot is running 🚀");
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ ok: true, service: "promti-bot" });
+});
+
+app.post("/payment", async (req, res) => {
+  try {
+    const data = req.body || {};
+    console.log("WAYFORPAY CALLBACK:", JSON.stringify(data, null, 2));
+
+    const expectedSignature = signWfpCallback(data);
+
+    if (expectedSignature !== data.merchantSignature) {
+      console.error("WAYFORPAY SIGNATURE INVALID");
+      return res
+        .status(200)
+        .json(buildWfpAcceptResponse(data.orderReference || "unknown"));
+    }
+
+    const parsed = parseOrderReference(data.orderReference);
+    if (!parsed) {
+      return res
+        .status(200)
+        .json(buildWfpAcceptResponse(data.orderReference || "unknown"));
+    }
+
+    const { userId, packKey } = parsed;
+    const user = getUser(userId);
+
+    let payment = db.payments.find(
+      (p) => p.orderReference === data.orderReference && p.status !== "credited"
+    );
+
+    if (!payment) {
+      payment = {
+        provider: "wayforpay",
+        orderReference: data.orderReference,
+        userId,
+        packKey,
+        amount: Number(data.amount || 0),
+        status: "callback_received",
+        createdAt: new Date().toISOString(),
+      };
+      db.payments.push(payment);
+    }
+
+    payment.callback = data;
+    payment.updatedAt = new Date().toISOString();
+    payment.status = (data.transactionStatus || "").toLowerCase();
+
+    if ((data.transactionStatus || "").toLowerCase() === "approved") {
+      const alreadyCredited = db.payments.some(
+        (p) =>
+          p.orderReference === data.orderReference &&
+          p.status === "credited"
+      );
+
+      if (!alreadyCredited) {
+        const photos = getPackagePhotos(packKey);
+
+        user.balance += photos;
+        user.purchasedPhotos += photos;
+        user.pendingPackage = null;
+        user.pendingPaymentAt = null;
+        user.pendingOrderReference = null;
+
+        db.stats.packageSales[packKey] += 1;
+
+        db.payments.push({
+          provider: "wayforpay",
+          orderReference: data.orderReference,
+          userId,
+          packKey,
+          photos,
+          amountText: formatMoneyFromPackageKey(packKey),
+          amount: Number(data.amount || 0),
+          status: "credited",
+          createdAt: new Date().toISOString(),
+        });
+
+        saveDB();
+
+        try {
+          await bot.telegram.sendMessage(
+            userId,
+            `✅ Оплату підтверджено автоматично\n\nПакет: ${getPackageTitle(packKey)}\nЗараховано: ${photos} фото\nБаланс: ${user.balance}`,
+            mainMenu()
+          );
+        } catch (e) {
+          console.error("SEND USER PAYMENT MESSAGE ERROR:", e);
+        }
+
+        for (const adminId of ADMINS) {
+          try {
+            await bot.telegram.sendMessage(
+              adminId,
+              `✅ WayForPay: автоматично зараховано\n\nКористувач: ${userId}\nПакет: ${getPackageTitle(packKey)}\nOrderReference: ${data.orderReference}\nСума: ${data.amount} ${data.currency}`
+            );
+          } catch (e) {}
+        }
+      }
+    } else {
+      saveDB();
+    }
+
+    return res
+      .status(200)
+      .json(buildWfpAcceptResponse(data.orderReference));
+  } catch (error) {
+    console.error("WAYFORPAY PAYMENT ERROR:", error);
+    return res.status(200).json(buildWfpAcceptResponse("unknown"));
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`🌐 HTTP server started on port ${PORT}`);
+});
+
+bot.launch().then(() => {
+  console.log("🔥 AI бот запущений");
+});
+
+process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGTERM", () => bot.stop("SIGTERM"));

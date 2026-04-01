@@ -35,48 +35,18 @@ const PAYMENTS_PATH = path.join(__dirname, "payments.json");
 
 // ===== ПОЧАТКОВІ ПРОМТИ =====
 const DEFAULT_PROMPTS = {
-  portrait:
-    "ultra realistic portrait, studio lighting, preserve face, do not change identity",
-  beauty:
-    "beauty editorial, glossy skin, preserve face, do not change identity",
-  fashion:
-    "high fashion photoshoot, preserve face, do not change identity",
-  art:
-    "digital art, artistic portrait, preserve face, do not change identity",
-  trend:
-    "viral instagram aesthetic, preserve face, do not change identity",
+  portrait: "ultra realistic portrait, studio lighting, preserve face, do not change identity",
+  beauty: "beauty editorial, glossy skin, preserve face, do not change identity",
+  fashion: "high fashion photoshoot, preserve face, do not change identity",
+  art: "digital art, artistic portrait, preserve face, do not change identity",
+  trend: "viral instagram aesthetic, preserve face, do not change identity",
 };
 
 // ===== ПОЧАТКОВІ ТЕКСТИ =====
 const DEFAULT_CONTENT = {
-  welcomeText: `Привіт ✨
-
-🎁 1 фото безкоштовно
-
-💳 Пакети:
-10 фото — 99 грн
-20 фото — 179 грн
-30 фото — 249 грн
-
-Обери режим:`,
-  infoText: `PROMTI AI Bot
-
-🎁 1 фото безкоштовно
-💳 Пакети:
-10 фото — 99 грн
-20 фото — 179 грн
-30 фото — 249 грн
-
-Надішли фото та обери стиль.`,
-  helpText: `Допомога:
-
-1. Обери режим
-2. Надішли фото
-3. Отримай результат
-
-Якщо закінчився баланс — натисни "💳 Купити".
-
-Якщо є проблема з оплатою або генерацією — напиши в підтримку.`,
+  welcomeText: `Привіт ✨\n\n🎁 1 фото безкоштовно\n\n💳 Пакети:\n10 фото — 99 грн\n20 фото — 179 грн\n30 фото — 249 грн\n\nОбери режим:`,
+  infoText: `PROMTI AI Bot\n\n🎁 1 фото безкоштовно\n💳 Пакети:\n10 фото — 99 грн\n20 фото — 179 грн\n30 фото — 249 грн\n\nНадішли фото та обери стиль.`,
+  helpText: `Допомога:\n\n1. Обери режим\n2. Надішли фото\n3. Отримай результат\n\nЯкщо закінчився баланс — натисни "💳 Купити".\n\nЯкщо є проблема з оплатою або генерацією — напиши в підтримку.`,
   supportText: `Напиши в підтримку: https://t.me/promteamai?direct`,
 };
 
@@ -87,7 +57,6 @@ function loadJson(filePath, fallback) {
       fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), "utf8");
       return JSON.parse(JSON.stringify(fallback));
     }
-
     const raw = fs.readFileSync(filePath, "utf8");
     return JSON.parse(raw);
   } catch (e) {
@@ -105,14 +74,8 @@ let prompts = loadJson(PROMPTS_PATH, DEFAULT_PROMPTS);
 let content = loadJson(CONTENT_PATH, DEFAULT_CONTENT);
 let payments = loadJson(PAYMENTS_PATH, []);
 
-prompts = {
-  ...DEFAULT_PROMPTS,
-  ...prompts,
-};
-content = {
-  ...DEFAULT_CONTENT,
-  ...content,
-};
+prompts = { ...DEFAULT_PROMPTS, ...prompts };
+content = { ...DEFAULT_CONTENT, ...content };
 
 saveJson(PROMPTS_PATH, prompts);
 saveJson(CONTENT_PATH, content);
@@ -129,10 +92,8 @@ function ensureSession(ctx) {
 
 function resetAdminState(ctx) {
   ensureSession(ctx);
-
   ctx.session.awaitingPromptEditKey = null;
   ctx.session.awaitingTextEditKey = null;
-
   ctx.session.awaitingCustomPrompt = false;
   ctx.session.customPrompt = null;
   ctx.session.mode = null;
@@ -181,33 +142,14 @@ function savePayments() {
   saveJson(PAYMENTS_PATH, payments);
 }
 
+// ===== ПАКЕТИ =====
 const PACKAGES = {
-  pack10: {
-    key: "pack10",
-    title: "10 фото",
-    description: "Пакет на 10 генерацій фото",
-    photos: 10,
-    amount: 99,
-    priceText: "99 грн",
-  },
-  pack20: {
-    key: "pack20",
-    title: "20 фото",
-    description: "Пакет на 20 генерацій фото",
-    photos: 20,
-    amount: 179,
-    priceText: "179 грн",
-  },
-  pack30: {
-    key: "pack30",
-    title: "30 фото",
-    description: "Пакет на 30 генерацій фото",
-    photos: 30,
-    amount: 249,
-    priceText: "249 грн",
-  },
+  pack10: { key: "pack10", title: "10 фото", description: "Пакет на 10 генерацій фото", photos: 10, amount: 99, priceText: "99 грн" },
+  pack20: { key: "pack20", title: "20 фото", description: "Пакет на 20 генерацій фото", photos: 20, amount: 179, priceText: "179 грн" },
+  pack30: { key: "pack30", title: "30 фото", description: "Пакет на 30 генерацій фото", photos: 30, amount: 249, priceText: "249 грн" },
 };
 
+// ===== МЕНЮ =====
 function mainMenu() {
   return Markup.keyboard([
     ["👩 Портрет", "💄 Б'юті"],
@@ -262,15 +204,11 @@ function paymentInlineKeyboard(payUrl, pack) {
   ]);
 }
 
+// ===== ОТРИМАННЯ ФОТО =====
 async function getImage(ctx, fileId) {
   const file = await ctx.telegram.getFile(fileId);
   const url = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
-
-  const res = await axios.get(url, {
-    responseType: "arraybuffer",
-    timeout: 120000,
-  });
-
+  const res = await axios.get(url, { responseType: "arraybuffer", timeout: 120000 });
   return `data:image/jpeg;base64,${Buffer.from(res.data).toString("base64")}`;
 }
 
@@ -282,24 +220,10 @@ function buildOrderReference(userId, packKey) {
 function parseOrderReference(orderReference) {
   const match = /^tg_(\d+)_(pack10|pack20|pack30)_\d+$/.exec(orderReference || "");
   if (!match) return null;
-
-  return {
-    userId: Number(match[1]),
-    packKey: match[2],
-  };
+  return { userId: Number(match[1]), packKey: match[2] };
 }
 
-function signWfpPurchase({
-  merchantAccount,
-  merchantDomainName,
-  orderReference,
-  orderDate,
-  amount,
-  currency,
-  productName,
-  productCount,
-  productPrice,
-}) {
+function signWfpPurchase({ merchantAccount, merchantDomainName, orderReference, orderDate, amount, currency, productName, productCount, productPrice }) {
   const values = [
     merchantAccount,
     merchantDomainName,
@@ -311,11 +235,7 @@ function signWfpPurchase({
     ...productCount,
     ...productPrice,
   ];
-
-  return crypto
-    .createHmac("md5", WAYFORPAY.secretKey)
-    .update(values.join(";"), "utf8")
-    .digest("hex");
+  return crypto.createHmac("md5", WAYFORPAY.secretKey).update(values.join(";"), "utf8").digest("hex");
 }
 
 function signWfpCallback(data) {
@@ -329,73 +249,43 @@ function signWfpCallback(data) {
     data.transactionStatus || "",
     data.reasonCode || "",
   ];
-
-  return crypto
-    .createHmac("md5", WAYFORPAY.secretKey)
-    .update(values.join(";"), "utf8")
-    .digest("hex");
+  return crypto.createHmac("md5", WAYFORPAY.secretKey).update(values.join(";"), "utf8").digest("hex");
 }
 
 function buildWfpAcceptResponse(orderReference) {
   const time = Math.floor(Date.now() / 1000);
   const status = "accept";
-
   const signature = crypto
     .createHmac("md5", WAYFORPAY.secretKey)
     .update([orderReference, status, time].join(";"), "utf8")
     .digest("hex");
-
-  return {
-    orderReference,
-    status,
-    time,
-    signature,
-  };
+  return { orderReference, status, time, signature };
 }
 
 function normalizeWayForPayCallbackBody(body) {
   if (!body) return {};
-
   if (typeof body === "string") {
-    try {
-      return JSON.parse(body);
-    } catch {
-      return {};
-    }
+    try { return JSON.parse(body); } catch { return {}; }
   }
-
   if (typeof body === "object" && !Array.isArray(body)) {
-    if (body.merchantAccount && body.orderReference) {
-      return body;
-    }
-
+    if (body.merchantAccount && body.orderReference) return body;
     const keys = Object.keys(body);
-
     if (keys.length === 1) {
       const firstKey = keys[0];
       if (firstKey && firstKey.startsWith("{") && firstKey.endsWith("}")) {
-        try {
-          return JSON.parse(firstKey);
-        } catch {
-          return body;
-        }
+        try { return JSON.parse(firstKey); } catch { return body; }
       }
     }
   }
-
   return body;
 }
 
+// ВИПРАВЛЕНО: прибрано merchantTransactionType: "AUTO" — він ламав callback для звичайних мерчантів
 async function createWayForPayInvoice(userId, packKey) {
   const pack = PACKAGES[packKey];
   if (!pack) throw new Error("Unknown package");
 
-  if (
-    !WAYFORPAY.merchantAccount ||
-    !WAYFORPAY.secretKey ||
-    !WAYFORPAY.domainName ||
-    !WAYFORPAY.serviceUrl
-  ) {
+  if (!WAYFORPAY.merchantAccount || !WAYFORPAY.secretKey || !WAYFORPAY.domainName || !WAYFORPAY.serviceUrl) {
     throw new Error("WayForPay environment variables are not fully configured");
   }
 
@@ -406,7 +296,7 @@ async function createWayForPayInvoice(userId, packKey) {
     transactionType: "CREATE_INVOICE",
     merchantAccount: WAYFORPAY.merchantAccount,
     merchantDomainName: WAYFORPAY.domainName,
-    merchantTransactionType: "AUTO",
+    // ВИДАЛЕНО: merchantTransactionType: "AUTO" — ламало callback без рекурентного договору
     merchantAuthType: "SimpleSignature",
     apiVersion: 1,
     language: "UA",
@@ -433,12 +323,16 @@ async function createWayForPayInvoice(userId, packKey) {
     productPrice: payload.productPrice,
   });
 
+  console.log("WFP CREATE INVOICE payload:", JSON.stringify(payload, null, 2));
+
   const response = await axios.post("https://api.wayforpay.com/api", payload, {
     headers: { "Content-Type": "application/json" },
     timeout: 30000,
   });
 
   const data = response.data || {};
+  console.log("WFP CREATE INVOICE response:", JSON.stringify(data, null, 2));
+
   const invoiceUrl = data.invoiceUrl || data.url || data.href || null;
 
   if (!invoiceUrl) {
@@ -461,39 +355,37 @@ async function createWayForPayInvoice(userId, packKey) {
 }
 
 function hasCreditedPayment(orderReference) {
-  return payments.some(
-    (p) => p.orderReference === orderReference && p.status === "credited"
-  );
+  return payments.some((p) => p.orderReference === orderReference && p.status === "credited");
 }
 
+// ВИПРАВЛЕНО: функція більше не створює дублікат якщо вже є credited
 function updatePaymentStatus(orderReference, data, status) {
-  let payment = payments.find(
-    (p) => p.orderReference === orderReference && p.status !== "credited"
-  );
+  const existing = payments.find((p) => p.orderReference === orderReference);
 
-  if (!payment) {
-    payment = {
+  if (existing) {
+    // Не перезаписуємо credited статус
+    if (existing.status === "credited") return;
+    existing.callback = data;
+    existing.updatedAt = new Date().toISOString();
+    existing.status = status || existing.status;
+  } else {
+    payments.push({
       provider: "wayforpay",
       orderReference,
       status: status || "callback_received",
       createdAt: new Date().toISOString(),
-    };
-    payments.push(payment);
+      callback: data,
+    });
   }
-
-  payment.callback = data;
-  payment.updatedAt = new Date().toISOString();
-  payment.status = status || payment.status;
 
   savePayments();
 }
 
-// ===== START / HELP / INFO =====
+// ===== START =====
 bot.start((ctx) => {
   ensureSession(ctx);
   touchUser(ctx);
   resetAdminState(ctx);
-
   return ctx.reply(content.welcomeText, mainMenu());
 });
 
@@ -507,7 +399,6 @@ bot.command("info", (ctx) => {
   return ctx.reply(content.infoText, mainMenu());
 });
 
-// ===== КОМАНДИ =====
 bot.command("myid", (ctx) => {
   touchUser(ctx);
   return ctx.reply(`Твій Telegram ID: ${ctx.from.id}`);
@@ -516,112 +407,64 @@ bot.command("myid", (ctx) => {
 // /add 123456789 20
 bot.command("add", async (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
 
   const parts = ctx.message.text.trim().split(/\s+/);
   const userId = Number(parts[1]);
   const amount = Number(parts[2]);
 
-  if (!userId || !amount) {
-    return ctx.reply("Формат: /add ID КІЛЬКІСТЬ");
-  }
+  if (!userId || !amount) return ctx.reply("Формат: /add ID КІЛЬКІСТЬ");
 
   const user = getUser(userId);
   user.balance += amount;
   saveUsers();
 
   await ctx.reply(`✅ Додано ${amount} фото користувачу ${userId}`);
-
-  bot.telegram
-    .sendMessage(
-      userId,
-      `🎉 Вам нараховано ${amount} генерацій
-
-Зараз на балансі: ${user.balance}`,
-      mainMenu()
-    )
-    .catch(() => {});
+  bot.telegram.sendMessage(userId, `🎉 Вам нараховано ${amount} генерацій\n\nЗараз на балансі: ${user.balance}`, mainMenu()).catch(() => {});
 });
 
 // ===== АДМІН =====
 bot.command("admin", (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
   resetAdminState(ctx);
   return ctx.reply("Адмін-меню:", adminMenu());
 });
 
 bot.hears("⚙️ Адмін", (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
   resetAdminState(ctx);
   return ctx.reply("Адмін-меню:", adminMenu());
 });
 
 bot.hears("📊 Статус бота", (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
   const usersCount = Object.keys(users).length;
-
   return ctx.reply(
-    `Бот працює ✅
-Fal підключений ✅
-Модель: nano-banana-2 ✅
-Користувачів: ${usersCount}
-Автооплата: увімкнена ✅`,
+    `Бот працює ✅\nFal підключений ✅\nМодель: nano-banana-2 ✅\nКористувачів: ${usersCount}\nАвтооплата: увімкнена ✅`,
     adminMenu()
   );
 });
 
 bot.hears("👤 Мій ID", (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
   return ctx.reply(`Твій Telegram ID: ${ctx.from.id}`, adminMenu());
 });
 
 bot.hears("👥 Користувачі", (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
 
   const allUsers = Object.values(users);
-  if (!allUsers.length) {
-    return ctx.reply("Користувачів поки немає", adminMenu());
-  }
+  if (!allUsers.length) return ctx.reply("Користувачів поки немає", adminMenu());
 
   const text = allUsers
     .slice(-20)
     .reverse()
-    .map(
-      (u) =>
-        `ID: ${u.id}
-Ім'я: ${u.firstName || "-"}
-Username: @${u.username || "-"}
-Баланс: ${u.balance}
-Куплено фото: ${u.purchasedPhotos || 0}
-Генерацій: ${u.generations || 0}`
-    )
+    .map((u) => `ID: ${u.id}\nІм'я: ${u.firstName || "-"}\nUsername: @${u.username || "-"}\nБаланс: ${u.balance}\nКуплено фото: ${u.purchasedPhotos || 0}\nГенерацій: ${u.generations || 0}`)
     .join("\n\n");
 
   return ctx.reply(text, adminMenu());
@@ -629,27 +472,14 @@ Username: @${u.username || "-"}
 
 bot.hears("💳 Останні оплати", (ctx) => {
   touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
 
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
-  if (!payments.length) {
-    return ctx.reply("Оплат поки немає", adminMenu());
-  }
+  if (!payments.length) return ctx.reply("Оплат поки немає", adminMenu());
 
   const text = payments
     .slice(-20)
     .reverse()
-    .map(
-      (p) =>
-        `Order: ${p.orderReference || "-"}
-User ID: ${p.userId || "-"}
-Пакет: ${p.packKey || "-"}
-Сума: ${p.amount || "-"}
-Статус: ${p.status || "-"}
-Час: ${p.updatedAt || p.createdAt || "-"}`
-    )
+    .map((p) => `Order: ${p.orderReference || "-"}\nUser ID: ${p.userId || "-"}\nПакет: ${p.packKey || "-"}\nСума: ${p.amount || "-"}\nСтатус: ${p.status || "-"}\nЧас: ${p.updatedAt || p.createdAt || "-"}`)
     .join("\n\n");
 
   return ctx.reply(text, adminMenu());
@@ -657,96 +487,52 @@ User ID: ${p.userId || "-"}
 
 bot.hears("📝 Поточні промти", (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
-  const text = Object.entries(prompts)
-    .map(([key, value]) => `${key}:\n${value}`)
-    .join("\n\n");
-
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
+  const text = Object.entries(prompts).map(([key, value]) => `${key}:\n${value}`).join("\n\n");
   return ctx.reply(text, adminMenu());
 });
 
 bot.hears("✏️ Змінити промт", (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
   resetAdminState(ctx);
   return ctx.reply("Обери який промт змінити:", adminPromptsMenu());
 });
 
 bot.hears(["portrait", "beauty", "fashion", "art", "trend"], (ctx) => {
   touchUser(ctx);
-
   if (!isAdmin(ctx.from.id)) return;
-  if (!["portrait", "beauty", "fashion", "art", "trend"].includes(ctx.message.text)) {
-    return;
-  }
+  if (!["portrait", "beauty", "fashion", "art", "trend"].includes(ctx.message.text)) return;
 
   ctx.session.awaitingPromptEditKey = ctx.message.text;
-
   return ctx.reply(
-    `Ключ: ${ctx.message.text}
-
-Поточний промт:
-${prompts[ctx.message.text]}
-
-Надішли новий промт текстом.`,
+    `Ключ: ${ctx.message.text}\n\nПоточний промт:\n${prompts[ctx.message.text]}\n\nНадішли новий промт текстом.`,
     adminMenu()
   );
 });
 
 bot.hears("📝 Поточні тексти", (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
-  const text = Object.entries(content)
-    .map(([key, value]) => `${key}:\n${value}`)
-    .join("\n\n====================\n\n");
-
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
+  const text = Object.entries(content).map(([key, value]) => `${key}:\n${value}`).join("\n\n====================\n\n");
   return ctx.reply(text, adminMenu());
 });
 
 bot.hears("✏️ Змінити текст", (ctx) => {
   touchUser(ctx);
-
-  if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("❌ Немає доступу");
-  }
-
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
   resetAdminState(ctx);
   return ctx.reply("Обери який текст змінити:", adminTextsMenu());
 });
 
 bot.hears(["welcomeText", "infoText", "helpText", "supportText"], (ctx) => {
   touchUser(ctx);
-
   if (!isAdmin(ctx.from.id)) return;
-  if (
-    !["welcomeText", "infoText", "helpText", "supportText"].includes(
-      ctx.message.text
-    )
-  ) {
-    return;
-  }
+  if (!["welcomeText", "infoText", "helpText", "supportText"].includes(ctx.message.text)) return;
 
   ctx.session.awaitingTextEditKey = ctx.message.text;
-
   return ctx.reply(
-    `Ключ: ${ctx.message.text}
-
-Поточний текст:
-${content[ctx.message.text]}
-
-Надішли новий текст.`,
+    `Ключ: ${ctx.message.text}\n\nПоточний текст:\n${content[ctx.message.text]}\n\nНадішли новий текст.`,
     adminMenu()
   );
 });
@@ -777,19 +563,11 @@ bot.hears("🆘 Підтримка", (ctx) => {
 // ===== БАЛАНС =====
 bot.hears("📊 Баланс", (ctx) => {
   const user = touchUser(ctx);
-
   if (isAdmin(ctx.from.id)) {
-    return ctx.reply(
-      "📊 Статус: адмін\nГенерації: безліміт ✅\nДоступ до всіх кнопок відкрито ✅",
-      mainMenu()
-    );
+    return ctx.reply("📊 Статус: адмін\nГенерації: безліміт ✅\nДоступ до всіх кнопок відкрито ✅", mainMenu());
   }
-
   return ctx.reply(
-    `📊 Твій баланс:
-Фото: ${user.balance}
-Безкоштовне фото використано: ${user.freeUsed ? "так" : "ні"}
-Всього генерацій: ${user.generations || 0}`,
+    `📊 Твій баланс:\nФото: ${user.balance}\nБезкоштовне фото використано: ${user.freeUsed ? "так" : "ні"}\nВсього генерацій: ${user.generations || 0}`,
     mainMenu()
   );
 });
@@ -797,14 +575,7 @@ bot.hears("📊 Баланс", (ctx) => {
 // ===== КУПІВЛЯ =====
 bot.hears("💳 Купити", (ctx) => {
   touchUser(ctx);
-
-  if (isAdmin(ctx.from.id)) {
-    return ctx.reply(
-      "✅ Ти адмін, для тебе генерації безкоштовні.",
-      adminMenu()
-    );
-  }
-
+  if (isAdmin(ctx.from.id)) return ctx.reply("✅ Ти адмін, для тебе генерації безкоштовні.", adminMenu());
   return ctx.reply("Обери пакет:", buyMenu());
 });
 
@@ -813,24 +584,14 @@ async function sendAutoPayment(ctx, packKey) {
     const user = touchUser(ctx);
     const pack = PACKAGES[packKey];
 
-    const { invoiceUrl, orderReference } = await createWayForPayInvoice(
-      ctx.from.id,
-      packKey
-    );
+    const { invoiceUrl, orderReference } = await createWayForPayInvoice(ctx.from.id, packKey);
 
     user.pendingOrderReference = orderReference;
-    user.lastPaymentRequest = {
-      packKey,
-      packageTitle: pack.title,
-      createdAt: new Date().toISOString(),
-    };
+    user.lastPaymentRequest = { packKey, packageTitle: pack.title, createdAt: new Date().toISOString() };
     saveUsers();
 
     return ctx.reply(
-      `Пакет: ${pack.title}
-Ціна: ${pack.priceText}
-
-Натисни кнопку для оплати.`,
+      `Пакет: ${pack.title}\nЦіна: ${pack.priceText}\n\nНатисни кнопку для оплати.`,
       paymentInlineKeyboard(invoiceUrl, pack)
     );
   } catch (e) {
@@ -845,9 +606,7 @@ bot.hears("30 фото", (ctx) => sendAutoPayment(ctx, "pack30"));
 
 bot.action(/^checkpay_(pack10|pack20|pack30)$/, async (ctx) => {
   try {
-    await ctx.answerCbQuery(
-      "Якщо оплата вже пройшла, фото будуть зараховані автоматично"
-    );
+    await ctx.answerCbQuery("Якщо оплата вже пройшла, фото будуть зараховані автоматично");
   } catch (e) {
     console.error("CHECKPAY ERROR:", e.message);
   }
@@ -855,56 +614,38 @@ bot.action(/^checkpay_(pack10|pack20|pack30)$/, async (ctx) => {
 
 // ===== РЕЖИМИ =====
 bot.hears("👩 Портрет", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  ctx.session.mode = "portrait";
-  ctx.session.awaitingCustomPrompt = false;
-  ctx.session.customPrompt = null;
+  touchUser(ctx); ensureSession(ctx);
+  ctx.session.mode = "portrait"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   return ctx.reply("Надішли фото 📸", mainMenu());
 });
 
 bot.hears("💄 Б'юті", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  ctx.session.mode = "beauty";
-  ctx.session.awaitingCustomPrompt = false;
-  ctx.session.customPrompt = null;
+  touchUser(ctx); ensureSession(ctx);
+  ctx.session.mode = "beauty"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   return ctx.reply("Надішли фото 📸", mainMenu());
 });
 
 bot.hears("📸 Fashion", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  ctx.session.mode = "fashion";
-  ctx.session.awaitingCustomPrompt = false;
-  ctx.session.customPrompt = null;
+  touchUser(ctx); ensureSession(ctx);
+  ctx.session.mode = "fashion"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   return ctx.reply("Надішли фото 📸", mainMenu());
 });
 
 bot.hears("🎨 Арт", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  ctx.session.mode = "art";
-  ctx.session.awaitingCustomPrompt = false;
-  ctx.session.customPrompt = null;
+  touchUser(ctx); ensureSession(ctx);
+  ctx.session.mode = "art"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   return ctx.reply("Надішли фото 📸", mainMenu());
 });
 
 bot.hears("🔥 Тренд", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  ctx.session.mode = "trend";
-  ctx.session.awaitingCustomPrompt = false;
-  ctx.session.customPrompt = null;
+  touchUser(ctx); ensureSession(ctx);
+  ctx.session.mode = "trend"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   return ctx.reply("Надішли фото 📸", mainMenu());
 });
 
 bot.hears("✍️ Свій промт", (ctx) => {
-  touchUser(ctx);
-  ensureSession(ctx);
-  ctx.session.mode = "custom";
-  ctx.session.awaitingCustomPrompt = true;
-  ctx.session.customPrompt = null;
+  touchUser(ctx); ensureSession(ctx);
+  ctx.session.mode = "custom"; ctx.session.awaitingCustomPrompt = true; ctx.session.customPrompt = null;
   return ctx.reply("Напиши промт текстом, а потім надішли фото.", mainMenu());
 });
 
@@ -917,58 +658,23 @@ bot.on("text", async (ctx, next) => {
     const text = ctx.message.text;
 
     const menuButtons = [
-      "👩 Портрет",
-      "💄 Б'юті",
-      "📸 Fashion",
-      "🎨 Арт",
-      "🔥 Тренд",
-      "✍️ Свій промт",
-      "💳 Купити",
-      "📊 Баланс",
-      "10 фото",
-      "20 фото",
-      "30 фото",
-      "📊 Статус бота",
-      "👤 Мій ID",
-      "👥 Користувачі",
-      "💳 Останні оплати",
-      "✏️ Змінити промт",
-      "📝 Поточні промти",
-      "✏️ Змінити текст",
-      "📝 Поточні тексти",
-      "portrait",
-      "beauty",
-      "fashion",
-      "art",
-      "trend",
-      "welcomeText",
-      "infoText",
-      "helpText",
-      "supportText",
-      "ℹ️ Інфо",
-      "❓ Допомога",
-      "🆘 Підтримка",
-      "⚙️ Адмін",
-      "↩️ Назад",
+      "👩 Портрет", "💄 Б'юті", "📸 Fashion", "🎨 Арт", "🔥 Тренд", "✍️ Свій промт",
+      "💳 Купити", "📊 Баланс", "10 фото", "20 фото", "30 фото",
+      "📊 Статус бота", "👤 Мій ID", "👥 Користувачі", "💳 Останні оплати",
+      "✏️ Змінити промт", "📝 Поточні промти", "✏️ Змінити текст", "📝 Поточні тексти",
+      "portrait", "beauty", "fashion", "art", "trend",
+      "welcomeText", "infoText", "helpText", "supportText",
+      "ℹ️ Інфо", "❓ Допомога", "🆘 Підтримка", "⚙️ Адмін", "↩️ Назад",
     ];
 
-    if (menuButtons.includes(text) || text.startsWith("/")) {
-      return next();
-    }
+    if (menuButtons.includes(text) || text.startsWith("/")) return next();
 
     if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptEditKey) {
       const key = ctx.session.awaitingPromptEditKey;
       prompts[key] = text;
       savePrompts();
       ctx.session.awaitingPromptEditKey = null;
-
-      return ctx.reply(
-        `✅ Промт для ${key} оновлено і збережено.
-
-Новий промт:
-${prompts[key]}`,
-        adminMenu()
-      );
+      return ctx.reply(`✅ Промт для ${key} оновлено і збережено.\n\nНовий промт:\n${prompts[key]}`, adminMenu());
     }
 
     if (isAdmin(ctx.from.id) && ctx.session.awaitingTextEditKey) {
@@ -976,14 +682,7 @@ ${prompts[key]}`,
       content[key] = text;
       saveContent();
       ctx.session.awaitingTextEditKey = null;
-
-      return ctx.reply(
-        `✅ Текст ${key} оновлено і збережено.
-
-Новий текст:
-${content[key]}`,
-        adminMenu()
-      );
+      return ctx.reply(`✅ Текст ${key} оновлено і збережено.\n\nНовий текст:\n${content[key]}`, adminMenu());
     }
 
     if (ctx.session.mode === "custom" && ctx.session.awaitingCustomPrompt) {
@@ -1027,14 +726,10 @@ bot.on("photo", async (ctx) => {
     let prompt = "";
 
     if (ctx.session.mode === "custom") {
-      if (!ctx.session.customPrompt) {
-        return ctx.reply("Спочатку напиши свій промт текстом.");
-      }
+      if (!ctx.session.customPrompt) return ctx.reply("Спочатку напиши свій промт текстом.");
       prompt = ctx.session.customPrompt;
     } else {
-      if (!ctx.session.mode || !prompts[ctx.session.mode]) {
-        return ctx.reply("Спочатку обери режим через /start");
-      }
+      if (!ctx.session.mode || !prompts[ctx.session.mode]) return ctx.reply("Спочатку обери режим через /start");
       prompt = prompts[ctx.session.mode];
     }
 
@@ -1044,128 +739,109 @@ bot.on("photo", async (ctx) => {
     const image = await getImage(ctx, photo.file_id);
 
     const result = await fal.subscribe("fal-ai/nano-banana-2/edit", {
-      input: {
-        prompt,
-        image_urls: [image],
-        resolution: "1K",
-      },
+      input: { prompt, image_urls: [image], resolution: "1K" },
       logs: true,
     });
 
     const url = result?.data?.images?.[0]?.url;
-
-    if (!url) {
-      throw new Error("fal не повернув зображення");
-    }
+    if (!url) throw new Error("fal не повернув зображення");
 
     user.generations = (user.generations || 0) + 1;
     saveUsers();
 
     if (isAdmin(ctx.from.id)) {
-      return ctx.replyWithPhoto(
-        { url },
-        { caption: "Готово ✨\nАдмін-режим: безліміт ✅" }
-      );
+      return ctx.replyWithPhoto({ url }, { caption: "Готово ✨\nАдмін-режим: безліміт ✅" });
     }
 
-    return ctx.replyWithPhoto(
-      { url },
-      { caption: `Готово ✨\nЗалишилось фото: ${user.balance}` }
-    );
+    return ctx.replyWithPhoto({ url }, { caption: `Готово ✨\nЗалишилось фото: ${user.balance}` });
   } catch (e) {
     console.error("FAL ERROR:", e);
-
     const user = getUser(ctx.from.id);
-
     if (!isAdmin(ctx.from.id)) {
-      if (chargedFromBalance) {
-        user.balance += 1;
-      }
-      if (usedFree) {
-        user.freeUsed = false;
-      }
+      if (chargedFromBalance) user.balance += 1;
+      if (usedFree) user.freeUsed = false;
       saveUsers();
     }
-
     return ctx.reply("Сталася помилка генерації 😢");
   }
 });
 
-// ===== EXPRESS / CALLBACK =====
+// ===== EXPRESS =====
 const app = express();
+
+// ВИПРАВЛЕНО: trust proxy для Railway — без цього HTTPS не розпізнається
+app.set("trust proxy", 1);
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-app.get("/", (req, res) => {
-  res.status(200).send("Bot is running");
-});
+app.get("/", (req, res) => res.status(200).send("Bot is running"));
+app.get("/health", (req, res) => res.status(200).json({ ok: true }));
 
-app.get("/health", (req, res) => {
-  res.status(200).json({ ok: true });
-});
-
+// ===== WAYFORPAY CALLBACK =====
 app.post("/payment", async (req, res) => {
   try {
     const rawBody = req.body || {};
     const data = normalizeWayForPayCallbackBody(rawBody);
 
-    console.log("WAYFORPAY CALLBACK:", JSON.stringify(data, null, 2));
+    // Детальне логування — допомагає діагностувати проблеми з підписом
+    console.log("=== WAYFORPAY CALLBACK RECEIVED ===");
+    console.log("RAW BODY:", JSON.stringify(rawBody, null, 2));
+    console.log("NORMALIZED:", JSON.stringify(data, null, 2));
 
+    // Перевірка підпису
     const expectedSignature = signWfpCallback(data);
+    console.log("SIGNATURE CHECK:");
+    console.log("  Expected:", expectedSignature);
+    console.log("  Received:", data.merchantSignature);
+    console.log("  Match:", expectedSignature === data.merchantSignature);
 
     if (expectedSignature !== data.merchantSignature) {
-      console.error("WAYFORPAY SIGNATURE INVALID");
-      return res
-        .status(200)
-        .json(buildWfpAcceptResponse(data.orderReference || "unknown"));
+      console.error("WAYFORPAY SIGNATURE INVALID — пропускаємо але відповідаємо accept");
+      // Все одно відповідаємо accept щоб WayForPay не слав повторно
+      return res.status(200).json(buildWfpAcceptResponse(data.orderReference || "unknown"));
     }
 
     const parsed = parseOrderReference(data.orderReference);
     if (!parsed) {
-      return res
-        .status(200)
-        .json(buildWfpAcceptResponse(data.orderReference || "unknown"));
+      console.error("WAYFORPAY PARSE ORDER REFERENCE FAILED:", data.orderReference);
+      return res.status(200).json(buildWfpAcceptResponse(data.orderReference || "unknown"));
     }
 
     const { userId, packKey } = parsed;
     const pack = PACKAGES[packKey];
     const user = getUser(userId);
 
-    updatePaymentStatus(
-      data.orderReference,
-      data,
-      (data.transactionStatus || "").toLowerCase() || "callback_received"
-    );
+    const txStatus = (data.transactionStatus || "").toLowerCase();
+    console.log("TRANSACTION STATUS:", txStatus);
 
-    if ((data.transactionStatus || "").toLowerCase() === "approved") {
+    updatePaymentStatus(data.orderReference, data, txStatus || "callback_received");
+
+    if (txStatus === "approved") {
       if (!hasCreditedPayment(data.orderReference)) {
+        // ВИПРАВЛЕНО: тепер updatePaymentStatus не створює дублікат,
+        // тому одразу оновлюємо статус на credited
+        const payment = payments.find((p) => p.orderReference === data.orderReference);
+        if (payment) {
+          payment.status = "credited";
+          payment.updatedAt = new Date().toISOString();
+          payment.amount = Number(data.amount || 0);
+          payment.callback = data;
+        }
+
         user.balance += pack.photos;
-        user.purchasedPhotos += pack.photos;
+        user.purchasedPhotos = (user.purchasedPhotos || 0) + pack.photos;
         user.pendingOrderReference = null;
         user.lastPaidAt = new Date().toISOString();
         saveUsers();
-
-        payments.push({
-          provider: "wayforpay",
-          orderReference: data.orderReference,
-          userId,
-          packKey,
-          amount: Number(data.amount || 0),
-          status: "credited",
-          createdAt: new Date().toISOString(),
-          callback: data,
-        });
         savePayments();
+
+        console.log(`✅ CREDITED: user ${userId}, pack ${packKey}, +${pack.photos} фото, balance: ${user.balance}`);
 
         try {
           await bot.telegram.sendMessage(
             userId,
-            `✅ Оплату підтверджено автоматично
-
-Пакет: ${pack.title}
-Зараховано: ${pack.photos} фото
-Баланс: ${user.balance}`,
+            `✅ Оплату підтверджено автоматично\n\nПакет: ${pack.title}\nЗараховано: ${pack.photos} фото\nБаланс: ${user.balance}`,
             mainMenu()
           );
         } catch (e) {
@@ -1176,17 +852,14 @@ app.post("/payment", async (req, res) => {
           try {
             await bot.telegram.sendMessage(
               adminId,
-              `✅ Автооплата підтверджена
-
-Користувач: ${userId}
-Пакет: ${pack.title}
-Сума: ${data.amount} ${data.currency}
-OrderReference: ${data.orderReference}`
+              `✅ Автооплата підтверджена\n\nКористувач: ${userId}\nПакет: ${pack.title}\nСума: ${data.amount} ${data.currency}\nOrderReference: ${data.orderReference}`
             );
           } catch (e) {
             console.error("SEND ADMIN PAYMENT MESSAGE ERROR:", e.message);
           }
         }
+      } else {
+        console.log("ALREADY CREDITED, SKIP:", data.orderReference);
       }
     }
 
@@ -1201,6 +874,9 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`🌐 HTTP server started on port ${PORT}`);
+  console.log(`📡 Callback URL: ${WAYFORPAY.serviceUrl || "НЕ ЗАДАНО!"}`);
+  console.log(`🏪 Merchant: ${WAYFORPAY.merchantAccount || "НЕ ЗАДАНО!"}`);
+  console.log(`🌐 Domain: ${WAYFORPAY.domainName || "НЕ ЗАДАНО!"}`);
 });
 
 bot.launch().then(() => {

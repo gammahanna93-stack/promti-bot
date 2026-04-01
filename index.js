@@ -21,7 +21,7 @@ const ADMINS = [346101852, 688515215];
 const WAYFORPAY = {
   merchantAccount: process.env.WAYFORPAY_MERCHANT,
   secretKey: process.env.WAYFORPAY_SECRET,
-  domainName: process.env.WAYFORPAY_DOMAIN || "promti-bot.onrender.com",
+  domainName: process.env.WAYFORPAY_DOMAIN || "https://promti-bot.onrender.com",
   returnUrl: process.env.WAYFORPAY_RETURN_URL || "https://t.me/Promtiai_bot",
   serviceUrl:
     process.env.WAYFORPAY_SERVICE_URL ||
@@ -604,23 +604,28 @@ async function createWayForPayPaymentUrl(userId, packKey) {
   const productPrice = [amount];
 
   const payload = {
-    transactionType: "CREATE_INVOICE",
-    merchantAccount: WAYFORPAY.merchantAccount,
-    merchantDomainName: WAYFORPAY.domainName,
-    merchantTransactionType: "AUTO",
-    merchantTransactionSecureType: "AUTO",
-    apiVersion: 1,
-    language: "UA",
-    serviceUrl: WAYFORPAY.serviceUrl,
-    returnUrl: WAYFORPAY.returnUrl,
-    orderReference,
-    orderDate,
-    amount,
-    currency,
-    productName,
-    productPrice,
-    productCount,
-  };
+  transactionType: "CREATE_INVOICE",
+  merchantAccount: WAYFORPAY.merchantAccount,
+  merchantDomainName: WAYFORPAY.domainName,
+
+  merchantTransactionType: "AUTO",
+  merchantAuthType: "SimpleSignature", // ✅ ВАЖЛИВО
+
+  apiVersion: 1,
+  language: "UA",
+
+  serviceUrl: WAYFORPAY.serviceUrl,
+  returnUrl: WAYFORPAY.returnUrl,
+
+  orderReference,
+  orderDate,
+  amount,
+  currency,
+
+  productName,
+  productPrice,
+  productCount,
+};
 
   payload.merchantSignature = signWfpPurchase({
     merchantAccount: payload.merchantAccount,

@@ -879,10 +879,13 @@ app.listen(PORT, () => {
   console.log(`🌐 Domain: ${WAYFORPAY.domainName || "НЕ ЗАДАНО!"}`);
 });
 
-bot.launch().then(() => {
-  console.log("🔥 AI бот запущений");
-  console.log("✅ Модель: fal-ai/nano-banana-2/edit");
-});
+setTimeout(() => {
+  bot.launch().then(() => {
+    console.log("🔥 AI бот запущений");
+    console.log("✅ Модель: fal-ai/nano-banana-2/edit");
+  });
+}, 3000); // чекаємо 3 секунди перед запуском});
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
+process.once("SIGUSR2", () => bot.stop("SIGUSR2"));

@@ -81,6 +81,31 @@ saveJson(PROMPTS_PATH, prompts);
 saveJson(CONTENT_PATH, content);
 saveJson(PAYMENTS_PATH, payments);
 
+// ===== RATE LIMITING =====
+const userLastGen = {};
+const userGenerating = new Set(); // захист від дублів генерації
+const RATE_LIMIT_MS = 15000; // 15 секунд між генераціями
+
+function checkRateLimit(userId) {
+  const now = Date.now();
+  if (userLastGen[userId] && now - userLastGen[userId] < RATE_LIMIT_MS) {
+    const secondsLeft = Math.ceil((RATE_LIMIT_MS - (now - userLastGen[userId])) / 1000);
+    return secondsLeft;
+  }
+  return 0;
+}
+
+// ===== НАДСИЛАННЯ ПОМИЛОК АДМІНУ =====
+async function notifyAdminsError(message) {
+  for (const adminId of ADMINS) {
+    try {
+      await bot.telegram.sendMessage(adminId, `⚠️ ПОМИЛКА БОТА:\n\n${message}`);
+    } catch (e) {
+      console.error("NOTIFY ADMIN ERROR:", e.message);
+    }
+  }
+}
+
 // ===== ДОПОМІЖНІ =====
 function isAdmin(userId) {
   return ADMINS.includes(userId);
@@ -107,11 +132,13 @@ function getUser(id) {
       balance: 0,
       generations: 0,
       purchasedPhotos: 0,
+      totalSpent: 0,
       username: "",
       firstName: "",
       lastPaymentRequest: null,
       pendingOrderReference: null,
       lastPaidAt: null,
+      createdAt: new Date().toISOString(),
     };
     saveJson(USERS_PATH, users);
   }
@@ -139,7 +166,6 @@ const PACKAGES = {
 };
 
 // ===== МЕНЮ =====
-// ВИПРАВЛЕНО: прибрано кнопку "⚙️ Адмін" — адмін-панель тільки через /admin
 function mainMenu() {
   return Markup.keyboard([
     ["👩 Портрет", "💄 Б'юті"],
@@ -263,7 +289,6 @@ function normalizeWayForPayCallbackBody(body) {
   return body;
 }
 
-// ВИПРАВЛЕНО: прибрано merchantTransactionType: "AUTO"
 async function createWayForPayInvoice(userId, packKey) {
   const pack = PACKAGES[packKey];
   if (!pack) throw new Error("Unknown package");
@@ -339,7 +364,6 @@ function hasCreditedPayment(orderReference) {
   return payments.some((p) => p.orderReference === orderReference && p.status === "credited");
 }
 
-// ВИПРАВЛЕНО: не створює дублікат, не перезаписує credited
 function updatePaymentStatus(orderReference, data, status) {
   const existing = payments.find((p) => p.orderReference === orderReference);
   if (existing) {
@@ -357,6 +381,20 @@ function updatePaymentStatus(orderReference, data, status) {
     });
   }
   savePayments();
+}
+
+// ===== СТАТИСТИКА ДЛЯ АДМІНА =====
+function getBotStats() {
+  const allUsers = Object.values(users);
+  const totalUsers = allUsers.length;
+  const activeUsers = allUsers.filter((u) => u.generations > 0).length;
+  const totalGenerations = allUsers.reduce((sum, u) => sum + (u.generations || 0), 0);
+  const totalRevenue = payments
+    .filter((p) => p.status === "credited")
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const totalPaidOrders = payments.filter((p) => p.status === "credited").length;
+
+  return { totalUsers, activeUsers, totalGenerations, totalRevenue, totalPaidOrders };
 }
 
 // ===== START =====
@@ -409,12 +447,25 @@ bot.command("admin", (ctx) => {
   return ctx.reply("Адмін-меню:", adminMenu());
 });
 
+// ===== СТАТУС БОТА — розширена статистика =====
 bot.hears("📊 Статус бота", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-  const usersCount = Object.keys(users).length;
+
+  const stats = getBotStats();
+
   return ctx.reply(
-    `Бот працює ✅\nFal підключений ✅\nМодель: nano-banana-2 ✅\nКористувачів: ${usersCount}\nАвтооплата: увімкнена ✅`,
+    `🤖 Статус бота:\n\n` +
+    `✅ Бот працює\n` +
+    `✅ Fal підключений\n` +
+    `✅ Модель: nano-banana-2\n` +
+    `✅ Автооплата увімкнена\n\n` +
+    `📊 Статистика:\n` +
+    `👥 Користувачів: ${stats.totalUsers}\n` +
+    `🔥 Активних (з генераціями): ${stats.activeUsers}\n` +
+    `🖼 Всього генерацій: ${stats.totalGenerations}\n` +
+    `💰 Зароблено: ${stats.totalRevenue} грн\n` +
+    `🧾 Успішних оплат: ${stats.totalPaidOrders}`,
     adminMenu()
   );
 });
@@ -434,7 +485,15 @@ bot.hears("👥 Користувачі", (ctx) => {
 
   const text = allUsers
     .slice(-20).reverse()
-    .map((u) => `ID: ${u.id}\nІм'я: ${u.firstName || "-"}\nUsername: @${u.username || "-"}\nБаланс: ${u.balance}\nКуплено фото: ${u.purchasedPhotos || 0}\nГенерацій: ${u.generations || 0}`)
+    .map((u) =>
+      `ID: ${u.id}\n` +
+      `Ім'я: ${u.firstName || "-"}\n` +
+      `Username: @${u.username || "-"}\n` +
+      `Баланс: ${u.balance}\n` +
+      `Куплено фото: ${u.purchasedPhotos || 0}\n` +
+      `Генерацій: ${u.generations || 0}\n` +
+      `Реєстрація: ${u.createdAt ? u.createdAt.slice(0, 10) : "-"}`
+    )
     .join("\n\n");
 
   return ctx.reply(text, adminMenu());
@@ -448,7 +507,14 @@ bot.hears("💳 Останні оплати", (ctx) => {
 
   const text = payments
     .slice(-20).reverse()
-    .map((p) => `Order: ${p.orderReference || "-"}\nUser ID: ${p.userId || "-"}\nПакет: ${p.packKey || "-"}\nСума: ${p.amount || "-"}\nСтатус: ${p.status || "-"}\nЧас: ${p.updatedAt || p.createdAt || "-"}`)
+    .map((p) =>
+      `Order: ${p.orderReference || "-"}\n` +
+      `User ID: ${p.userId || "-"}\n` +
+      `Пакет: ${p.packKey || "-"}\n` +
+      `Сума: ${p.amount || "-"}\n` +
+      `Статус: ${p.status || "-"}\n` +
+      `Час: ${p.updatedAt || p.createdAt || "-"}`
+    )
     .join("\n\n");
 
   return ctx.reply(text, adminMenu());
@@ -673,8 +739,22 @@ bot.on("photo", async (ctx) => {
   try {
     ensureSession(ctx);
     const user = touchUser(ctx);
+    const userId = ctx.from.id;
 
-    if (!isAdmin(ctx.from.id)) {
+    // ===== ЗАХИСТ ВІД ДУБЛІВ =====
+    if (userGenerating.has(userId)) {
+      return ctx.reply("⏳ Зачекай, твоє фото ще генерується...");
+    }
+
+    // ===== RATE LIMITING =====
+    if (!isAdmin(userId)) {
+      const secondsLeft = checkRateLimit(userId);
+      if (secondsLeft > 0) {
+        return ctx.reply(`⏳ Зачекай ще ${secondsLeft} сек. перед наступною генерацією.`);
+      }
+    }
+
+    if (!isAdmin(userId)) {
       if (!user.freeUsed) {
         user.freeUsed = true;
         usedFree = true;
@@ -699,15 +779,26 @@ bot.on("photo", async (ctx) => {
       prompt = prompts[ctx.session.mode];
     }
 
+    // Позначаємо що юзер генерує
+    userGenerating.add(userId);
+    userLastGen[userId] = Date.now();
+
     await ctx.reply("Генерую... ⏳");
 
+    // ===== ТАЙМАУТ НА FAL.AI =====
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
     const image = await getImage(ctx, photo.file_id);
 
-    const result = await fal.subscribe("fal-ai/nano-banana-2/edit", {
+    const falPromise = fal.subscribe("fal-ai/nano-banana-2/edit", {
       input: { prompt, image_urls: [image], resolution: "1K" },
       logs: true,
     });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("FAL_TIMEOUT")), 120000)
+    );
+
+    const result = await Promise.race([falPromise, timeoutPromise]);
 
     const url = result?.data?.images?.[0]?.url;
     if (!url) throw new Error("fal не повернув зображення");
@@ -715,19 +806,37 @@ bot.on("photo", async (ctx) => {
     user.generations = (user.generations || 0) + 1;
     saveUsers();
 
-    if (isAdmin(ctx.from.id)) {
+    userGenerating.delete(userId);
+
+    if (isAdmin(userId)) {
       return ctx.replyWithPhoto({ url }, { caption: "Готово ✨\nАдмін-режим: безліміт ✅" });
     }
     return ctx.replyWithPhoto({ url }, { caption: `Готово ✨\nЗалишилось фото: ${user.balance}` });
+
   } catch (e) {
+    const userId = ctx.from.id;
+    userGenerating.delete(userId);
+
     console.error("FAL ERROR:", e);
-    const user = getUser(ctx.from.id);
-    if (!isAdmin(ctx.from.id)) {
+
+    // Повертаємо баланс при помилці
+    const user = getUser(userId);
+    if (!isAdmin(userId)) {
       if (chargedFromBalance) user.balance += 1;
       if (usedFree) user.freeUsed = false;
       saveUsers();
     }
-    return ctx.reply("Сталася помилка генерації 😢");
+
+    // Повідомляємо адміна про помилку
+    const errorMsg = e.message === "FAL_TIMEOUT"
+      ? `FAL TIMEOUT: юзер ${userId}`
+      : `FAL ERROR: юзер ${userId}\n${e.message}`;
+    notifyAdminsError(errorMsg).catch(() => {});
+
+    if (e.message === "FAL_TIMEOUT") {
+      return ctx.reply("⏱ Генерація зайняла занадто багато часу. Спробуй ще раз.");
+    }
+    return ctx.reply("Сталася помилка генерації 😢 Спробуй ще раз.");
   }
 });
 
@@ -789,6 +898,7 @@ app.post("/payment", async (req, res) => {
 
         user.balance += pack.photos;
         user.purchasedPhotos = (user.purchasedPhotos || 0) + pack.photos;
+        user.totalSpent = (user.totalSpent || 0) + Number(data.amount || 0);
         user.pendingOrderReference = null;
         user.lastPaidAt = new Date().toISOString();
         saveUsers();
@@ -810,7 +920,7 @@ app.post("/payment", async (req, res) => {
           try {
             await bot.telegram.sendMessage(
               adminId,
-              `✅ Автооплата підтверджена\n\nКористувач: ${userId}\nПакет: ${pack.title}\nСума: ${data.amount} ${data.currency}\nOrderReference: ${data.orderReference}`
+              `✅ Автооплата підтверджена\n\nКористувач: ${userId} (@${user.username || "-"})\nПакет: ${pack.title}\nСума: ${data.amount} ${data.currency}\nOrderReference: ${data.orderReference}`
             );
           } catch (e) {
             console.error("SEND ADMIN PAYMENT MESSAGE ERROR:", e.message);
@@ -837,13 +947,11 @@ app.listen(PORT, () => {
   console.log(`🌐 Domain: ${WAYFORPAY.domainName || "НЕ ЗАДАНО!"}`);
 });
 
-// ВИПРАВЛЕНО: затримка 3 сек — вирішує помилку 409 Conflict на Render
-setTimeout(() => {
-  bot.launch().then(() => {
-    console.log("🔥 AI бот запущений");
-    console.log("✅ Модель: fal-ai/nano-banana-2/edit");
-  });
-}, 3000);
+// ===== ЗАПУСК БОТА — виправлено 409 Conflict =====
+bot.launch({ dropPendingUpdates: true }).then(() => {
+  console.log("🔥 AI бот запущений");
+  console.log("✅ Модель: fal-ai/nano-banana-2/edit");
+});
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

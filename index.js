@@ -126,21 +126,10 @@ function touchUser(ctx) {
   return user;
 }
 
-function saveUsers() {
-  saveJson(USERS_PATH, users);
-}
-
-function savePrompts() {
-  saveJson(PROMPTS_PATH, prompts);
-}
-
-function saveContent() {
-  saveJson(CONTENT_PATH, content);
-}
-
-function savePayments() {
-  saveJson(PAYMENTS_PATH, payments);
-}
+function saveUsers() { saveJson(USERS_PATH, users); }
+function savePrompts() { saveJson(PROMPTS_PATH, prompts); }
+function saveContent() { saveJson(CONTENT_PATH, content); }
+function savePayments() { saveJson(PAYMENTS_PATH, payments); }
 
 // ===== ПАКЕТИ =====
 const PACKAGES = {
@@ -150,6 +139,7 @@ const PACKAGES = {
 };
 
 // ===== МЕНЮ =====
+// ВИПРАВЛЕНО: прибрано кнопку "⚙️ Адмін" — адмін-панель тільки через /admin
 function mainMenu() {
   return Markup.keyboard([
     ["👩 Портрет", "💄 Б'юті"],
@@ -157,7 +147,7 @@ function mainMenu() {
     ["🔥 Тренд", "✍️ Свій промт"],
     ["💳 Купити", "📊 Баланс"],
     ["ℹ️ Інфо", "❓ Допомога"],
-    ["🆘 Підтримка", "⚙️ Адмін"],
+    ["🆘 Підтримка"],
   ]).resize();
 }
 
@@ -225,15 +215,8 @@ function parseOrderReference(orderReference) {
 
 function signWfpPurchase({ merchantAccount, merchantDomainName, orderReference, orderDate, amount, currency, productName, productCount, productPrice }) {
   const values = [
-    merchantAccount,
-    merchantDomainName,
-    orderReference,
-    orderDate,
-    amount,
-    currency,
-    ...productName,
-    ...productCount,
-    ...productPrice,
+    merchantAccount, merchantDomainName, orderReference, orderDate,
+    amount, currency, ...productName, ...productCount, ...productPrice,
   ];
   return crypto.createHmac("md5", WAYFORPAY.secretKey).update(values.join(";"), "utf8").digest("hex");
 }
@@ -280,7 +263,7 @@ function normalizeWayForPayCallbackBody(body) {
   return body;
 }
 
-// ВИПРАВЛЕНО: прибрано merchantTransactionType: "AUTO" — він ламав callback для звичайних мерчантів
+// ВИПРАВЛЕНО: прибрано merchantTransactionType: "AUTO"
 async function createWayForPayInvoice(userId, packKey) {
   const pack = PACKAGES[packKey];
   if (!pack) throw new Error("Unknown package");
@@ -296,7 +279,6 @@ async function createWayForPayInvoice(userId, packKey) {
     transactionType: "CREATE_INVOICE",
     merchantAccount: WAYFORPAY.merchantAccount,
     merchantDomainName: WAYFORPAY.domainName,
-    // ВИДАЛЕНО: merchantTransactionType: "AUTO" — ламало callback без рекурентного договору
     merchantAuthType: "SimpleSignature",
     apiVersion: 1,
     language: "UA",
@@ -334,7 +316,6 @@ async function createWayForPayInvoice(userId, packKey) {
   console.log("WFP CREATE INVOICE response:", JSON.stringify(data, null, 2));
 
   const invoiceUrl = data.invoiceUrl || data.url || data.href || null;
-
   if (!invoiceUrl) {
     throw new Error(`WayForPay did not return invoiceUrl: ${JSON.stringify(data)}`);
   }
@@ -358,12 +339,10 @@ function hasCreditedPayment(orderReference) {
   return payments.some((p) => p.orderReference === orderReference && p.status === "credited");
 }
 
-// ВИПРАВЛЕНО: функція більше не створює дублікат якщо вже є credited
+// ВИПРАВЛЕНО: не створює дублікат, не перезаписує credited
 function updatePaymentStatus(orderReference, data, status) {
   const existing = payments.find((p) => p.orderReference === orderReference);
-
   if (existing) {
-    // Не перезаписуємо credited статус
     if (existing.status === "credited") return;
     existing.callback = data;
     existing.updatedAt = new Date().toISOString();
@@ -377,7 +356,6 @@ function updatePaymentStatus(orderReference, data, status) {
       callback: data,
     });
   }
-
   savePayments();
 }
 
@@ -423,15 +401,8 @@ bot.command("add", async (ctx) => {
   bot.telegram.sendMessage(userId, `🎉 Вам нараховано ${amount} генерацій\n\nЗараз на балансі: ${user.balance}`, mainMenu()).catch(() => {});
 });
 
-// ===== АДМІН =====
+// ===== АДМІН (тільки через /admin) =====
 bot.command("admin", (ctx) => {
-  touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-  resetAdminState(ctx);
-  return ctx.reply("Адмін-меню:", adminMenu());
-});
-
-bot.hears("⚙️ Адмін", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
   resetAdminState(ctx);
@@ -462,8 +433,7 @@ bot.hears("👥 Користувачі", (ctx) => {
   if (!allUsers.length) return ctx.reply("Користувачів поки немає", adminMenu());
 
   const text = allUsers
-    .slice(-20)
-    .reverse()
+    .slice(-20).reverse()
     .map((u) => `ID: ${u.id}\nІм'я: ${u.firstName || "-"}\nUsername: @${u.username || "-"}\nБаланс: ${u.balance}\nКуплено фото: ${u.purchasedPhotos || 0}\nГенерацій: ${u.generations || 0}`)
     .join("\n\n");
 
@@ -477,8 +447,7 @@ bot.hears("💳 Останні оплати", (ctx) => {
   if (!payments.length) return ctx.reply("Оплат поки немає", adminMenu());
 
   const text = payments
-    .slice(-20)
-    .reverse()
+    .slice(-20).reverse()
     .map((p) => `Order: ${p.orderReference || "-"}\nUser ID: ${p.userId || "-"}\nПакет: ${p.packKey || "-"}\nСума: ${p.amount || "-"}\nСтатус: ${p.status || "-"}\nЧас: ${p.updatedAt || p.createdAt || "-"}`)
     .join("\n\n");
 
@@ -503,7 +472,6 @@ bot.hears(["portrait", "beauty", "fashion", "art", "trend"], (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return;
   if (!["portrait", "beauty", "fashion", "art", "trend"].includes(ctx.message.text)) return;
-
   ctx.session.awaitingPromptEditKey = ctx.message.text;
   return ctx.reply(
     `Ключ: ${ctx.message.text}\n\nПоточний промт:\n${prompts[ctx.message.text]}\n\nНадішли новий промт текстом.`,
@@ -529,7 +497,6 @@ bot.hears(["welcomeText", "infoText", "helpText", "supportText"], (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return;
   if (!["welcomeText", "infoText", "helpText", "supportText"].includes(ctx.message.text)) return;
-
   ctx.session.awaitingTextEditKey = ctx.message.text;
   return ctx.reply(
     `Ключ: ${ctx.message.text}\n\nПоточний текст:\n${content[ctx.message.text]}\n\nНадішли новий текст.`,
@@ -564,7 +531,7 @@ bot.hears("🆘 Підтримка", (ctx) => {
 bot.hears("📊 Баланс", (ctx) => {
   const user = touchUser(ctx);
   if (isAdmin(ctx.from.id)) {
-    return ctx.reply("📊 Статус: адмін\nГенерації: безліміт ✅\nДоступ до всіх кнопок відкрито ✅", mainMenu());
+    return ctx.reply("📊 Статус: адмін\nГенерації: безліміт ✅\nДоступ до всіх кнопок відкрито ✅", adminMenu());
   }
   return ctx.reply(
     `📊 Твій баланс:\nФото: ${user.balance}\nБезкоштовне фото використано: ${user.freeUsed ? "так" : "ні"}\nВсього генерацій: ${user.generations || 0}`,
@@ -664,7 +631,7 @@ bot.on("text", async (ctx, next) => {
       "✏️ Змінити промт", "📝 Поточні промти", "✏️ Змінити текст", "📝 Поточні тексти",
       "portrait", "beauty", "fashion", "art", "trend",
       "welcomeText", "infoText", "helpText", "supportText",
-      "ℹ️ Інфо", "❓ Допомога", "🆘 Підтримка", "⚙️ Адмін", "↩️ Назад",
+      "ℹ️ Інфо", "❓ Допомога", "🆘 Підтримка", "↩️ Назад",
     ];
 
     if (menuButtons.includes(text) || text.startsWith("/")) return next();
@@ -724,7 +691,6 @@ bot.on("photo", async (ctx) => {
     }
 
     let prompt = "";
-
     if (ctx.session.mode === "custom") {
       if (!ctx.session.customPrompt) return ctx.reply("Спочатку напиши свій промт текстом.");
       prompt = ctx.session.customPrompt;
@@ -752,7 +718,6 @@ bot.on("photo", async (ctx) => {
     if (isAdmin(ctx.from.id)) {
       return ctx.replyWithPhoto({ url }, { caption: "Готово ✨\nАдмін-режим: безліміт ✅" });
     }
-
     return ctx.replyWithPhoto({ url }, { caption: `Готово ✨\nЗалишилось фото: ${user.balance}` });
   } catch (e) {
     console.error("FAL ERROR:", e);
@@ -769,9 +734,7 @@ bot.on("photo", async (ctx) => {
 // ===== EXPRESS =====
 const app = express();
 
-// ВИПРАВЛЕНО: trust proxy для Railway — без цього HTTPS не розпізнається
 app.set("trust proxy", 1);
-
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -784,12 +747,10 @@ app.post("/payment", async (req, res) => {
     const rawBody = req.body || {};
     const data = normalizeWayForPayCallbackBody(rawBody);
 
-    // Детальне логування — допомагає діагностувати проблеми з підписом
     console.log("=== WAYFORPAY CALLBACK RECEIVED ===");
     console.log("RAW BODY:", JSON.stringify(rawBody, null, 2));
     console.log("NORMALIZED:", JSON.stringify(data, null, 2));
 
-    // Перевірка підпису
     const expectedSignature = signWfpCallback(data);
     console.log("SIGNATURE CHECK:");
     console.log("  Expected:", expectedSignature);
@@ -797,8 +758,7 @@ app.post("/payment", async (req, res) => {
     console.log("  Match:", expectedSignature === data.merchantSignature);
 
     if (expectedSignature !== data.merchantSignature) {
-      console.error("WAYFORPAY SIGNATURE INVALID — пропускаємо але відповідаємо accept");
-      // Все одно відповідаємо accept щоб WayForPay не слав повторно
+      console.error("WAYFORPAY SIGNATURE INVALID");
       return res.status(200).json(buildWfpAcceptResponse(data.orderReference || "unknown"));
     }
 
@@ -819,8 +779,6 @@ app.post("/payment", async (req, res) => {
 
     if (txStatus === "approved") {
       if (!hasCreditedPayment(data.orderReference)) {
-        // ВИПРАВЛЕНО: тепер updatePaymentStatus не створює дублікат,
-        // тому одразу оновлюємо статус на credited
         const payment = payments.find((p) => p.orderReference === data.orderReference);
         if (payment) {
           payment.status = "credited";
@@ -879,12 +837,13 @@ app.listen(PORT, () => {
   console.log(`🌐 Domain: ${WAYFORPAY.domainName || "НЕ ЗАДАНО!"}`);
 });
 
+// ВИПРАВЛЕНО: затримка 3 сек — вирішує помилку 409 Conflict на Render
 setTimeout(() => {
   bot.launch().then(() => {
     console.log("🔥 AI бот запущений");
     console.log("✅ Модель: fal-ai/nano-banana-2/edit");
   });
-}, 3000); // чекаємо 3 секунди перед запуском});
+}, 3000);
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

@@ -1,5 +1,14 @@
 require("dotenv").config();
 
+// ===== ГЛОБАЛЬНИЙ ЗАХИСТ — процес не падає якщо бот крашнувся =====
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err.message);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason);
+});
+
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -83,8 +92,8 @@ saveJson(PAYMENTS_PATH, payments);
 
 // ===== RATE LIMITING =====
 const userLastGen = {};
-const userGenerating = new Set(); // захист від дублів генерації
-const RATE_LIMIT_MS = 15000; // 15 секунд між генераціями
+const userGenerating = new Set();
+const RATE_LIMIT_MS = 15000;
 
 function checkRateLimit(userId) {
   const now = Date.now();
@@ -393,7 +402,6 @@ function getBotStats() {
     .filter((p) => p.status === "credited")
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const totalPaidOrders = payments.filter((p) => p.status === "credited").length;
-
   return { totalUsers, activeUsers, totalGenerations, totalRevenue, totalPaidOrders };
 }
 
@@ -420,26 +428,20 @@ bot.command("myid", (ctx) => {
   return ctx.reply(`Твій Telegram ID: ${ctx.from.id}`);
 });
 
-// /add 123456789 20
 bot.command("add", async (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
   const parts = ctx.message.text.trim().split(/\s+/);
   const userId = Number(parts[1]);
   const amount = Number(parts[2]);
-
   if (!userId || !amount) return ctx.reply("Формат: /add ID КІЛЬКІСТЬ");
-
   const user = getUser(userId);
   user.balance += amount;
   saveUsers();
-
   await ctx.reply(`✅ Додано ${amount} фото користувачу ${userId}`);
   bot.telegram.sendMessage(userId, `🎉 Вам нараховано ${amount} генерацій\n\nЗараз на балансі: ${user.balance}`, mainMenu()).catch(() => {});
 });
 
-// ===== АДМІН (тільки через /admin) =====
 bot.command("admin", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
@@ -447,13 +449,10 @@ bot.command("admin", (ctx) => {
   return ctx.reply("Адмін-меню:", adminMenu());
 });
 
-// ===== СТАТУС БОТА — розширена статистика =====
 bot.hears("📊 Статус бота", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
   const stats = getBotStats();
-
   return ctx.reply(
     `🤖 Статус бота:\n\n` +
     `✅ Бот працює\n` +
@@ -479,44 +478,27 @@ bot.hears("👤 Мій ID", (ctx) => {
 bot.hears("👥 Користувачі", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
   const allUsers = Object.values(users);
   if (!allUsers.length) return ctx.reply("Користувачів поки немає", adminMenu());
-
   const text = allUsers
     .slice(-20).reverse()
     .map((u) =>
-      `ID: ${u.id}\n` +
-      `Ім'я: ${u.firstName || "-"}\n` +
-      `Username: @${u.username || "-"}\n` +
-      `Баланс: ${u.balance}\n` +
-      `Куплено фото: ${u.purchasedPhotos || 0}\n` +
-      `Генерацій: ${u.generations || 0}\n` +
-      `Реєстрація: ${u.createdAt ? u.createdAt.slice(0, 10) : "-"}`
+      `ID: ${u.id}\nІм'я: ${u.firstName || "-"}\nUsername: @${u.username || "-"}\nБаланс: ${u.balance}\nКуплено фото: ${u.purchasedPhotos || 0}\nГенерацій: ${u.generations || 0}\nРеєстрація: ${u.createdAt ? u.createdAt.slice(0, 10) : "-"}`
     )
     .join("\n\n");
-
   return ctx.reply(text, adminMenu());
 });
 
 bot.hears("💳 Останні оплати", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌ Немає доступу");
-
   if (!payments.length) return ctx.reply("Оплат поки немає", adminMenu());
-
   const text = payments
     .slice(-20).reverse()
     .map((p) =>
-      `Order: ${p.orderReference || "-"}\n` +
-      `User ID: ${p.userId || "-"}\n` +
-      `Пакет: ${p.packKey || "-"}\n` +
-      `Сума: ${p.amount || "-"}\n` +
-      `Статус: ${p.status || "-"}\n` +
-      `Час: ${p.updatedAt || p.createdAt || "-"}`
+      `Order: ${p.orderReference || "-"}\nUser ID: ${p.userId || "-"}\nПакет: ${p.packKey || "-"}\nСума: ${p.amount || "-"}\nСтатус: ${p.status || "-"}\nЧас: ${p.updatedAt || p.createdAt || "-"}`
     )
     .join("\n\n");
-
   return ctx.reply(text, adminMenu());
 });
 
@@ -570,14 +552,12 @@ bot.hears(["welcomeText", "infoText", "helpText", "supportText"], (ctx) => {
   );
 });
 
-// ===== НАЗАД =====
 bot.hears("↩️ Назад", (ctx) => {
   touchUser(ctx);
   resetAdminState(ctx);
   return ctx.reply("Повертаю звичайне меню ✨", mainMenu());
 });
 
-// ===== ІНФО / ДОПОМОГА / ПІДТРИМКА =====
 bot.hears("ℹ️ Інфо", (ctx) => {
   touchUser(ctx);
   return ctx.reply(content.infoText, mainMenu());
@@ -593,7 +573,6 @@ bot.hears("🆘 Підтримка", (ctx) => {
   return ctx.reply(content.supportText, mainMenu());
 });
 
-// ===== БАЛАНС =====
 bot.hears("📊 Баланс", (ctx) => {
   const user = touchUser(ctx);
   if (isAdmin(ctx.from.id)) {
@@ -605,7 +584,6 @@ bot.hears("📊 Баланс", (ctx) => {
   );
 });
 
-// ===== КУПІВЛЯ =====
 bot.hears("💳 Купити", (ctx) => {
   touchUser(ctx);
   if (isAdmin(ctx.from.id)) return ctx.reply("✅ Ти адмін, для тебе генерації безкоштовні.", adminMenu());
@@ -616,13 +594,10 @@ async function sendAutoPayment(ctx, packKey) {
   try {
     const user = touchUser(ctx);
     const pack = PACKAGES[packKey];
-
     const { invoiceUrl, orderReference } = await createWayForPayInvoice(ctx.from.id, packKey);
-
     user.pendingOrderReference = orderReference;
     user.lastPaymentRequest = { packKey, packageTitle: pack.title, createdAt: new Date().toISOString() };
     saveUsers();
-
     return ctx.reply(
       `Пакет: ${pack.title}\nЦіна: ${pack.priceText}\n\nНатисни кнопку для оплати.`,
       paymentInlineKeyboard(invoiceUrl, pack)
@@ -645,7 +620,6 @@ bot.action(/^checkpay_(pack10|pack20|pack30)$/, async (ctx) => {
   }
 });
 
-// ===== РЕЖИМИ =====
 bot.hears("👩 Портрет", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   ctx.session.mode = "portrait"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
@@ -682,14 +656,11 @@ bot.hears("✍️ Свій промт", (ctx) => {
   return ctx.reply("Напиши промт текстом, а потім надішли фото.", mainMenu());
 });
 
-// ===== ОБРОБКА ТЕКСТУ =====
 bot.on("text", async (ctx, next) => {
   try {
     ensureSession(ctx);
     touchUser(ctx);
-
     const text = ctx.message.text;
-
     const menuButtons = [
       "👩 Портрет", "💄 Б'юті", "📸 Fashion", "🎨 Арт", "🔥 Тренд", "✍️ Свій промт",
       "💳 Купити", "📊 Баланс", "10 фото", "20 фото", "30 фото",
@@ -699,9 +670,7 @@ bot.on("text", async (ctx, next) => {
       "welcomeText", "infoText", "helpText", "supportText",
       "ℹ️ Інфо", "❓ Допомога", "🆘 Підтримка", "↩️ Назад",
     ];
-
     if (menuButtons.includes(text) || text.startsWith("/")) return next();
-
     if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptEditKey) {
       const key = ctx.session.awaitingPromptEditKey;
       prompts[key] = text;
@@ -709,7 +678,6 @@ bot.on("text", async (ctx, next) => {
       ctx.session.awaitingPromptEditKey = null;
       return ctx.reply(`✅ Промт для ${key} оновлено і збережено.\n\nНовий промт:\n${prompts[key]}`, adminMenu());
     }
-
     if (isAdmin(ctx.from.id) && ctx.session.awaitingTextEditKey) {
       const key = ctx.session.awaitingTextEditKey;
       content[key] = text;
@@ -717,13 +685,11 @@ bot.on("text", async (ctx, next) => {
       ctx.session.awaitingTextEditKey = null;
       return ctx.reply(`✅ Текст ${key} оновлено і збережено.\n\nНовий текст:\n${content[key]}`, adminMenu());
     }
-
     if (ctx.session.mode === "custom" && ctx.session.awaitingCustomPrompt) {
       ctx.session.customPrompt = text;
       ctx.session.awaitingCustomPrompt = false;
       return ctx.reply("Промт збережено ✅\nТепер надішли фото.", mainMenu());
     }
-
     return ctx.reply("Обери режим через меню або натисни /start", mainMenu());
   } catch (e) {
     console.error("TEXT HANDLER ERROR:", e.message);
@@ -731,29 +697,22 @@ bot.on("text", async (ctx, next) => {
   }
 });
 
-// ===== ГЕНЕРАЦІЯ =====
 bot.on("photo", async (ctx) => {
   let chargedFromBalance = false;
   let usedFree = false;
-
   try {
     ensureSession(ctx);
     const user = touchUser(ctx);
     const userId = ctx.from.id;
-
-    // ===== ЗАХИСТ ВІД ДУБЛІВ =====
     if (userGenerating.has(userId)) {
       return ctx.reply("⏳ Зачекай, твоє фото ще генерується...");
     }
-
-    // ===== RATE LIMITING =====
     if (!isAdmin(userId)) {
       const secondsLeft = checkRateLimit(userId);
       if (secondsLeft > 0) {
         return ctx.reply(`⏳ Зачекай ще ${secondsLeft} сек. перед наступною генерацією.`);
       }
     }
-
     if (!isAdmin(userId)) {
       if (!user.freeUsed) {
         user.freeUsed = true;
@@ -769,7 +728,6 @@ bot.on("photo", async (ctx) => {
       }
       saveUsers();
     }
-
     let prompt = "";
     if (ctx.session.mode === "custom") {
       if (!ctx.session.customPrompt) return ctx.reply("Спочатку напиши свій промт текстом.");
@@ -778,61 +736,42 @@ bot.on("photo", async (ctx) => {
       if (!ctx.session.mode || !prompts[ctx.session.mode]) return ctx.reply("Спочатку обери режим через /start");
       prompt = prompts[ctx.session.mode];
     }
-
-    // Позначаємо що юзер генерує
     userGenerating.add(userId);
     userLastGen[userId] = Date.now();
-
     await ctx.reply("Генерую... ⏳");
-
-    // ===== ТАЙМАУТ НА FAL.AI =====
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
     const image = await getImage(ctx, photo.file_id);
-
     const falPromise = fal.subscribe("fal-ai/nano-banana-2/edit", {
       input: { prompt, image_urls: [image], resolution: "1K" },
       logs: true,
     });
-
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error("FAL_TIMEOUT")), 120000)
     );
-
     const result = await Promise.race([falPromise, timeoutPromise]);
-
     const url = result?.data?.images?.[0]?.url;
     if (!url) throw new Error("fal не повернув зображення");
-
     user.generations = (user.generations || 0) + 1;
     saveUsers();
-
     userGenerating.delete(userId);
-
     if (isAdmin(userId)) {
       return ctx.replyWithPhoto({ url }, { caption: "Готово ✨\nАдмін-режим: безліміт ✅" });
     }
     return ctx.replyWithPhoto({ url }, { caption: `Готово ✨\nЗалишилось фото: ${user.balance}` });
-
   } catch (e) {
     const userId = ctx.from.id;
     userGenerating.delete(userId);
-
     console.error("FAL ERROR:", e);
-
-    // Повертаємо баланс при помилці
     const user = getUser(userId);
     if (!isAdmin(userId)) {
       if (chargedFromBalance) user.balance += 1;
       if (usedFree) user.freeUsed = false;
       saveUsers();
     }
-
-    // Повідомляємо адміна про помилку
     const errorMsg = e.message === "FAL_TIMEOUT"
       ? `FAL TIMEOUT: юзер ${userId}`
       : `FAL ERROR: юзер ${userId}\n${e.message}`;
     notifyAdminsError(errorMsg).catch(() => {});
-
     if (e.message === "FAL_TIMEOUT") {
       return ctx.reply("⏱ Генерація зайняла занадто багато часу. Спробуй ще раз.");
     }
@@ -895,7 +834,6 @@ app.post("/payment", async (req, res) => {
           payment.amount = Number(data.amount || 0);
           payment.callback = data;
         }
-
         user.balance += pack.photos;
         user.purchasedPhotos = (user.purchasedPhotos || 0) + pack.photos;
         user.totalSpent = (user.totalSpent || 0) + Number(data.amount || 0);
@@ -903,9 +841,7 @@ app.post("/payment", async (req, res) => {
         user.lastPaidAt = new Date().toISOString();
         saveUsers();
         savePayments();
-
         console.log(`✅ CREDITED: user ${userId}, pack ${packKey}, +${pack.photos} фото, balance: ${user.balance}`);
-
         try {
           await bot.telegram.sendMessage(
             userId,
@@ -915,7 +851,6 @@ app.post("/payment", async (req, res) => {
         } catch (e) {
           console.error("SEND USER PAYMENT MESSAGE ERROR:", e.message);
         }
-
         for (const adminId of ADMINS) {
           try {
             await bot.telegram.sendMessage(
@@ -938,6 +873,7 @@ app.post("/payment", async (req, res) => {
   }
 });
 
+// ===== ЗАПУСК EXPRESS ПЕРШИМ — він має бути живий завжди =====
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
@@ -947,11 +883,16 @@ app.listen(PORT, () => {
   console.log(`🌐 Domain: ${WAYFORPAY.domainName || "НЕ ЗАДАНО!"}`);
 });
 
-// ===== ЗАПУСК БОТА — виправлено 409 Conflict =====
-bot.launch({ dropPendingUpdates: true }).then(() => {
-  console.log("🔥 AI бот запущений");
-  console.log("✅ Модель: fal-ai/nano-banana-2/edit");
-});
+// ===== ЗАПУСК БОТА ПІСЛЯ EXPRESS — помилка бота НЕ вбиває Express =====
+bot.launch({ dropPendingUpdates: true })
+  .then(() => {
+    console.log("🔥 AI бот запущений");
+    console.log("✅ Модель: fal-ai/nano-banana-2/edit");
+  })
+  .catch((err) => {
+    // Бот впав — але Express продовжує працювати і приймати /payment !
+    console.error("BOT LAUNCH ERROR:", err.message);
+  });
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

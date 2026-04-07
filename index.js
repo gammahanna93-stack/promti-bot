@@ -876,7 +876,7 @@ app.post("/payment", async (req, res) => {
 // ===== ЗАПУСК EXPRESS ПЕРШИМ — він має бути живий завжди =====
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌐 HTTP server started on port ${PORT}`);
   console.log(`📡 Callback URL: ${WAYFORPAY.serviceUrl || "НЕ ЗАДАНО!"}`);
   console.log(`🏪 Merchant: ${WAYFORPAY.merchantAccount || "НЕ ЗАДАНО!"}`);

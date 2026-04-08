@@ -991,6 +991,11 @@ bot.hears("✍️ Свій промт", (ctx) => {
 
 // ─── ВІДЕО МОДЕЛІ ─────────────────────────────────────────────────────────────
 bot.hears("🎬 Seedance", (ctx) => {
+  const cfg = loadSettings();
+  // ✅ Перевірка чи Seedance увімкнено (керується з settings.json)
+  if (cfg.seedanceEnabled === false) {
+    return ctx.reply(cfg.seedanceComingSoonText || "🎬 Seedance тимчасово недоступний. Скоро повернеться! Спробуй 🎥 Kling.", videoMenu());
+  }
   touchUser(ctx); ensureSession(ctx);
   ctx.session.mode = "video"; ctx.session.style = "seedance";
   if (ctx.session.customPrompt) {
@@ -1060,7 +1065,15 @@ async function sendAutoPayment(ctx, packKey) {
 }
 
 bot.hears("💳 Купити фото",    (ctx) => { touchUser(ctx); if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu()); return ctx.reply("Обери пакет фото:", buyPhotoMenu()); });
-bot.hears("💳 Купити Seedance", (ctx) => { touchUser(ctx); if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu()); return ctx.reply("Обери пакет Seedance 🎬:", buySeedanceMenu()); });
+bot.hears("💳 Купити Seedance", (ctx) => {
+  const cfg = loadSettings();
+  if (cfg.seedanceEnabled === false) {
+    return ctx.reply(cfg.seedanceComingSoonText || "🎬 Seedance тимчасово недоступний. Скоро повернеться!", videoMenu());
+  }
+  touchUser(ctx);
+  if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
+  return ctx.reply("Обери пакет Seedance 🎬:", buySeedanceMenu());
+});
 bot.hears("💳 Купити Kling",    (ctx) => { touchUser(ctx); if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu()); return ctx.reply("Обери пакет Kling 🎥:", buyKlingMenu()); });
 
 bot.hears("📦 10 фото — 99 грн",      (ctx) => sendAutoPayment(ctx, "photo_pack10"));
@@ -1147,12 +1160,10 @@ bot.on("text", async (ctx, next) => {
 
     // ✅ Валідація довжини промту
     if (ctx.session.customType === "custom_photo" && ctx.session.awaitingCustomPrompt) {
-      if (text.length > 500) return ctx.reply("❌ Промт занадто довгий. Максимум 500 символів.");
       ctx.session.customPrompt = text; ctx.session.awaitingCustomPrompt = false;
       return ctx.reply("Промт збережено ✅\nНадішли фото.", photoMenu());
     }
     if (ctx.session.mode === "video" && ctx.session.awaitingCustomPrompt) {
-      if (text.length > 500) return ctx.reply("❌ Промт занадто довгий. Максимум 500 символів.");
       ctx.session.customPrompt = text; ctx.session.awaitingCustomPrompt = false;
       return ctx.reply("Промт збережено ✅\nНадішли фото для анімації.", videoMenu());
     }

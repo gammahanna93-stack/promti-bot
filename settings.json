@@ -1,0 +1,18 @@
+{
+  "photoRateLimitMs": 15000,
+  "videoRateLimitMs": 60000,
+  "aiPromptRateLimitMs": 30000,
+  "photoTimeoutMs": 120000,
+  "seedanceTimeoutMs": 180000,
+  "klingTimeoutMs": 300000,
+  "seedanceDurationSec": 5,
+  "klingDurationSec": 5,
+  "seedanceAspectRatio": "9:16",
+  "klingAspectRatio": "9:16",
+  "maxWorkers": 5,
+  "dailySeedanceLimit": 10,
+  "dailyKlingLimit": 5,
+  "aiPromptEnabled": true,
+  "videoEnabled": true,
+  "dailyAiPromptLimit": 10
+}

@@ -458,6 +458,7 @@ function signWfpPurchase({ merchantAccount, merchantDomainName, orderReference, 
 
 // ✅ ВИПРАВЛЕНИЙ підпис — правильний порядок полів згідно документації WayForPay
 function signWfpCallback(data) {
+  // ✅ Правильний порядок згідно документації WayForPay (8 полів)
   const vals = [
     data.merchantAccount   || "",
     data.orderReference    || "",
@@ -465,10 +466,6 @@ function signWfpCallback(data) {
     data.currency          || "",
     data.authCode          || "",
     data.cardPan           || "",
-    data.cardType          || "",
-    data.issuerBankCountry || "",
-    data.issuerBankName    || "",
-    data.recToken          || "",
     data.transactionStatus || "",
     data.reasonCode        || "",
   ];
@@ -1420,8 +1417,13 @@ bot.on(["video", "video_note"], async (ctx) => {
 // ─── EXPRESS / HTTP ───────────────────────────────────────────────────────────
 const app = express();
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use((req, res, next) => {
+  if (req.path === "/payment") return next(); // пропускаємо — обробляємо окремо
+  express.json({ limit: "1mb" })(req, res, (err) => {
+    if (err) return next(err);
+    express.urlencoded({ extended: true })(req, res, next);
+  });
+});
 
 app.get("/",       (_, res) => res.send("Bot is running"));
 app.get("/health", (_, res) => {
@@ -1439,29 +1441,35 @@ app.get("/health", (_, res) => {
 });
 
 // ─── WAYFORPAY CALLBACK ───────────────────────────────────────────────────────
-app.post("/payment", express.text({ type: "*/*" }), async (req, res) => {
+app.post("/payment",
+  express.text({ type: "*/*" }),
+  express.json({ type: "application/json", limit: "1mb" }),
+  express.urlencoded({ extended: true }),
+  async (req, res) => {
   try {
-    // ✅ Правильний парсинг тіла — WayForPay надсилає JSON як text/plain
     let data = {};
-    try {
-      const raw = req.body;
-      if (typeof raw === "string" && raw.trim().startsWith("{")) {
-        data = JSON.parse(raw);
-      } else if (typeof raw === "object" && raw !== null) {
-        data = normalizeWayForPayCallbackBody(raw);
-      } else {
-        data = normalizeWayForPayCallbackBody(req.body || {});
+    const raw = req.body;
+    console.log("RAW TYPE:", typeof raw);
+    console.log("RAW PREVIEW:", typeof raw === "string" ? raw.slice(0, 100) : JSON.stringify(raw).slice(0, 100));
+
+    if (typeof raw === "string") {
+      // WayForPay надіслав як text — парсимо напряму
+      try { data = JSON.parse(raw); }
+      catch(e) {
+        // можливо urlencoded — шукаємо JSON в ключах
+        try {
+          const decoded = decodeURIComponent(raw);
+          if (decoded.includes("merchantAccount")) data = JSON.parse(decoded);
+        } catch {}
       }
-    } catch (parseErr) {
-      console.error("WFP BODY PARSE ERROR:", parseErr.message);
-      console.error("RAW BODY:", req.body);
-      data = normalizeWayForPayCallbackBody(req.body || {});
+    } else if (raw && typeof raw === "object") {
+      data = normalizeWayForPayCallbackBody(raw);
     }
 
     console.log("=== WFP CALLBACK ===", JSON.stringify(data));
     console.log("merchantSignature:", data.merchantSignature);
 
-    // ✅ Діагностика підпису
+    // ✅ Діагностика підпису  
     const expectedSig = signWfpCallback(data);
     console.log("EXPECTED SIG:", expectedSig);
     console.log("RECEIVED SIG:", data.merchantSignature);

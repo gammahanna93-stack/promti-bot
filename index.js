@@ -483,19 +483,25 @@ function buildWfpAcceptResponse(ref) {
 
 function normalizeWayForPayCallbackBody(body) {
   if (!body) return {};
-  if (typeof body === "string") { try { return JSON.parse(body); } catch { return {}; } }
-  if (body.merchantAccount) return body;
-  const keys = Object.keys(body);
-  if (keys.length === 1) {
-    const onlyKey = keys[0];
-    if (onlyKey.startsWith("{") && onlyKey.includes("merchantAccount")) { try { return JSON.parse(onlyKey); } catch {} }
-    const onlyVal = body[onlyKey];
-    if (typeof onlyVal === "string" && onlyVal.startsWith("{") && onlyVal.includes("merchantAccount")) { try { return JSON.parse(onlyVal); } catch {} }
+
+  // якщо рядок — парсимо напряму
+  if (typeof body === "string") {
+    try { return JSON.parse(body); } catch { return {}; }
   }
+
+  // вже нормальний обʼєкт з підписом
+  if (body.merchantSignature) return body;
+
+  // ✅ Головний кейс: JSON сидить як КЛЮЧ обʼєкта
   for (const key of Object.keys(body)) {
-    if (typeof key === "string" && key.startsWith("{") && key.includes("merchantAccount")) { try { return JSON.parse(key); } catch {} }
-    if (typeof body[key] === "string" && body[key].startsWith("{") && body[key].includes("merchantAccount")) { try { return JSON.parse(body[key]); } catch {} }
+    if (typeof key === "string" && key.startsWith("{")) {
+      try { return JSON.parse(key); } catch {}
+    }
+    if (typeof body[key] === "string" && body[key].startsWith("{")) {
+      try { return JSON.parse(body[key]); } catch {}
+    }
   }
+
   return body;
 }
 

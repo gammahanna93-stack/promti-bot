@@ -1433,10 +1433,27 @@ app.get("/health", (_, res) => {
 });
 
 // ─── WAYFORPAY CALLBACK ───────────────────────────────────────────────────────
-app.post("/payment", async (req, res) => {
+app.post("/payment", express.text({ type: "*/*" }), async (req, res) => {
   try {
-    const data = normalizeWayForPayCallbackBody(req.body || {});
+    // ✅ Правильний парсинг тіла — WayForPay надсилає JSON як text/plain
+    let data = {};
+    try {
+      const raw = req.body;
+      if (typeof raw === "string" && raw.trim().startsWith("{")) {
+        data = JSON.parse(raw);
+      } else if (typeof raw === "object" && raw !== null) {
+        data = normalizeWayForPayCallbackBody(raw);
+      } else {
+        data = normalizeWayForPayCallbackBody(req.body || {});
+      }
+    } catch (parseErr) {
+      console.error("WFP BODY PARSE ERROR:", parseErr.message);
+      console.error("RAW BODY:", req.body);
+      data = normalizeWayForPayCallbackBody(req.body || {});
+    }
+
     console.log("=== WFP CALLBACK ===", JSON.stringify(data));
+    console.log("merchantSignature:", data.merchantSignature);
 
     // ✅ Діагностика підпису
     const expectedSig = signWfpCallback(data);

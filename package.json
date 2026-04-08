@@ -9,6 +9,7 @@
     "node": "20.x"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@fal-ai/client": "^1.2.0",
     "axios": "^1.7.2",
     "dotenv": "^16.4.5",

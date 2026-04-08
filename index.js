@@ -41,14 +41,20 @@ const WAYFORPAY = {
 const REFERRAL_PHOTO_BONUS = 1;
 
 // ─── ШЛЯХИ ДО ФАЙЛІВ ─────────────────────────────────────────────────────────
-const USERS_PATH        = path.join(__dirname, "users.json");
+// Постійне сховище (Railway Volume — не скидається при деплої)
+const DATA_DIR          = "/app/data";
+if (!require("fs").existsSync(DATA_DIR)) require("fs").mkdirSync(DATA_DIR, { recursive: true });
+
+const USERS_PATH        = path.join(DATA_DIR, "users.json");
+const PAYMENTS_PATH     = path.join(DATA_DIR, "payments.json");
+const PAYMENT_LOCK_PATH = path.join(DATA_DIR, "payment.lock.json");
+const PACKAGES_PATH     = path.join(DATA_DIR, "packages.json");
+const GEN_LOG_PATH      = path.join(DATA_DIR, "generation_logs.jsonl");
+
+// Конфігурація (зберігається в GitHub — оновлюється через код)
 const PROMPTS_PATH      = path.join(__dirname, "prompts.json");
 const CONTENT_PATH      = path.join(__dirname, "content.json");
-const PAYMENTS_PATH     = path.join(__dirname, "payments.json");
-const PAYMENT_LOCK_PATH = path.join(__dirname, "payment.lock.json");
 const SETTINGS_PATH     = path.join(__dirname, "settings.json");
-const PACKAGES_PATH     = path.join(__dirname, "packages.json");
-const GEN_LOG_PATH      = path.join(__dirname, "generation_logs.jsonl");
 
 // ─── НАЛАШТУВАННЯ ─────────────────────────────────────────────────────────────
 const DEFAULT_SETTINGS = {
@@ -1575,7 +1581,7 @@ app.listen(PORT, "0.0.0.0", () => {
 });
 
 // ─── BACKUP КОЖНІ 6 ГОДИН ────────────────────────────────────────────────────
-const BACKUP_DIR   = path.join(__dirname, "backups");
+const BACKUP_DIR   = path.join(DATA_DIR, "backups");
 const BACKUP_FILES = [USERS_PATH, PAYMENTS_PATH, PAYMENT_LOCK_PATH, PACKAGES_PATH];
 
 function runBackup() {

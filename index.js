@@ -17,11 +17,11 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // ─── ПЕРСИСТЕНТНА СЕСІЯ ───────────────────────────────────────────────────────
 const localSession = new LocalSession({
-  database: path.join(__dirname, "sessions.json"),
+  database: path.join(DATA_DIR, "sessions.json"), // ✅ у Volume — не зникає при деплої
   property: "session",
   storage: LocalSession.storageFileAsync,
   format: { serialize: JSON.stringify, deserialize: JSON.parse },
-  getSessionKey: (ctx) => ctx.from && `${ctx.from.id}:${ctx.from.id}`,
+  getSessionKey: (ctx) => ctx.from ? String(ctx.from.id) : null, // ✅ простий і правильний ключ
 });
 bot.use(localSession.middleware());
 
@@ -255,8 +255,18 @@ function incrementDailyVideo(user, model) {
   else user.dailySeedanceCount = (user.dailySeedanceCount || 0) + 1;
 }
 
-// ─── ПОМИЛКИ → АДМІНИ ─────────────────────────────────────────────────────────
+// ─── ПОМИЛКИ → АДМІНИ (з debounce щоб не спамити) ───────────────────────────
+const adminErrorLog = {};
+const ADMIN_ERROR_DEBOUNCE_MS = 60000; // одне повідомлення не частіше 1 рази/хв
+
 async function notifyAdminsError(message) {
+  const now = Date.now();
+  const key = message.slice(0, 100);
+  if (adminErrorLog[key] && now - adminErrorLog[key] < ADMIN_ERROR_DEBOUNCE_MS) {
+    console.log("ADMIN NOTIFY DEBOUNCED:", key);
+    return; // ✅ не спамимо адмінів
+  }
+  adminErrorLog[key] = now;
   for (const adminId of ADMINS) {
     try { await bot.telegram.sendMessage(adminId, `⚠️ ПОМИЛКА:\n\n${message}`); }
     catch (e) { console.error("NOTIFY ADMIN ERROR:", e.message); }
@@ -304,10 +314,15 @@ function getUser(id) {
 }
 
 function touchUser(ctx) {
-  const user     = getUser(ctx.from.id);
-  user.username  = ctx.from.username   || "";
-  user.firstName = ctx.from.first_name || "";
-  saveJson(USERS_PATH, users);
+  const user = getUser(ctx.from.id);
+  const newUsername  = ctx.from.username   || "";
+  const newFirstName = ctx.from.first_name || "";
+  // ✅ Зберігаємо тільки якщо щось змінилось
+  if (user.username !== newUsername || user.firstName !== newFirstName) {
+    user.username  = newUsername;
+    user.firstName = newFirstName;
+    saveJson(USERS_PATH, users);
+  }
   return user;
 }
 
@@ -702,14 +717,36 @@ bot.command("broadcast", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const text = ctx.message.text.replace("/broadcast", "").trim();
   if (!text) return ctx.reply("Формат: /broadcast Текст");
+
   const all = Object.values(users).filter(u => !u.banned);
   let sent = 0, failed = 0;
   await ctx.reply(`⏳ Надсилаю ${all.length} користувачам...`);
-  for (const u of all) {
-    try { await bot.telegram.sendMessage(u.id, text, mainMenu()); sent++; await new Promise(r => setTimeout(r, 100)); } // ✅ 100мс замість 50
-    catch { failed++; }
+
+  // ✅ Пачками по 25 з паузою між пачками — захист від Telegram rate limit
+  const BATCH_SIZE  = 25;
+  const BATCH_DELAY = 1500; // пауза між пачками
+  const MSG_DELAY   = 50;   // пауза між повідомленнями в пачці
+
+  for (let i = 0; i < all.length; i++) {
+    const u = all[i];
+    try {
+      await bot.telegram.sendMessage(u.id, text, mainMenu());
+      sent++;
+    } catch { failed++; }
+
+    // пауза між повідомленнями
+    await new Promise(r => setTimeout(r, MSG_DELAY));
+
+    // пауза після кожної пачки
+    if ((i + 1) % BATCH_SIZE === 0) {
+      await ctx.reply(`⏳ Надіслано ${sent}/${all.length}...`);
+      await new Promise(r => setTimeout(r, BATCH_DELAY));
+    }
   }
-  return ctx.reply(`✅ Broadcast: ${sent} надіслано, ${failed} помилок`);
+
+  return ctx.reply(`✅ Broadcast завершено!
+Надіслано: ${sent}
+Помилок: ${failed}`);
 });
 
 // ─── АДМІН: КЕРУВАННЯ ПАКЕТАМИ ────────────────────────────────────────────────
@@ -992,7 +1029,7 @@ bot.hears("✍️ Свій промт", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   ctx.session.mode = "photo"; ctx.session.style = null;
   ctx.session.customType = "custom_photo"; ctx.session.awaitingCustomPrompt = true; ctx.session.customPrompt = null;
-  return ctx.reply("Напиши промт для фото (до 500 символів), потім надішли фото.", photoMenu());
+  return ctx.reply("Напиши промт для фото, потім надішли фото.", photoMenu());
 });
 
 // ─── ВІДЕО МОДЕЛІ ─────────────────────────────────────────────────────────────
@@ -1029,23 +1066,39 @@ bot.hears("✍️ Свій промт відео", (ctx) => {
   if (!ctx.session.style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
   ctx.session.customType = `custom_video_${ctx.session.style}`;
   ctx.session.awaitingCustomPrompt = true; ctx.session.customPrompt = null;
-  return ctx.reply(`Напиши промт для ${ctx.session.style} (до 500 символів), потім надішли фото.`, videoMenu());
+  return ctx.reply(`Напиши промт для ${ctx.session.style}, потім надішли фото.`, videoMenu());
 });
 
 // ─── AI ПРОМТ ─────────────────────────────────────────────────────────────────
 bot.hears("🤖 AI промт для фото", (ctx) => {
-  const cfg = loadSettings();
+  const cfg  = loadSettings();
+  const user = touchUser(ctx);
+  // ✅ Доступно тільки після покупки пакету
   if (!cfg.aiPromptEnabled) return ctx.reply("🤖 AI промт тимчасово вимкнено.", photoMenu());
-  touchUser(ctx); ensureSession(ctx);
+  if (!isAdmin(ctx.from.id) && (user.totalSpent || 0) <= 0) {
+    return ctx.reply(
+      "🔒 AI промт доступний після покупки будь-якого пакету 💳\n\nКупи пакет фото або відео — і отримаєш доступ до AI промтів!",
+      photoMenu()
+    );
+  }
+  ensureSession(ctx);
   ctx.session.mode = "photo"; ctx.session.style = null;
   ctx.session.awaitingAiPrompt = "photo"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   return ctx.reply("🤖 Надішли фото — я запропоную промт для генерації.", photoMenu());
 });
 
 bot.hears("🤖 AI промт для відео", (ctx) => {
-  const cfg = loadSettings();
+  const cfg  = loadSettings();
+  const user = touchUser(ctx);
+  // ✅ Доступно тільки після покупки пакету
   if (!cfg.aiPromptEnabled) return ctx.reply("🤖 AI промт тимчасово вимкнено.", videoMenu());
-  touchUser(ctx); ensureSession(ctx);
+  if (!isAdmin(ctx.from.id) && (user.totalSpent || 0) <= 0) {
+    return ctx.reply(
+      "🔒 AI промт доступний після покупки будь-якого пакету 💳\n\nКупи пакет фото або відео — і отримаєш доступ до AI промтів!",
+      videoMenu()
+    );
+  }
+  ensureSession(ctx);
   ctx.session.mode = "video";
   if (!ctx.session.style) ctx.session.style = "seedance";
   ctx.session.awaitingAiPrompt = "video"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;

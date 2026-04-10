@@ -1,24 +1,18 @@
 {
-  "photoRateLimitMs": 15000,
-  "videoRateLimitMs": 60000,
-  "aiPromptRateLimitMs": 30000,
-
+  "photoRateLimitMs": 10000,
+  "videoRateLimitMs": 30000,
+  "aiPromptRateLimitMs": 20000,
   "photoTimeoutMs": 120000,
-  "seedanceTimeoutMs": 180000,
-  "klingTimeoutMs": 300000,
-
+  "seedanceTimeoutMs": 240000,
+  "klingTimeoutMs": 360000,
   "seedanceDurationSec": 5,
   "klingDurationSec": 5,
-
   "seedanceAspectRatio": "9:16",
   "klingAspectRatio": "9:16",
-
-  "maxWorkers": 5,
-
-  "dailySeedanceLimit": 10,
-  "dailyKlingLimit": 5,
-  "dailyAiPromptLimit": 10,
-
+  "maxWorkers": 10,
+  "dailySeedanceLimit": 15,
+  "dailyKlingLimit": 8,
+  "dailyAiPromptLimit": 20,
   "aiPromptEnabled": true,
   "videoEnabled": true,
   "seedanceEnabled": true

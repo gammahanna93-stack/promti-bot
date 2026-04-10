@@ -15,6 +15,10 @@ const { fal } = require("@fal-ai/client");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+// ─── ПОСТІЙНЕ СХОВИЩЕ (має бути до LocalSession!) ────────────────────────────
+const DATA_DIR = "/app/data";
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
 // ─── ПЕРСИСТЕНТНА СЕСІЯ ───────────────────────────────────────────────────────
 const localSession = new LocalSession({
   database: path.join(DATA_DIR, "sessions.json"), // ✅ у Volume — не зникає при деплої
@@ -41,9 +45,7 @@ const WAYFORPAY = {
 const REFERRAL_PHOTO_BONUS = 1;
 
 // ─── ШЛЯХИ ДО ФАЙЛІВ ─────────────────────────────────────────────────────────
-// Постійне сховище (Railway Volume — не скидається при деплої)
-const DATA_DIR          = "/app/data";
-if (!require("fs").existsSync(DATA_DIR)) require("fs").mkdirSync(DATA_DIR, { recursive: true });
+// DATA_DIR визначено вище перед LocalSession
 
 const USERS_PATH        = path.join(DATA_DIR, "users.json");
 const PAYMENTS_PATH     = path.join(DATA_DIR, "payments.json");
@@ -1029,7 +1031,7 @@ bot.hears("✍️ Свій промт", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   ctx.session.mode = "photo"; ctx.session.style = null;
   ctx.session.customType = "custom_photo"; ctx.session.awaitingCustomPrompt = true; ctx.session.customPrompt = null;
-  return ctx.reply("Напиши промт для фото, потім надішли фото.", photoMenu());
+  return ctx.reply("Напиши промт для фото, потім надішли фото.\n\n💡 Ідеї для промтів: t.me/promteamai", photoMenu());
 });
 
 // ─── ВІДЕО МОДЕЛІ ─────────────────────────────────────────────────────────────
@@ -1066,7 +1068,7 @@ bot.hears("✍️ Свій промт відео", (ctx) => {
   if (!ctx.session.style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
   ctx.session.customType = `custom_video_${ctx.session.style}`;
   ctx.session.awaitingCustomPrompt = true; ctx.session.customPrompt = null;
-  return ctx.reply(`Напиши промт для ${ctx.session.style}, потім надішли фото.`, videoMenu());
+  return ctx.reply(`Напиши промт для ${ctx.session.style}, потім надішли фото.\n\n💡 Ідеї для промтів: t.me/promteamai`, videoMenu());
 });
 
 // ─── AI ПРОМТ ─────────────────────────────────────────────────────────────────

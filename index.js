@@ -745,12 +745,14 @@ const videoMenu     = () => Markup.keyboard([
   ["↩️ Назад"]
 ]).resize();
 const seedanceMenu  = () => Markup.keyboard([
-  ["📸 Фото → Відео", "✍️ Текст → Відео"],
+  ["⚡ Авто анімація", "🎬 Анімація + промт"],
+  ["🎥 Відео з тексту"],
   ["💳 Купити Seedance"],
   ["↩️ Назад до відео"]
 ]).resize();
 const klingMenu     = () => Markup.keyboard([
-  ["📸 Фото → Відео", "✍️ Текст → Відео"],
+  ["⚡ Авто анімація", "🎬 Анімація + промт"],
+  ["🎥 Відео з тексту"],
   ["💳 Купити Kling"],
   ["↩️ Назад до відео"]
 ]).resize();
@@ -1422,7 +1424,23 @@ bot.hears("🎬 Seedance", (ctx) => {
 });
 
 // Seedance: Фото → Відео
-bot.hears("📸 Фото → Відео", (ctx) => {
+bot.hears("⚡ Авто анімація", (ctx) => {
+  touchUser(ctx); ensureSession(ctx);
+  const style = ctx.session.style;
+  if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
+  ctx.session.videoInputMode = "image";
+  ctx.session.customType = `custom_video_${style}`;
+  ctx.session.awaitingCustomPrompt = false;
+  ctx.session.customPrompt = null;
+  const menu = style === "kling" ? klingMenu() : seedanceMenu();
+  return ctx.reply(
+    `⚡ Авто анімація\n\nНадішли фото — модель сама оживить його!\n\nПромт підбирається автоматично 🤖`,
+    menu
+  );
+});
+
+// 🎬 Анімація + промт
+bot.hears("🎬 Анімація + промт", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
   if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
@@ -1432,13 +1450,13 @@ bot.hears("📸 Фото → Відео", (ctx) => {
   ctx.session.customPrompt = null;
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
   return ctx.reply(
-    `📸 Режим: Фото → Відео\n\nНапиши промт, потім надішли фото.\n\nПриклад: "eyes slowly opening, cinematic"\n\n💡 t.me/promteamai`,
+    `🎬 Анімація + промт\n\nНапиши промт, потім надішли фото.\n\nПриклад: "eyes slowly opening, cinematic"\n\n💡 t.me/promteamai`,
     menu
   );
 });
 
 // Seedance/Kling: Текст → Відео
-bot.hears("✍️ Текст → Відео", (ctx) => {
+bot.hears("🎥 Відео з тексту", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
   if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
@@ -1448,7 +1466,7 @@ bot.hears("✍️ Текст → Відео", (ctx) => {
   ctx.session.customPrompt = null;
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
   return ctx.reply(
-    `✍️ Режим: Текст → Відео\n\nНапиши детальний промт — створю відео з нуля!\n\nПриклад: "cinematic portrait of woman, wind in hair, golden hour"\n\n💡 t.me/promteamai`,
+    `🎥 Відео з тексту\n\nНапиши детальний промт — створю відео з нуля!\n\nПриклад: "cinematic portrait of woman, wind in hair, golden hour"\n\n💡 t.me/promteamai`,
     menu
   );
 });
@@ -1588,7 +1606,7 @@ bot.action(/^regen_ai_prompt_(photo|video)$/, async (ctx) => {
 const ALL_BUTTONS = [
   "🖼 Фото","🎬 Відео","📊 Баланс","💡 Ідея для промтів","ℹ️ Інформація","❓ Допомога","🆘 Підтримка","💰 Ціни",
   "🖼 Редагувати фото","✨ Створити фото",
-  "📸 Фото → Відео","✍️ Текст → Відео",
+  "⚡ Авто анімація","🎬 Анімація + промт","🎥 Відео з тексту",
   "🤖 AI промт для фото","🤖 AI промт для відео",
   "💳 Купити фото","📊 Баланс фото","💳 Купити Seedance","💳 Купити Kling","📊 Баланс відео",
   "🎬 Seedance","🎥 Kling",
@@ -1642,6 +1660,14 @@ bot.on("text", async (ctx, next) => {
       }
       return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", photoMenu());
     }
+    // ✅ Якщо авто анімація і юзер пише текст — це опціональний промт
+    if (ctx.session.mode === "video" && ctx.session.videoInputMode === "image" && !ctx.session.awaitingCustomPrompt) {
+      ctx.session.customPrompt = text;
+      const style = ctx.session.style;
+      const menu = style === "kling" ? klingMenu() : seedanceMenu();
+      return ctx.reply(`✅ Промт збережено: "${text}"\nТепер надішли фото 📸`, menu);
+    }
+
     if (ctx.session.mode === "video" && ctx.session.awaitingCustomPrompt) {
       ctx.session.customPrompt = text;
       ctx.session.awaitingCustomPrompt = false;
@@ -2191,13 +2217,26 @@ function runBackup() {
 
 setInterval(runBackup, 6 * 60 * 60 * 1000);
 
-bot.launch({ dropPendingUpdates: true })
+bot.launch({
+  dropPendingUpdates: true,
+  allowedUpdates: ["message", "callback_query"],
+})
   .then(() => {
     console.log("🔥 Бот запущений (v5)");
-    saveJson(SETTINGS_PATH, loadSettings());
     runBackup();
   })
-  .catch(err => console.error("BOT LAUNCH ERROR:", err.message));
+  .catch(err => {
+    console.error("BOT LAUNCH ERROR:", err.message);
+    // Retry після 5 сек якщо таймаут
+    if (err.message && err.message.includes("timed out")) {
+      console.log("🔄 Retrying bot launch in 5s...");
+      setTimeout(() => {
+        bot.launch({ dropPendingUpdates: true })
+          .then(() => console.log("🔥 Бот запущений після retry"))
+          .catch(e => console.error("BOT RETRY ERROR:", e.message));
+      }, 5000);
+    }
+  });
 
 // ─── GRACEFUL SHUTDOWN ───────────────────────────────────────────────────────
 async function gracefulShutdown(signal) {

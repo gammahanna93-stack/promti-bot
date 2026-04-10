@@ -166,25 +166,47 @@ let creditedSet = new Set(loadJson(PAYMENT_LOCK_PATH, []));
 function markAsCredited(ref) { creditedSet.add(ref); saveJson(PAYMENT_LOCK_PATH, [...creditedSet]); }
 function isCredited(ref)     { return creditedSet.has(ref); }
 
-// ─── ЧЕРГА ГЕНЕРАЦІЙ ──────────────────────────────────────────────────────────
-const generationQueue = [];
-let activeWorkers = 0;
+// ─── ЧЕРГА ГЕНЕРАЦІЙ (окремі черги для фото і відео) ─────────────────────────
+const photoQueue = [];
+const videoQueue = [];
+let activePhotoWorkers = 0;
+let activeVideoWorkers = 0;
 
-function enqueueGeneration(userId, taskFn) {
+// Залишаємо для сумісності зі статистикою
+const generationQueue = { get length() { return photoQueue.length + videoQueue.length; } };
+let activeWorkers = 0; // загальна для статистики
+
+function enqueueGeneration(userId, taskFn, type = "photo") {
   return new Promise((resolve, reject) => {
-    generationQueue.push({ userId, taskFn, resolve, reject });
+    const queue = type === "video" ? videoQueue : photoQueue;
+    queue.push({ userId, taskFn, resolve, reject });
     processQueue();
   });
 }
 
 function processQueue() {
   const cfg = loadSettings();
-  while (activeWorkers < cfg.maxWorkers && generationQueue.length > 0) {
-    const job = generationQueue.shift();
+  const maxPhoto = Math.max(Math.floor(cfg.maxWorkers * 0.7), 3); // 70% воркерів для фото
+  const maxVideo = Math.max(Math.floor(cfg.maxWorkers * 0.5), 2); // 50% воркерів для відео
+
+  // Обробляємо фото чергу
+  while (activePhotoWorkers < maxPhoto && photoQueue.length > 0) {
+    const job = photoQueue.shift();
+    activePhotoWorkers++;
     activeWorkers++;
     job.taskFn()
       .then(job.resolve).catch(job.reject)
-      .finally(() => { activeWorkers--; processQueue(); });
+      .finally(() => { activePhotoWorkers--; activeWorkers--; processQueue(); });
+  }
+
+  // Обробляємо відео чергу
+  while (activeVideoWorkers < maxVideo && videoQueue.length > 0) {
+    const job = videoQueue.shift();
+    activeVideoWorkers++;
+    activeWorkers++;
+    job.taskFn()
+      .then(job.resolve).catch(job.reject)
+      .finally(() => { activeVideoWorkers--; activeWorkers--; processQueue(); });
   }
 }
 
@@ -1289,14 +1311,16 @@ bot.on("photo", async (ctx) => {
   }
 
   const MAX_QUEUE = 50;
-  if (generationQueue.length >= MAX_QUEUE) return ctx.reply("⚠️ Сервіс зараз перевантажений. Спробуй через кілька хвилин.");
-  if (generationQueue.length > 0) await ctx.reply(`⏳ Черга: #${generationQueue.length + 1}. Зачекай...`);
+  const currentQueue = ctx.session.mode === "video" ? videoQueue : photoQueue;
+  if (currentQueue.length >= MAX_QUEUE) return ctx.reply("⚠️ Сервіс зараз перевантажений. Спробуй через кілька хвилин.");
+  if (currentQueue.length > 0) await ctx.reply(`⏳ Черга: #${currentQueue.length + 1}. Зачекай...`);
 
   userGenerating.add(userId);
 
   // ✅ ВИПРАВЛЕНИЙ catch блок
+  const genType = ctx.session.mode === "video" ? "video" : "photo";
   try {
-    await enqueueGeneration(userId, () => _processGeneration(ctx, user, userId, ctx.session.mode, photo));
+    await enqueueGeneration(userId, () => _processGeneration(ctx, user, userId, ctx.session.mode, photo), genType);
   } catch (e) {
     userGenerating.delete(userId);
     console.error("ENQUEUE ERROR:", e.message);
@@ -1340,8 +1364,15 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         let videoUrl = null;
         if (videoStyle === "seedance") {
           const result = await falWithRetry(
-            "fal-ai/bytedance/seedance-1-lite/image-to-video",
-            { prompt, image_url: image, duration: String(cfg.seedanceDurationSec), aspect_ratio: cfg.seedanceAspectRatio },
+            "fal-ai/bytedance/seedance-2.0/image-to-video", // ✅ Seedance 2.0
+            {
+              prompt,
+              image_url: image,
+              duration: cfg.seedanceDurationSec === 5 ? "auto" : String(cfg.seedanceDurationSec),
+              aspect_ratio: cfg.seedanceAspectRatio || "auto",
+              resolution: "720p",
+              generate_audio: false, // вимикаємо аудіо — швидше і дешевше
+            },
             cfg.seedanceTimeoutMs
           );
           videoUrl = result?.data?.video?.url;
@@ -1668,6 +1699,46 @@ bot.launch({ dropPendingUpdates: true })
   })
   .catch(err => console.error("BOT LAUNCH ERROR:", err.message));
 
-process.once("SIGINT",  () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
-process.once("SIGUSR2", () => bot.stop("SIGUSR2"));
+// ─── GRACEFUL SHUTDOWN ───────────────────────────────────────────────────────
+async function gracefulShutdown(signal) {
+  console.log(`⏳ ${signal} — чекаємо завершення генерацій...`);
+
+  // Повідомляємо адмінів
+  for (const adminId of ADMINS) {
+    bot.telegram.sendMessage(adminId, `⚠️ Бот перезапускається (${signal})
+Активних генерацій: ${activeWorkers}`).catch(() => {});
+  }
+
+  // Чекаємо поки всі воркери завершать (макс 5 хвилин)
+  const maxWait = 5 * 60 * 1000;
+  const start   = Date.now();
+
+  while (activeWorkers > 0 && Date.now() - start < maxWait) {
+    console.log(`⏳ Активних генерацій: ${activeWorkers}, чекаємо...`);
+    await new Promise(r => setTimeout(r, 3000));
+  }
+
+  if (activeWorkers > 0) {
+    console.log(`⚠️ Таймаут очікування — зупиняємось з ${activeWorkers} активними генераціями`);
+    // Повертаємо баланс всім хто генерує
+    for (const userId of userGenerating) {
+      const user = users[userId];
+      if (user) {
+        // Повідомляємо юзера
+        bot.telegram.sendMessage(
+          userId,
+          "⚠️ Генерацію перервано через оновлення бота.\nБаланс збережено — спробуй ще раз!"
+        ).catch(() => {});
+      }
+    }
+    saveUsers();
+  }
+
+  console.log("✅ Завершено — зупиняємось.");
+  bot.stop(signal);
+  process.exit(0);
+}
+
+process.once("SIGINT",  () => gracefulShutdown("SIGINT"));
+process.once("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.once("SIGUSR2", () => gracefulShutdown("SIGUSR2"));

@@ -488,6 +488,24 @@ async function tgSendWithRetry(fn, maxRetries = 3) {
   throw lastErr;
 }
 
+// ─── FAL UPLOAD IMAGE → отримати публічний URL ───────────────────────────────
+async function uploadImageToFal(base64DataUrl) {
+  try {
+    // Конвертуємо base64 в Buffer
+    const base64Data = base64DataUrl.replace(/^data:image\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+    const blob = new Blob([buffer], { type: "image/jpeg" });
+    const file = new File([blob], `img_${Date.now()}.jpg`, { type: "image/jpeg" });
+    const url = await fal.storage.upload(file);
+    console.log("FAL UPLOAD URL:", url);
+    return url;
+  } catch (e) {
+    console.error("FAL UPLOAD ERROR:", e.message);
+    // Fallback — повертаємо base64 як є
+    return base64DataUrl;
+  }
+}
+
 // ─── FAL RETRY ────────────────────────────────────────────────────────────────
 async function falWithRetry(model, input, timeoutMs, maxRetries = 3) {
   let lastError = null;
@@ -1778,14 +1796,15 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             );
             videoUrl = result?.data?.video?.url;
           } else {
-            // 📸 Фото → Відео
+            // 📸 Фото → Відео — завантажуємо фото на FAL для отримання публічного URL
+            const imageUrl = await uploadImageToFal(image);
             const result = await falWithRetry(
               "bytedance/seedance-2.0/image-to-video",
               {
                 prompt,
-                image_url: image,
+                image_url: imageUrl,
                 duration: "auto",
-                aspect_ratio: cfg.seedanceAspectRatio || "auto",
+                aspect_ratio: "auto",
                 resolution: "720p",
                 generate_audio: false,
               },

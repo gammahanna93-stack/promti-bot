@@ -1857,12 +1857,14 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             const imageUrl = await uploadImageToFal(image);
             console.log("SEEDANCE INPUT:", { prompt: prompt?.slice(0, 50), imageUrl });
             const result = await falWithRetry(
-              "fal-ai/bytedance/seedance-1-lite/image-to-video", // fallback to v1 lite
+              "bytedance/seedance-2.0/fast/image-to-video",
               {
                 prompt: prompt || "cinematic motion, smooth animation, realistic movement",
                 image_url: imageUrl,
-                duration: String(cfg.seedanceDurationSec || 5),
-                aspect_ratio: cfg.seedanceAspectRatio || "9:16",
+                duration: "5",
+                aspect_ratio: "9:16",
+                resolution: "720p",
+                generate_audio: false,
               },
               cfg.seedanceTimeoutMs
             );

@@ -242,17 +242,16 @@ function enqueueGeneration(userId, taskFn, type = "photo", ctx = null) {
 
 function processQueue() {
   const cfg = loadSettings();
-  const maxPhoto = Math.max(Math.floor(cfg.maxWorkers * 0.7), 3);
-  const maxVideo = Math.max(Math.floor(cfg.maxWorkers * 0.5), 2);
+  const maxTotal = cfg.maxWorkers || 10;
+  const maxPhoto = 6;
+  const maxVideo = 4;
 
-  // Повідомляємо юзерів про їх позицію в черзі
+  // ✅ Повідомляємо юзерів про позицію в черзі
   photoQueue.forEach((job, idx) => {
     if (job.notifiedPosition !== idx + 1) {
       job.notifiedPosition = idx + 1;
       if (job.ctx) {
-        job.ctx.reply(`⏳ Ти в черзі: #${idx + 1}
-Зараз обробляється фото для іншого користувача...
-Орієнтовно ~1 хв ⌛`).catch(() => {});
+        job.ctx.reply(`⏳ Ти в черзі: #${idx + 1}\nЗараз обробляється фото...\nОрієнтовно ~1 хв ⌛`).catch(() => {});
       }
     }
   });
@@ -261,19 +260,16 @@ function processQueue() {
     if (job.notifiedPosition !== idx + 1) {
       job.notifiedPosition = idx + 1;
       if (job.ctx) {
-        job.ctx.reply(`⏳ Ти в черзі: #${idx + 1}
-Зараз генерується відео для іншого користувача...
-Орієнтовно ~3 хв ⌛`).catch(() => {});
+        job.ctx.reply(`⏳ Ти в черзі: #${idx + 1}\nЗараз генерується відео...\nОрієнтовно ~3 хв ⌛`).catch(() => {});
       }
     }
   });
 
-  // Обробляємо фото чергу
-  while (activePhotoWorkers < maxPhoto && photoQueue.length > 0) {
+  // ✅ Фото: макс 6 + загальний ліміт
+  while (activePhotoWorkers < maxPhoto && activeWorkers < maxTotal && photoQueue.length > 0) {
     const job = photoQueue.shift();
     activePhotoWorkers++;
     activeWorkers++;
-    // Повідомляємо що черга дійшла
     if (job.ctx && job.notifiedPosition > 1) {
       job.ctx.reply("✅ Черга дійшла! Починаю генерацію...").catch(() => {});
     }
@@ -282,12 +278,11 @@ function processQueue() {
       .finally(() => { activePhotoWorkers--; activeWorkers--; processQueue(); });
   }
 
-  // Обробляємо відео чергу
-  while (activeVideoWorkers < maxVideo && videoQueue.length > 0) {
+  // ✅ Відео: макс 4 + загальний ліміт
+  while (activeVideoWorkers < maxVideo && activeWorkers < maxTotal && videoQueue.length > 0) {
     const job = videoQueue.shift();
     activeVideoWorkers++;
     activeWorkers++;
-    // Повідомляємо що черга дійшла
     if (job.ctx && job.notifiedPosition > 1) {
       job.ctx.reply("✅ Черга дійшла! Починаю генерацію відео...").catch(() => {});
     }
@@ -522,18 +517,25 @@ async function tgSendWithRetry(fn, maxRetries = 3) {
 // ─── FAL UPLOAD IMAGE → отримати публічний URL ───────────────────────────────
 async function uploadImageToFal(base64DataUrl) {
   try {
-    // Конвертуємо base64 в Buffer
-    const base64Data = base64DataUrl.replace(/^data:image\/\w+;base64,/, "");
+    // ✅ Використовуємо Buffer напряму — працює в будь-якій версії Node
+    const base64Data = base64DataUrl.replace(/^data:image\/[^;]+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
-    const blob = new Blob([buffer], { type: "image/jpeg" });
-    const file = new File([blob], `img_${Date.now()}.jpg`, { type: "image/jpeg" });
-    const url = await fal.storage.upload(file);
+
+    // Записуємо тимчасово на диск і завантажуємо через fs
+    const tmpPath = `/tmp/fal_upload_${Date.now()}.jpg`;
+    fs.writeFileSync(tmpPath, buffer);
+
+    const fileStream = fs.createReadStream(tmpPath);
+    fileStream.name = `img_${Date.now()}.jpg`;
+    fileStream.type = "image/jpeg";
+
+    const url = await fal.storage.upload(fileStream);
+    try { fs.unlinkSync(tmpPath); } catch {}
     console.log("FAL UPLOAD URL:", url);
     return url;
   } catch (e) {
     console.error("FAL UPLOAD ERROR:", e.message);
-    // Fallback — повертаємо base64 як є
-    return base64DataUrl;
+    return base64DataUrl; // fallback
   }
 }
 
@@ -848,7 +850,7 @@ bot.command("admin", (ctx) => {
     "📊 Статус бота — статистика, черга, ключі\n" +
     "👥 Користувачі — останні 15 юзерів\n" +
     "💳 Останні оплати — останні 15 транзакцій\n" +
-    "✏️ Змінити промт — редагувати AI промти\n" +
+    
     "✏️ Змінити текст — редагувати тексти бота\n" +
     "⚙️ Налаштування — ліміти, таймаути\n" +
     "📦 Пакети — переглянути всі пакети\n\n" +
@@ -1464,8 +1466,9 @@ bot.hears("⚡ Авто анімація", (ctx) => {
   ctx.session.awaitingCustomPrompt = false;
   ctx.session.customPrompt = null;
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
+  const defaultPrompt = prompts[style] || "cinematic motion, smooth animation";
   return ctx.reply(
-    `⚡ Авто анімація\n\nНадішли фото — модель сама оживить його!\n\nПромт підбирається автоматично 🤖`,
+    `⚡ Авто анімація\n\nНадішли фото — оживлю з дефолтним промтом:\n📝 "${defaultPrompt}"\n\n✍️ Хочеш свій промт? Напиши його перед фото.`,
     menu
   );
 });
@@ -1680,13 +1683,12 @@ bot.on("text", async (ctx, next) => {
         const user = getUser(ctx.from.id);
         if (userGenerating.has(ctx.from.id)) return ctx.reply("⏳ Зачекай, ще обробляється...");
         userGenerating.add(ctx.from.id);
-        try {
-          await enqueueGeneration(ctx.from.id, () => _processGeneration(ctx, user, ctx.from.id, "photo", null), "photo", ctx);
-        } catch (e) {
-          userGenerating.delete(ctx.from.id);
-          console.error("CREATE PHOTO ENQUEUE ERROR:", e.message);
-          ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
-        }
+        enqueueGeneration(ctx.from.id, () => _processGeneration(ctx, user, ctx.from.id, "photo", null), "photo", ctx)
+          .catch(e => {
+            userGenerating.delete(ctx.from.id);
+            console.error("CREATE PHOTO ENQUEUE ERROR:", e.message);
+            ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
+          });
         return;
       }
       return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", photoMenu());
@@ -1711,13 +1713,12 @@ bot.on("text", async (ctx, next) => {
         const user = getUser(ctx.from.id);
         if (userGenerating.has(ctx.from.id)) return ctx.reply("⏳ Зачекай, ще обробляється...");
         userGenerating.add(ctx.from.id);
-        try {
-          await enqueueGeneration(ctx.from.id, () => _processGeneration(ctx, user, ctx.from.id, "video", null), "video", ctx);
-        } catch (e) {
-          userGenerating.delete(ctx.from.id);
-          console.error("TEXT-TO-VIDEO ENQUEUE ERROR:", e.message);
-          ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
-        }
+        enqueueGeneration(ctx.from.id, () => _processGeneration(ctx, user, ctx.from.id, "video", null), "video", ctx)
+          .catch(e => {
+            userGenerating.delete(ctx.from.id);
+            console.error("TEXT-TO-VIDEO ENQUEUE ERROR:", e.message);
+            ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
+          });
         return;
       }
       return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", menu);
@@ -1785,19 +1786,19 @@ bot.on("photo", async (ctx) => {
   const MAX_QUEUE = 50;
   const currentQueue = ctx.session.mode === "video" ? videoQueue : photoQueue;
   if (currentQueue.length >= MAX_QUEUE) return ctx.reply("⚠️ Сервіс зараз перевантажений. Спробуй через кілька хвилин.");
-  if (currentQueue.length > 0) await ctx.reply(`⏳ Черга: #${currentQueue.length + 1}. Зачекай...`);
+  // ✅ Не дублюємо — processQueue сам повідомить про позицію в черзі
 
   userGenerating.add(userId);
 
   // ✅ ВИПРАВЛЕНИЙ catch блок
   const genType = ctx.session.mode === "video" ? "video" : "photo";
-  try {
-    await enqueueGeneration(userId, () => _processGeneration(ctx, user, userId, ctx.session.mode, photo), genType, ctx);
-  } catch (e) {
-    userGenerating.delete(userId);
-    console.error("ENQUEUE ERROR:", e.message);
-    ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
-  }
+  // ✅ Без await — бот не зависає поки генерує
+  enqueueGeneration(userId, () => _processGeneration(ctx, user, userId, ctx.session.mode, photo), genType, ctx)
+    .catch(e => {
+      userGenerating.delete(userId);
+      console.error("ENQUEUE ERROR:", e.message);
+      ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
+    });
 });
 
 // ─── ПРОЦЕСИНГ ГЕНЕРАЦІЇ ─────────────────────────────────────────────────────
@@ -1841,7 +1842,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           if (videoInputMode === "text") {
             // ✍️ Текст → Відео
             const result = await falWithRetry(
-              "bytedance/seedance-2.0/fast/text-to-video",
+              "fal-ai/bytedance/seedance-2.0/fast/text-to-video",
               {
                 prompt,
                 duration: "auto",        // auto, 4-15
@@ -1857,7 +1858,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             const imageUrl = await uploadImageToFal(image);
             console.log("SEEDANCE INPUT:", { prompt: prompt?.slice(0, 50), imageUrl });
             const result = await falWithRetry(
-              "bytedance/seedance-2.0/fast/image-to-video",
+              "fal-ai/bytedance/seedance-2.0/fast/image-to-video",
               {
                 prompt: prompt || "cinematic motion, smooth animation, realistic movement",
                 image_url: imageUrl,

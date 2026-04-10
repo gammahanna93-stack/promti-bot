@@ -31,6 +31,16 @@ bot.use(localSession.middleware());
 
 fal.config({ credentials: process.env.FAL_KEY });
 
+// ✅ Глобальний обробник помилок — бот не зависає при будь-якій помилці
+bot.use(async (ctx, next) => {
+  try {
+    await next();
+  } catch (e) {
+    console.error("GLOBAL HANDLER ERROR:", e.message);
+    try { await ctx.reply("❌ Сталася помилка. Спробуй ще раз або /start"); } catch {}
+  }
+});
+
 // ─── КОНСТАНТИ ────────────────────────────────────────────────────────────────
 const ADMINS = [346101852, 688515215];
 
@@ -53,10 +63,23 @@ const PAYMENT_LOCK_PATH = path.join(DATA_DIR, "payment.lock.json");
 const PACKAGES_PATH     = path.join(DATA_DIR, "packages.json");
 const GEN_LOG_PATH      = path.join(DATA_DIR, "generation_logs.jsonl");
 
-// Конфігурація (зберігається в GitHub — оновлюється через код)
-const PROMPTS_PATH      = path.join(__dirname, "prompts.json");
-const CONTENT_PATH      = path.join(__dirname, "content.json");
-const SETTINGS_PATH     = path.join(__dirname, "settings.json");
+// ✅ Тексти/промти/налаштування теж у Volume — зміни адміна зберігаються між деплоями
+// При першому запуску — копіюємо з GitHub у Volume якщо ще немає
+const PROMPTS_PATH      = path.join(DATA_DIR, "prompts.json");
+const CONTENT_PATH      = path.join(DATA_DIR, "content.json");
+const SETTINGS_PATH     = path.join(DATA_DIR, "settings.json");
+
+// Копіюємо дефолтні файли з репо у Volume якщо їх ще немає
+for (const [src, dst] of [
+  [path.join(__dirname, "prompts.json"),  PROMPTS_PATH],
+  [path.join(__dirname, "content.json"),  CONTENT_PATH],
+  [path.join(__dirname, "settings.json"), SETTINGS_PATH],
+]) {
+  if (!fs.existsSync(dst) && fs.existsSync(src)) {
+    fs.copyFileSync(src, dst);
+    console.log(`📋 Copied ${path.basename(src)} to Volume`);
+  }
+}
 
 // ─── НАЛАШТУВАННЯ ─────────────────────────────────────────────────────────────
 const DEFAULT_SETTINGS = {
@@ -78,8 +101,23 @@ const DEFAULT_SETTINGS = {
   dailyAiPromptLimit:  10,
 };
 
+// ✅ Кешування settings — читаємо з диску не частіше 1 разу на 30 сек
+let _settingsCache = null;
+let _settingsCacheTime = 0;
+const SETTINGS_CACHE_MS = 30000;
+
 function loadSettings() {
-  return { ...DEFAULT_SETTINGS, ...loadJson(SETTINGS_PATH, DEFAULT_SETTINGS) };
+  const now = Date.now();
+  if (_settingsCache && now - _settingsCacheTime < SETTINGS_CACHE_MS) {
+    return _settingsCache;
+  }
+  _settingsCache = { ...DEFAULT_SETTINGS, ...loadJson(SETTINGS_PATH, DEFAULT_SETTINGS) };
+  _settingsCacheTime = now;
+  return _settingsCache;
+}
+
+function invalidateSettingsCache() {
+  _settingsCache = null;
 }
 
 // ─── JSON HELPERS ─────────────────────────────────────────────────────────────
@@ -105,6 +143,12 @@ function appendLog(entry) {
   catch (e) { console.error("LOG APPEND ERROR:", e.message); }
 }
 
+// ✅ Структуроване логування з userId, типом і часом
+function log(type, userId, details = "") {
+  const ts = new Date().toISOString().slice(0, 19);
+  console.log(`[${ts}] ${type} | user:${userId || "-"} | ${details}`);
+}
+
 // ─── ДАНІ ─────────────────────────────────────────────────────────────────────
 const DEFAULT_PROMPTS = {
   portrait: "ultra realistic portrait, studio lighting, preserve face, do not change identity",
@@ -123,6 +167,7 @@ const DEFAULT_CONTENT = {
   supportText:  "Напиши в підтримку: https://t.me/promteamai?direct",
   ideaText:     "💡 Ідеї для промтів:\n\n🖼 Фото:\n• \"portrait in Renaissance style\"\n• \"cyberpunk neon portrait\"\n\n🎬 Відео:\n• \"hair gently flowing in wind\"\n• \"eyes slowly opening, cinematic\"",
   support_link: "https://t.me/promteamai?direct",
+  pricesText:   "💰 PROMTI AI — Ціни\n\n🖼 Фото\n📦 10 фото — 99 грн\n📦 20 фото — 179 грн\n📦 30 фото — 249 грн\n🔥 50 фото — 399 грн (найкраща ціна!)\n\n🎬 Seedance (анімація фото)\n3 відео — 199 грн\n5 відео — 349 грн\n10 відео — 599 грн\n\n🎥 Kling (кінематограф)\n3 відео — 299 грн\n5 відео — 499 грн\n10 відео — 899 грн\n\n🎁 1 фото безкоштовно при реєстрації!\n👫 За кожного друга +1 фото\n\n💳 Обери пакет в меню Фото або Відео",
 };
 
 let users    = loadJson(USERS_PATH,    {});
@@ -176,10 +221,21 @@ let activeVideoWorkers = 0;
 const generationQueue = { get length() { return photoQueue.length + videoQueue.length; } };
 let activeWorkers = 0; // загальна для статистики
 
+const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 хвилин hard timeout
+
 function enqueueGeneration(userId, taskFn, type = "photo") {
   return new Promise((resolve, reject) => {
     const queue = type === "video" ? videoQueue : photoQueue;
-    queue.push({ userId, taskFn, resolve, reject });
+
+    // ✅ Hard timeout — якщо FAL завис більше 10 хв — вбиваємо job
+    const wrappedTask = () => {
+      const timeoutPromise = new Promise((_, rej) =>
+        setTimeout(() => rej(new Error("JOB_HARD_TIMEOUT")), JOB_TIMEOUT_MS)
+      );
+      return Promise.race([taskFn(), timeoutPromise]);
+    };
+
+    queue.push({ userId, taskFn: wrappedTask, resolve, reject });
     processQueue();
   });
 }
@@ -352,7 +408,19 @@ function touchUser(ctx) {
   return user;
 }
 
-function saveUsers()    { saveJson(USERS_PATH,    users);    }
+// ✅ Debounce saveUsers — захист від race condition при одночасних запитах
+let _saveUsersTimer = null;
+function saveUsers() {
+  if (_saveUsersTimer) clearTimeout(_saveUsersTimer);
+  _saveUsersTimer = setTimeout(() => {
+    saveJson(USERS_PATH, users);
+    _saveUsersTimer = null;
+  }, 300); // зберігаємо не частіше ніж раз на 300мс
+}
+
+// Синхронне збереження для критичних операцій (оплата, баланс)
+function saveUsersSync() { saveJson(USERS_PATH, users); }
+
 function savePrompts()  { saveJson(PROMPTS_PATH,  prompts);  }
 function saveContent()  { saveJson(CONTENT_PATH,  content);  }
 function savePayments() { saveJson(PAYMENTS_PATH, payments); }
@@ -572,7 +640,18 @@ async function createWayForPayInvoice(userId, packKey) {
     productName: payload.productName, productCount: payload.productCount, productPrice: payload.productPrice,
   });
 
-  const res  = await axios.post("https://api.wayforpay.com/api", payload, { headers: { "Content-Type": "application/json" }, timeout: 30000 });
+  // ✅ Retry для WayForPay API
+  let res;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      res = await axios.post("https://api.wayforpay.com/api", payload, { headers: { "Content-Type": "application/json" }, timeout: 30000 });
+      break;
+    } catch (e) {
+      if (attempt === 3) throw e;
+      console.warn(`WFP API RETRY ${attempt}/3:`, e.message);
+      await new Promise(r => setTimeout(r, 2000 * attempt));
+    }
+  }
   const data = res.data || {};
   const invoiceUrl = data.invoiceUrl || data.url || data.href || null;
   if (!invoiceUrl) throw new Error(`WayForPay no invoiceUrl: ${JSON.stringify(data)}`);
@@ -629,7 +708,12 @@ function getBotStats() {
 }
 
 // ─── МЕНЮ ─────────────────────────────────────────────────────────────────────
-const mainMenu  = () => Markup.keyboard([["🖼 Фото", "🎬 Відео"], ["📊 Баланс", "💡 Ідея для промтів"], ["ℹ️ Інформація", "❓ Допомога"], ["🆘 Підтримка"]]).resize();
+const mainMenu  = () => Markup.keyboard([
+  ["🖼 Фото", "🎬 Відео"],
+  ["📊 Баланс", "💰 Ціни"],
+  ["💡 Ідея для промтів", "ℹ️ Інформація"],
+  ["❓ Допомога", "🆘 Підтримка"]
+]).resize();
 const photoMenu = () => Markup.keyboard([
   ["🖼 Редагувати фото", "✨ Створити фото"],
   ["🤖 AI промт для фото"],
@@ -672,13 +756,13 @@ const buyKlingMenu    = () => Markup.keyboard([
 const adminMenu       = () => Markup.keyboard([
   ["📊 Статус бота", "👤 Мій ID"],
   ["👥 Користувачі", "💳 Останні оплати"],
-  ["✏️ Змінити промт", "📝 Поточні промти"],
+  ["📈 Аналітика", "📦 Пакети"],
   ["✏️ Змінити текст", "📝 Поточні тексти"],
-  ["⚙️ Налаштування", "📦 Пакети"],
-  ["📊 Баланс", "↩️ Назад"],
+  ["⚙️ Налаштування", "📊 Баланс"],
+  ["↩️ Назад"],
 ]).resize();
 const adminPromptsMenu = () => Markup.keyboard([["portrait", "beauty"], ["fashion", "art"], ["trend", "seedance"], ["kling"], ["↩️ Назад"]]).resize();
-const adminTextsMenu   = () => Markup.keyboard([["welcomeText", "infoText"], ["helpText", "supportText"], ["ideaText"], ["↩️ Назад"]]).resize();
+const adminTextsMenu   = () => Markup.keyboard([["welcomeText", "infoText"], ["helpText", "supportText"], ["ideaText", "pricesText"], ["↩️ Назад"]]).resize();
 
 const paymentInlineKeyboard = (payUrl, pack) => Markup.inlineKeyboard([
   [Markup.button.url(`💳 Оплатити ${pack.title} — ${pack.priceText}`, payUrl)],
@@ -703,7 +787,34 @@ bot.start(async (ctx) => {
 bot.command("help",  (ctx) => { touchUser(ctx); return ctx.reply(content.helpText,  mainMenu()); });
 bot.command("info",  (ctx) => { touchUser(ctx); return ctx.reply(content.infoText,  mainMenu()); });
 bot.command("myid",  (ctx) => { touchUser(ctx); return ctx.reply(`Твій ID: ${ctx.from.id}`); });
-bot.command("admin", (ctx) => { touchUser(ctx); if (!isAdmin(ctx.from.id)) return ctx.reply("❌"); resetState(ctx); return ctx.reply("Адмін:", adminMenu()); });
+bot.command("admin", (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+  resetState(ctx);
+  return ctx.reply(
+    "👑 Адмін панель\n\n" +
+    "📊 Кнопки меню:\n" +
+    "📊 Статус бота — статистика, черга, ключі\n" +
+    "👥 Користувачі — останні 15 юзерів\n" +
+    "💳 Останні оплати — останні 15 транзакцій\n" +
+    "✏️ Змінити промт — редагувати AI промти\n" +
+    "✏️ Змінити текст — редагувати тексти бота\n" +
+    "⚙️ Налаштування — ліміти, таймаути\n" +
+    "📦 Пакети — переглянути всі пакети\n\n" +
+    "⌨️ Команди:\n" +
+    "/setprice photo_pack10 120 — змінити ціну\n" +
+    "/addpackage kling_pack15 video 15 1199 15 Kling — додати пакет\n" +
+    "/setlink support_link https://t.me/... — змінити посилання\n" +
+    "/packages — всі пакети і ціни\n" +
+    "/addphoto ID 10 — додати фото юзеру\n" +
+    "/addvideo ID 5 — додати відео юзеру\n" +
+    "/userinfo ID — інфо про юзера\n" +
+    "/ban ID — заблокувати\n" +
+    "/unban ID — розблокувати\n" +
+    "/broadcast Текст — розсилка всім",
+    adminMenu()
+  );
+});
 
 bot.command("ref", (ctx) => {
   touchUser(ctx);
@@ -810,6 +921,81 @@ bot.command("broadcast", async (ctx) => {
 });
 
 // ─── АДМІН: КЕРУВАННЯ ПАКЕТАМИ ────────────────────────────────────────────────
+
+// /analytics — детальна аналітика
+bot.command("analytics", (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+
+  const all = Object.values(users);
+  const paid = payments.filter(p => p.status === "credited");
+
+  // Топ пакети
+  const packCount = {};
+  paid.forEach(p => {
+    packCount[p.packKey] = (packCount[p.packKey] || 0) + 1;
+  });
+  const topPacks = Object.entries(packCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([key, cnt]) => `  ${key}: ${cnt} разів`)
+    .join("\n");
+
+  // Виручка по днях (останні 7 днів)
+  const now = Date.now();
+  const DAY = 86400000;
+  const revenueByDay = {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now - i * DAY).toISOString().slice(0, 10);
+    revenueByDay[d] = 0;
+  }
+  paid.forEach(p => {
+    const d = (p.updatedAt || p.createdAt || "").slice(0, 10);
+    if (revenueByDay[d] !== undefined) revenueByDay[d] += Number(p.amount || 0);
+  });
+  const revenueChart = Object.entries(revenueByDay)
+    .map(([d, amt]) => `  ${d.slice(5)}: ${amt} грн`)
+    .join("\n");
+
+  // Конверсія
+  const totalUsers   = all.length;
+  const payingUsers  = all.filter(u => (u.totalSpent || 0) > 0).length;
+  const activeUsers  = all.filter(u => (u.generations || 0) > 0 || (u.seedanceGenerations || 0) > 0 || (u.klingGenerations || 0) > 0).length;
+  const conversion   = totalUsers > 0 ? ((payingUsers / totalUsers) * 100).toFixed(1) : 0;
+  const actConversion = activeUsers > 0 ? ((payingUsers / activeUsers) * 100).toFixed(1) : 0;
+
+  // Середній чек
+  const totalRevenue = paid.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const avgCheck     = payingUsers > 0 ? Math.round(totalRevenue / payingUsers) : 0;
+
+  // Коли відвалюються (юзери без оплати після генерацій)
+  const triedNoPayment = all.filter(u =>
+    ((u.generations || 0) > 0 || (u.seedanceGenerations || 0) > 0 || (u.klingGenerations || 0) > 0) &&
+    (u.totalSpent || 0) === 0
+  ).length;
+
+  // Повторні покупки
+  const repeatBuyers = all.filter(u => {
+    const userPaid = paid.filter(p => p.userId == u.id);
+    return userPaid.length > 1;
+  }).length;
+
+  return ctx.reply(
+    `📊 Аналітика\n\n` +
+    `👥 Юзери: ${totalUsers} всього\n` +
+    `  🔥 Активних: ${activeUsers}\n` +
+    `  💳 Платних: ${payingUsers}\n` +
+    `  😶 Спробували і пішли: ${triedNoPayment}\n\n` +
+    `💰 Конверсія:\n` +
+    `  Всі→платні: ${conversion}%\n` +
+    `  Активні→платні: ${actConversion}%\n\n` +
+    `💵 Фінанси:\n` +
+    `  Всього: ${totalRevenue} грн\n` +
+    `  Середній чек: ${avgCheck} грн\n` +
+    `  Повторні покупки: ${repeatBuyers} юзерів\n\n` +
+    `📦 Топ пакети:\n${topPacks || "  немає даних"}\n\n` +
+    `📅 Виручка (7 днів):\n${revenueChart}`
+  );
+});
 
 // /packages — показати всі пакети
 bot.command("packages", (ctx) => {
@@ -974,10 +1160,10 @@ bot.hears("✏️ Змінити текст", (ctx) => {
   return ctx.reply("Обери:", adminTextsMenu());
 });
 
-bot.hears(["welcomeText", "infoText", "helpText", "supportText", "ideaText"], (ctx) => {
+bot.hears(["welcomeText", "infoText", "helpText", "supportText", "ideaText", "pricesText"], (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return;
-  const valid = ["welcomeText", "infoText", "helpText", "supportText", "ideaText"];
+  const valid = ["welcomeText", "infoText", "helpText", "supportText", "ideaText", "pricesText"];
   if (!valid.includes(ctx.message.text)) return;
   ctx.session.awaitingTextEditKey = ctx.message.text;
   return ctx.reply(`Ключ: ${ctx.message.text}\n\nПоточний:\n${content[ctx.message.text]}\n\nНадішли новий.`, adminMenu());
@@ -1006,6 +1192,59 @@ bot.hears("⚙️ Налаштування", (ctx) => {
 });
 
 // ✅ НОВА кнопка — Пакети
+bot.hears("📈 Аналітика", (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+  // Викликаємо ту саму логіку що і /analytics
+  const all = Object.values(users);
+  const paid = payments.filter(p => p.status === "credited");
+  const packCount = {};
+  paid.forEach(p => { packCount[p.packKey] = (packCount[p.packKey] || 0) + 1; });
+  const topPacks = Object.entries(packCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([key, cnt]) => `  ${key}: ${cnt} разів`).join("\n");
+  const now = Date.now();
+  const DAY = 86400000;
+  const revenueByDay = {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now - i * DAY).toISOString().slice(0, 10);
+    revenueByDay[d] = 0;
+  }
+  paid.forEach(p => {
+    const d = (p.updatedAt || p.createdAt || "").slice(0, 10);
+    if (revenueByDay[d] !== undefined) revenueByDay[d] += Number(p.amount || 0);
+  });
+  const revenueChart = Object.entries(revenueByDay)
+    .map(([d, amt]) => `  ${d.slice(5)}: ${amt} грн`).join("\n");
+  const totalUsers    = all.length;
+  const payingUsers   = all.filter(u => (u.totalSpent || 0) > 0).length;
+  const activeUsers   = all.filter(u => (u.generations || 0) > 0 || (u.seedanceGenerations || 0) > 0 || (u.klingGenerations || 0) > 0).length;
+  const conversion    = totalUsers > 0 ? ((payingUsers / totalUsers) * 100).toFixed(1) : 0;
+  const actConversion = activeUsers > 0 ? ((payingUsers / activeUsers) * 100).toFixed(1) : 0;
+  const totalRevenue  = paid.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const avgCheck      = payingUsers > 0 ? Math.round(totalRevenue / payingUsers) : 0;
+  const triedNoPayment = all.filter(u =>
+    ((u.generations || 0) > 0 || (u.seedanceGenerations || 0) > 0 || (u.klingGenerations || 0) > 0) &&
+    (u.totalSpent || 0) === 0
+  ).length;
+  const repeatBuyers = all.filter(u => paid.filter(p => p.userId == u.id).length > 1).length;
+  return ctx.reply(
+    `📊 Аналітика\n\n` +
+    `👥 Юзери: ${totalUsers} всього\n` +
+    `  🔥 Активних: ${activeUsers}\n` +
+    `  💳 Платних: ${payingUsers}\n` +
+    `  😶 Спробували і пішли: ${triedNoPayment}\n\n` +
+    `💰 Конверсія:\n` +
+    `  Всі→платні: ${conversion}%\n` +
+    `  Активні→платні: ${actConversion}%\n\n` +
+    `💵 Фінанси:\n` +
+    `  Всього: ${totalRevenue} грн\n` +
+    `  Середній чек: ${avgCheck} грн\n` +
+    `  Повторні покупки: ${repeatBuyers} юзерів\n\n` +
+    `📦 Топ пакети:\n${topPacks || "  немає даних"}\n\n` +
+    `📅 Виручка (7 днів):\n${revenueChart}`,
+    adminMenu()
+  );
+});
+
 bot.hears("📦 Пакети", (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const pkgs = getPackages();
@@ -1049,6 +1288,7 @@ bot.hears("↩️ Назад до відео", (ctx) => {
 bot.hears("ℹ️ Інформація",     (ctx) => { touchUser(ctx); return ctx.reply(content.infoText,    mainMenu()); });
 bot.hears("❓ Допомога",       (ctx) => { touchUser(ctx); return ctx.reply(content.helpText,    mainMenu()); });
 bot.hears("🆘 Підтримка",      (ctx) => { touchUser(ctx); return ctx.reply(content.supportText, mainMenu()); });
+bot.hears("💰 Ціни",           (ctx) => { touchUser(ctx); return ctx.reply(content.pricesText || "💰 Ціни тимчасово недоступні", mainMenu()); });
 bot.hears("💡 Ідея для промтів",(ctx) => { touchUser(ctx); return ctx.reply(content.ideaText,   mainMenu()); });
 
 // ─── БАЛАНС ───────────────────────────────────────────────────────────────────
@@ -1328,7 +1568,7 @@ bot.action(/^regen_ai_prompt_(photo|video)$/, async (ctx) => {
 
 // ─── ТЕКСТОВИЙ ХЕНДЛЕР ────────────────────────────────────────────────────────
 const ALL_BUTTONS = [
-  "🖼 Фото","🎬 Відео","📊 Баланс","💡 Ідея для промтів","ℹ️ Інформація","❓ Допомога","🆘 Підтримка",
+  "🖼 Фото","🎬 Відео","📊 Баланс","💡 Ідея для промтів","ℹ️ Інформація","❓ Допомога","🆘 Підтримка","💰 Ціни",
   "🖼 Редагувати фото","✨ Створити фото",
   "📸 Фото → Відео","✍️ Текст → Відео",
   "🤖 AI промт для фото","🤖 AI промт для відео",
@@ -1337,8 +1577,8 @@ const ALL_BUTTONS = [
   "📦 10 фото","📦 20 фото","📦 30 фото","🔥 50 фото",
   "🎬 3 Seedance","🎬 5 Seedance","🎬 10 Seedance",
   "🎥 3 Kling","🎥 5 Kling","🎥 10 Kling",
-  "📊 Статус бота","👤 Мій ID","👥 Користувачі","💳 Останні оплати",
-  "✏️ Змінити промт","📝 Поточні промти","✏️ Змінити текст","📝 Поточні тексти","⚙️ Налаштування","📦 Пакети",
+  "📊 Статус бота","👤 Мій ID","👥 Користувачі","💳 Останні оплати","📈 Аналітика",
+  "✏️ Змінити текст","📝 Поточні тексти","⚙️ Налаштування","📦 Пакети",
   "portrait","beauty","fashion","art","trend","seedance","kling",
   "welcomeText","infoText","helpText","supportText","ideaText",
   "↩️ Назад","↩️ Назад до фото","↩️ Назад до відео",
@@ -1347,6 +1587,8 @@ const ALL_BUTTONS = [
 bot.on("text", async (ctx, next) => {
   try {
     ensureSession(ctx); touchUser(ctx);
+    // ✅ Перевірка бану
+    if (users[ctx.from.id]?.banned) return ctx.reply("🚫 Ваш акаунт заблокований. Напишіть в підтримку.");
     const text = ctx.message.text;
     if (ALL_BUTTONS.includes(text) || text.startsWith("/")) return next();
 
@@ -1363,21 +1605,45 @@ bot.on("text", async (ctx, next) => {
 
     // ✅ Валідація довжини промту
     if ((ctx.session.customType === "custom_photo" || ctx.session.customType === "create_photo") && ctx.session.awaitingCustomPrompt) {
-      ctx.session.customPrompt = text; ctx.session.awaitingCustomPrompt = false;
+      ctx.session.customPrompt = text;
+      ctx.session.awaitingCustomPrompt = false;
+
       if (ctx.session.customType === "create_photo") {
-        return ctx.reply("Промт збережено ✅\nГенерую фото...", photoMenu());
+        // ✅ Запускаємо генерацію БЕЗ фото
+        const user = getUser(ctx.from.id);
+        if (userGenerating.has(ctx.from.id)) return ctx.reply("⏳ Зачекай, ще обробляється...");
+        userGenerating.add(ctx.from.id);
+        try {
+          await enqueueGeneration(ctx.from.id, () => _processGeneration(ctx, user, ctx.from.id, "photo", null), "photo");
+        } catch (e) {
+          userGenerating.delete(ctx.from.id);
+          console.error("CREATE PHOTO ENQUEUE ERROR:", e.message);
+          ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
+        }
+        return;
       }
       return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", photoMenu());
     }
     if (ctx.session.mode === "video" && ctx.session.awaitingCustomPrompt) {
-      ctx.session.customPrompt = text; ctx.session.awaitingCustomPrompt = false;
+      ctx.session.customPrompt = text;
+      ctx.session.awaitingCustomPrompt = false;
       const videoInputMode = ctx.session.videoInputMode || "image";
       const style = ctx.session.style;
       const menu = style === "kling" ? klingMenu() : seedanceMenu();
+
       if (videoInputMode === "text") {
-        // Текст → Відео: одразу генеруємо без фото
-        ctx.session.awaitingCustomPrompt = false;
-        return ctx.reply("Промт збережено ✅\nГенерую відео з тексту...", menu);
+        // ✅ Запускаємо text-to-video БЕЗ фото
+        const user = getUser(ctx.from.id);
+        if (userGenerating.has(ctx.from.id)) return ctx.reply("⏳ Зачекай, ще обробляється...");
+        userGenerating.add(ctx.from.id);
+        try {
+          await enqueueGeneration(ctx.from.id, () => _processGeneration(ctx, user, ctx.from.id, "video", null), "video");
+        } catch (e) {
+          userGenerating.delete(ctx.from.id);
+          console.error("TEXT-TO-VIDEO ENQUEUE ERROR:", e.message);
+          ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
+        }
+        return;
       }
       return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", menu);
     }
@@ -1571,6 +1837,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         saveUsers();
         userGenerating.delete(userId);
 
+        log("VIDEO_OK", userId, `model:${videoStyle} dur:${Date.now()-startMs}ms`);
         appendLog({ type: "video", model: videoStyle, userId, prompt, success: true, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
 
         const caption = isAdmin(userId)
@@ -1659,7 +1926,8 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     user.generations = (user.generations || 0) + 1;
     saveUsers();
     userGenerating.delete(userId);
-    appendLog({ type: "photo", model: style || "custom", userId, prompt, success: true, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
+    log("PHOTO_OK", userId, `dur:${Date.now()-startMs}ms`);
+    appendLog({ type: "photo", model: customType || "custom", userId, prompt, success: true, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
 
     const caption = isAdmin(userId) ? "Готово ✨\nАдмін: безліміт ✅" : `Готово ✨\n🖼 Залишилось фото: ${user.balance}`;
     await tgSendWithRetry(() => ctx.replyWithPhoto({ url }, { caption }));
@@ -1790,7 +2058,8 @@ app.post("/payment",
     console.log("MATCH:", expectedSig === data.merchantSignature);
 
     if (expectedSig !== data.merchantSignature) {
-      console.error("WFP SIGNATURE INVALID");
+      log("WFP_SIG_INVALID", null, `ref:${data.orderReference}`);
+    console.error("WFP SIGNATURE INVALID");
       return res.status(200).json(buildWfpAcceptResponse(data.orderReference || "unknown"));
     }
 
@@ -1830,8 +2099,9 @@ app.post("/payment",
       user.totalSpent            = (user.totalSpent || 0) + Number(data.amount || 0);
       user.pendingOrderReference = null;
       user.lastPaidAt            = new Date().toISOString();
-      saveUsers(); savePayments();
+      saveUsersSync(); savePayments();
 
+      log("CREDITED", userId, `pack:${packKey} +${pack.count} amount:${data.amount}грн`);
       console.log(`✅ CREDITED: user ${userId}, pack ${packKey}, +${pack.count}`);
 
       const emoji        = pack.type === "video" ? (pack.model === "kling" ? "🎥" : "🎬") : "🖼";

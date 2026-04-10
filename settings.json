@@ -21,7 +21,5 @@
 
   "aiPromptEnabled": true,
   "videoEnabled": true,
-  "seedanceEnabled": false,
-
-  "seedanceComingSoonText": "🎬 Seedance тимчасово недоступний. Скоро повернеться! Спробуй 🎥 Kling."
+  "seedanceEnabled": true,
 }

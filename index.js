@@ -1766,7 +1766,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           if (videoInputMode === "text") {
             // ✍️ Текст → Відео
             const result = await falWithRetry(
-              "fal-ai/bytedance/seedance-2.0/fast/text-to-video",
+              "bytedance/seedance-2.0/fast/text-to-video",
               {
                 prompt,
                 duration: "auto",
@@ -1780,7 +1780,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           } else {
             // 📸 Фото → Відео
             const result = await falWithRetry(
-              "fal-ai/bytedance/seedance-2.0/image-to-video",
+              "bytedance/seedance-2.0/image-to-video",
               {
                 prompt,
                 image_url: image,

@@ -1769,9 +1769,9 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
               "bytedance/seedance-2.0/fast/text-to-video",
               {
                 prompt,
-                duration: "auto",
-                aspect_ratio: cfg.seedanceAspectRatio || "9:16",
-                resolution: "720p",
+                duration: "auto",        // auto, 4-15
+                aspect_ratio: "auto",    // auto інферить з промту
+                resolution: "720p",      // 480p або 720p
                 generate_audio: false,
               },
               cfg.seedanceTimeoutMs

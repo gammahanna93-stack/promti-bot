@@ -305,6 +305,8 @@ function resetState(ctx) {
   ensureSession(ctx);
   ctx.session.mode                  = null;
   ctx.session.style                 = null;
+  ctx.session.photoMode             = null;
+  ctx.session.videoInputMode        = null;
   ctx.session.customType            = null;
   ctx.session.awaitingCustomPrompt  = false;
   ctx.session.customPrompt          = null;
@@ -628,11 +630,45 @@ function getBotStats() {
 
 // ─── МЕНЮ ─────────────────────────────────────────────────────────────────────
 const mainMenu  = () => Markup.keyboard([["🖼 Фото", "🎬 Відео"], ["📊 Баланс", "💡 Ідея для промтів"], ["ℹ️ Інформація", "❓ Допомога"], ["🆘 Підтримка"]]).resize();
-const photoMenu = () => Markup.keyboard([["👩 Портрет", "💄 Б'юті"], ["📸 Fashion", "🎨 Арт"], ["🔥 Тренд", "✍️ Свій промт"], ["🤖 AI промт для фото"], ["💳 Купити фото", "📊 Баланс фото"], ["↩️ Назад"]]).resize();
-const videoMenu = () => Markup.keyboard([["🎬 Seedance", "🎥 Kling"], ["✍️ Свій промт відео"], ["🤖 AI промт для відео"], ["💳 Купити Seedance", "💳 Купити Kling"], ["📊 Баланс відео"], ["↩️ Назад"]]).resize();
-const buyPhotoMenu    = () => Markup.keyboard([["📦 10 фото — 99 грн", "📦 20 фото — 179 грн"], ["📦 30 фото — 249 грн", "📦 50 фото — 399 грн"], ["↩️ Назад до фото"]]).resize();
-const buySeedanceMenu = () => Markup.keyboard([["🎬 3 Seedance — 199 грн"], ["🎬 5 Seedance — 349 грн"], ["🎬 10 Seedance — 599 грн"], ["↩️ Назад до відео"]]).resize();
-const buyKlingMenu    = () => Markup.keyboard([["🎥 3 Kling — 299 грн"],    ["🎥 5 Kling — 499 грн"],  ["🎥 10 Kling — 899 грн"],  ["↩️ Назад до відео"]]).resize();
+const photoMenu = () => Markup.keyboard([
+  ["🖼 Редагувати фото", "✨ Створити фото"],
+  ["🤖 AI промт для фото"],
+  ["💳 Купити фото", "📊 Баланс фото"],
+  ["↩️ Назад"]
+]).resize();
+const videoMenu     = () => Markup.keyboard([
+  ["🎬 Seedance", "🎥 Kling"],
+  ["🤖 AI промт для відео"],
+  ["📊 Баланс відео"],
+  ["↩️ Назад"]
+]).resize();
+const seedanceMenu  = () => Markup.keyboard([
+  ["📸 Фото → Відео", "✍️ Текст → Відео"],
+  ["💳 Купити Seedance"],
+  ["↩️ Назад до відео"]
+]).resize();
+const klingMenu     = () => Markup.keyboard([
+  ["📸 Фото → Відео", "✍️ Текст → Відео"],
+  ["💳 Купити Kling"],
+  ["↩️ Назад до відео"]
+]).resize();
+const buyPhotoMenu    = () => Markup.keyboard([
+  ["📦 10 фото", "📦 20 фото"],
+  ["📦 30 фото", "🔥 50 фото"],
+  ["↩️ Назад до фото"]
+]).resize();
+const buySeedanceMenu = () => Markup.keyboard([
+  ["🎬 3 Seedance"],
+  ["🎬 5 Seedance"],
+  ["🎬 10 Seedance"],
+  ["↩️ Назад до відео"]
+]).resize();
+const buyKlingMenu    = () => Markup.keyboard([
+  ["🎥 3 Kling"],
+  ["🎥 5 Kling"],
+  ["🎥 10 Kling"],
+  ["↩️ Назад до відео"]
+]).resize();
 const adminMenu       = () => Markup.keyboard([
   ["📊 Статус бота", "👤 Мій ID"],
   ["👥 Користувачі", "💳 Останні оплати"],
@@ -987,8 +1023,29 @@ bot.hears("📦 Пакети", (ctx) => {
 
 // ─── НАВІГАЦІЯ ────────────────────────────────────────────────────────────────
 bot.hears("↩️ Назад",          (ctx) => { touchUser(ctx); resetState(ctx); return ctx.reply("Головне меню ✨", mainMenu()); });
-bot.hears("↩️ Назад до фото",  (ctx) => { touchUser(ctx); resetState(ctx); ctx.session.mode = "photo"; return ctx.reply("Меню фото 🖼", photoMenu()); });
-bot.hears("↩️ Назад до відео", (ctx) => { touchUser(ctx); resetState(ctx); ctx.session.mode = "video"; return ctx.reply("Меню відео 🎬", videoMenu()); });
+bot.hears("↩️ Назад до фото", (ctx) => {
+  touchUser(ctx); resetState(ctx);
+  ctx.session.mode = "photo";
+  return ctx.reply(
+    "🖼 Меню фото\n\n" +
+    "🖼 Редагувати фото — надішли своє фото + промт, змінимо стиль!\n" +
+    "✨ Створити фото — напиши промт, створю фото з нуля\n" +
+    "🤖 AI промт — аналізую твоє фото і пропоную промт\n\n" +
+    "💡 Ідеї: t.me/promteamai",
+    photoMenu()
+  );
+});
+bot.hears("↩️ Назад до відео", (ctx) => {
+  touchUser(ctx); resetState(ctx);
+  ctx.session.mode = "video";
+  return ctx.reply(
+    "🎬 Меню відео\n\n" +
+    "🎬 Seedance — ByteDance модель, реалістична анімація\n" +
+    "🎥 Kling — кінематографічна якість відео\n\n" +
+    "💡 Ідеї: t.me/promteamai",
+    videoMenu()
+  );
+});
 bot.hears("ℹ️ Інформація",     (ctx) => { touchUser(ctx); return ctx.reply(content.infoText,    mainMenu()); });
 bot.hears("❓ Допомога",       (ctx) => { touchUser(ctx); return ctx.reply(content.helpText,    mainMenu()); });
 bot.hears("🆘 Підтримка",      (ctx) => { touchUser(ctx); return ctx.reply(content.supportText, mainMenu()); });
@@ -1030,68 +1087,130 @@ bot.hears("📊 Баланс відео", (ctx) => {
 });
 
 // ─── РОЗДІЛИ ──────────────────────────────────────────────────────────────────
-bot.hears("🖼 Фото", (ctx) => { touchUser(ctx); ensureSession(ctx); ctx.session.mode = "photo"; return ctx.reply("Меню фото 🖼\nОбери стиль:", photoMenu()); });
+bot.hears("🖼 Фото", (ctx) => {
+  touchUser(ctx); ensureSession(ctx);
+  ctx.session.mode = "photo";
+  return ctx.reply(
+    "🖼 Меню фото\n\n" +
+    "🖼 Редагувати фото — надішли своє фото + промт, змінимо стиль!\n" +
+    "✨ Створити фото — напиши промт, створю фото з нуля\n" +
+    "🤖 AI промт — аналізую твоє фото і пропоную промт\n\n" +
+    "💡 Ідеї: t.me/promteamai",
+    photoMenu()
+  );
+});
 bot.hears("🎬 Відео", (ctx) => {
   const cfg = loadSettings();
   if (!cfg.videoEnabled) return ctx.reply("🎬 Відео тимчасово недоступне. Спробуй пізніше.", mainMenu());
-  touchUser(ctx); ensureSession(ctx); ctx.session.mode = "video";
-  return ctx.reply("Меню відео 🎬\nОбери модель:", videoMenu());
-});
-
-// ─── ФОТО СТИЛІ ───────────────────────────────────────────────────────────────
-const PHOTO_STYLES = { "👩 Портрет": "portrait", "💄 Б'юті": "beauty", "📸 Fashion": "fashion", "🎨 Арт": "art", "🔥 Тренд": "trend" };
-Object.entries(PHOTO_STYLES).forEach(([btn, style]) => {
-  bot.hears(btn, (ctx) => {
-    touchUser(ctx); ensureSession(ctx);
-    ctx.session.mode = "photo"; ctx.session.style = style;
-    ctx.session.customType = null; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
-    return ctx.reply("Надішли фото 📸", photoMenu());
-  });
-});
-
-bot.hears("✍️ Свій промт", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
-  ctx.session.mode = "photo"; ctx.session.style = null;
-  ctx.session.customType = "custom_photo"; ctx.session.awaitingCustomPrompt = true; ctx.session.customPrompt = null;
-  return ctx.reply("Напиши промт для фото, потім надішли фото.\n\n💡 Ідеї для промтів: t.me/promteamai", photoMenu());
+  ctx.session.mode = "video";
+  return ctx.reply(
+    "🎬 Меню відео\n\n" +
+    "🎬 Seedance — ByteDance модель, реалістична анімація\n" +
+    "🎥 Kling — кінематографічна якість відео\n\n" +
+    "💡 Ідеї: t.me/promteamai",
+    videoMenu()
+  );
+});
+
+// ─── ФОТО РЕЖИМИ ──────────────────────────────────────────────────────────────
+
+// 🖼 Редагування — своє фото + промт (nano-banana-2/edit)
+bot.hears("🖼 Редагувати фото", (ctx) => {
+  touchUser(ctx); ensureSession(ctx);
+  ctx.session.mode = "photo";
+  ctx.session.photoMode = "edit"; // редагування існуючого фото
+  ctx.session.customType = "custom_photo";
+  ctx.session.awaitingCustomPrompt = true;
+  ctx.session.customPrompt = null;
+  return ctx.reply(
+    "✏️ Режим редагування фото\n\nНапиши промт як хочеш змінити фото, потім надішли своє фото.\n\nПриклад: \"beauty editorial, glossy skin\"\n\n💡 Ідеї: t.me/promteamai",
+    photoMenu()
+  );
+});
+
+// ✨ Створення — тільки текст → нове фото (nano-banana-2/text-to-image)
+bot.hears("✨ Створити фото", (ctx) => {
+  touchUser(ctx); ensureSession(ctx);
+  ctx.session.mode = "photo";
+  ctx.session.photoMode = "create"; // генерація з тексту
+  ctx.session.customType = "create_photo";
+  ctx.session.awaitingCustomPrompt = true;
+  ctx.session.customPrompt = null;
+  return ctx.reply(
+    "✨ Режим створення фото\n\nНапиши що хочеш згенерувати — фото буде створено з нуля.\n\nПриклад: \"portrait of woman in Renaissance style, cinematic lighting\"\n\n💡 Ідеї: t.me/promteamai",
+    photoMenu()
+  );
 });
 
 // ─── ВІДЕО МОДЕЛІ ─────────────────────────────────────────────────────────────
 bot.hears("🎬 Seedance", (ctx) => {
   const cfg = loadSettings();
-  // ✅ Перевірка чи Seedance увімкнено (керується з settings.json)
   if (cfg.seedanceEnabled === false) {
     return ctx.reply(cfg.seedanceComingSoonText || "🎬 Seedance тимчасово недоступний. Скоро повернеться! Спробуй 🎥 Kling.", videoMenu());
   }
   touchUser(ctx); ensureSession(ctx);
   ctx.session.mode = "video"; ctx.session.style = "seedance";
-  if (ctx.session.customPrompt) {
-    ctx.session.customType = "custom_video_seedance";
-    return ctx.reply(`🎬 Seedance обрано ✅\n\n📝 Промт: ${ctx.session.customPrompt}\n\nНадішли фото.`, videoMenu());
-  }
   ctx.session.customType = null; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
-  return ctx.reply("🎬 Seedance обрано ✅\nНадішли фото для анімації.", videoMenu());
+  ctx.session.videoInputMode = null;
+  return ctx.reply(
+    "🎬 Seedance 2.0\n\n" +
+    "📸 Фото → Відео — надішли фото + промт, оживлю!\n" +
+    "✍️ Текст → Відео — напиши промт, створю відео з нуля\n\n" +
+    "Приклад: \"hair gently flowing in wind\"\n\n" +
+    "💡 Ідеї: t.me/promteamai",
+    seedanceMenu()
+  );
+});
+
+// Seedance: Фото → Відео
+bot.hears("📸 Фото → Відео", (ctx) => {
+  touchUser(ctx); ensureSession(ctx);
+  const style = ctx.session.style;
+  if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
+  ctx.session.videoInputMode = "image";
+  ctx.session.customType = `custom_video_${style}`;
+  ctx.session.awaitingCustomPrompt = true;
+  ctx.session.customPrompt = null;
+  const menu = style === "kling" ? klingMenu() : seedanceMenu();
+  return ctx.reply(
+    `📸 Режим: Фото → Відео\n\nНапиши промт, потім надішли фото.\n\nПриклад: "eyes slowly opening, cinematic"\n\n💡 t.me/promteamai`,
+    menu
+  );
+});
+
+// Seedance/Kling: Текст → Відео
+bot.hears("✍️ Текст → Відео", (ctx) => {
+  touchUser(ctx); ensureSession(ctx);
+  const style = ctx.session.style;
+  if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
+  ctx.session.videoInputMode = "text";
+  ctx.session.customType = `custom_video_${style}`;
+  ctx.session.awaitingCustomPrompt = true;
+  ctx.session.customPrompt = null;
+  const menu = style === "kling" ? klingMenu() : seedanceMenu();
+  return ctx.reply(
+    `✍️ Режим: Текст → Відео\n\nНапиши детальний промт — створю відео з нуля!\n\nПриклад: "cinematic portrait of woman, wind in hair, golden hour"\n\n💡 t.me/promteamai`,
+    menu
+  );
 });
 
 bot.hears("🎥 Kling", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   ctx.session.mode = "video"; ctx.session.style = "kling";
-  if (ctx.session.customPrompt) {
-    ctx.session.customType = "custom_video_kling";
-    return ctx.reply(`🎥 Kling обрано ✅\n\n📝 Промт: ${ctx.session.customPrompt}\n\nНадішли фото.`, videoMenu());
-  }
   ctx.session.customType = null; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
-  return ctx.reply("🎥 Kling обрано ✅\nНадішли фото для анімації.", videoMenu());
+  ctx.session.videoInputMode = null;
+  return ctx.reply(
+    "🎥 Kling\n\n" +
+    "📸 Фото → Відео — надішли фото + промт, оживлю!\n" +
+    "✍️ Текст → Відео — напиши промт, створю кінематографічне відео\n\n" +
+    "Приклад: \"cinematic close-up, soft bokeh\"\n\n" +
+    "💡 Ідеї: t.me/promteamai",
+    klingMenu()
+  );
 });
 
-bot.hears("✍️ Свій промт відео", (ctx) => {
-  touchUser(ctx); ensureSession(ctx);
-  ctx.session.mode = "video";
-  if (!ctx.session.style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
-  ctx.session.customType = `custom_video_${ctx.session.style}`;
-  ctx.session.awaitingCustomPrompt = true; ctx.session.customPrompt = null;
-  return ctx.reply(`Напиши промт для ${ctx.session.style}, потім надішли фото.\n\n💡 Ідеї для промтів: t.me/promteamai`, videoMenu());
-});
+
 
 // ─── AI ПРОМТ ─────────────────────────────────────────────────────────────────
 bot.hears("🤖 AI промт для фото", (ctx) => {
@@ -1159,16 +1278,16 @@ bot.hears("💳 Купити Seedance", (ctx) => {
 });
 bot.hears("💳 Купити Kling",    (ctx) => { touchUser(ctx); if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu()); return ctx.reply("Обери пакет Kling 🎥:", buyKlingMenu()); });
 
-bot.hears("📦 10 фото — 99 грн",      (ctx) => sendAutoPayment(ctx, "photo_pack10"));
-bot.hears("📦 20 фото — 179 грн",     (ctx) => sendAutoPayment(ctx, "photo_pack20"));
-bot.hears("📦 30 фото — 249 грн",     (ctx) => sendAutoPayment(ctx, "photo_pack30"));
-bot.hears("📦 50 фото — 399 грн",     (ctx) => sendAutoPayment(ctx, "photo_pack50"));
-bot.hears("🎬 3 Seedance — 199 грн",  (ctx) => sendAutoPayment(ctx, "seedance_pack3"));
-bot.hears("🎬 5 Seedance — 349 грн",  (ctx) => sendAutoPayment(ctx, "seedance_pack5"));
-bot.hears("🎬 10 Seedance — 599 грн", (ctx) => sendAutoPayment(ctx, "seedance_pack10"));
-bot.hears("🎥 3 Kling — 299 грн",     (ctx) => sendAutoPayment(ctx, "kling_pack3"));
-bot.hears("🎥 5 Kling — 499 грн",     (ctx) => sendAutoPayment(ctx, "kling_pack5"));
-bot.hears("🎥 10 Kling — 899 грн",    (ctx) => sendAutoPayment(ctx, "kling_pack10"));
+bot.hears("📦 10 фото",   (ctx) => sendAutoPayment(ctx, "photo_pack10"));
+bot.hears("📦 20 фото",   (ctx) => sendAutoPayment(ctx, "photo_pack20"));
+bot.hears("📦 30 фото",   (ctx) => sendAutoPayment(ctx, "photo_pack30"));
+bot.hears("🔥 50 фото",   (ctx) => sendAutoPayment(ctx, "photo_pack50"));
+bot.hears("🎬 3 Seedance", (ctx) => sendAutoPayment(ctx, "seedance_pack3"));
+bot.hears("🎬 5 Seedance", (ctx) => sendAutoPayment(ctx, "seedance_pack5"));
+bot.hears("🎬 10 Seedance",(ctx) => sendAutoPayment(ctx, "seedance_pack10"));
+bot.hears("🎥 3 Kling",   (ctx) => sendAutoPayment(ctx, "kling_pack3"));
+bot.hears("🎥 5 Kling",   (ctx) => sendAutoPayment(ctx, "kling_pack5"));
+bot.hears("🎥 10 Kling",  (ctx) => sendAutoPayment(ctx, "kling_pack10"));
 
 bot.action(/^checkpay_(.+)$/, async (ctx) => {
   try { await ctx.answerCbQuery("Якщо оплата пройшла — буде зараховано автоматично ✅"); }
@@ -1210,13 +1329,14 @@ bot.action(/^regen_ai_prompt_(photo|video)$/, async (ctx) => {
 // ─── ТЕКСТОВИЙ ХЕНДЛЕР ────────────────────────────────────────────────────────
 const ALL_BUTTONS = [
   "🖼 Фото","🎬 Відео","📊 Баланс","💡 Ідея для промтів","ℹ️ Інформація","❓ Допомога","🆘 Підтримка",
-  "👩 Портрет","💄 Б'юті","📸 Fashion","🎨 Арт","🔥 Тренд","✍️ Свій промт","✍️ Свій промт відео",
+  "🖼 Редагувати фото","✨ Створити фото",
+  "📸 Фото → Відео","✍️ Текст → Відео",
   "🤖 AI промт для фото","🤖 AI промт для відео",
   "💳 Купити фото","📊 Баланс фото","💳 Купити Seedance","💳 Купити Kling","📊 Баланс відео",
   "🎬 Seedance","🎥 Kling",
-  "📦 10 фото — 99 грн","📦 20 фото — 179 грн","📦 30 фото — 249 грн","📦 50 фото — 399 грн",
-  "🎬 3 Seedance — 199 грн","🎬 5 Seedance — 349 грн","🎬 10 Seedance — 599 грн",
-  "🎥 3 Kling — 299 грн","🎥 5 Kling — 499 грн","🎥 10 Kling — 899 грн",
+  "📦 10 фото","📦 20 фото","📦 30 фото","🔥 50 фото",
+  "🎬 3 Seedance","🎬 5 Seedance","🎬 10 Seedance",
+  "🎥 3 Kling","🎥 5 Kling","🎥 10 Kling",
   "📊 Статус бота","👤 Мій ID","👥 Користувачі","💳 Останні оплати",
   "✏️ Змінити промт","📝 Поточні промти","✏️ Змінити текст","📝 Поточні тексти","⚙️ Налаштування","📦 Пакети",
   "portrait","beauty","fashion","art","trend","seedance","kling",
@@ -1242,13 +1362,24 @@ bot.on("text", async (ctx, next) => {
     }
 
     // ✅ Валідація довжини промту
-    if (ctx.session.customType === "custom_photo" && ctx.session.awaitingCustomPrompt) {
+    if ((ctx.session.customType === "custom_photo" || ctx.session.customType === "create_photo") && ctx.session.awaitingCustomPrompt) {
       ctx.session.customPrompt = text; ctx.session.awaitingCustomPrompt = false;
-      return ctx.reply("Промт збережено ✅\nНадішли фото.", photoMenu());
+      if (ctx.session.customType === "create_photo") {
+        return ctx.reply("Промт збережено ✅\nГенерую фото...", photoMenu());
+      }
+      return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", photoMenu());
     }
     if (ctx.session.mode === "video" && ctx.session.awaitingCustomPrompt) {
       ctx.session.customPrompt = text; ctx.session.awaitingCustomPrompt = false;
-      return ctx.reply("Промт збережено ✅\nНадішли фото для анімації.", videoMenu());
+      const videoInputMode = ctx.session.videoInputMode || "image";
+      const style = ctx.session.style;
+      const menu = style === "kling" ? klingMenu() : seedanceMenu();
+      if (videoInputMode === "text") {
+        // Текст → Відео: одразу генеруємо без фото
+        ctx.session.awaitingCustomPrompt = false;
+        return ctx.reply("Промт збережено ✅\nГенерую відео з тексту...", menu);
+      }
+      return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", menu);
     }
     return ctx.reply("Обери розділ через меню або /start", mainMenu());
   } catch (e) { console.error("TEXT HANDLER:", e.message); return ctx.reply("Помилка 😢", mainMenu()); }
@@ -1355,34 +1486,80 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       }
 
       const prompt       = ctx.session.customPrompt || prompts[videoStyle];
+      const videoInputMode = ctx.session.videoInputMode || "image";
       const stopProgress = startVideoProgress(ctx);
-      await ctx.reply(`⏳ Генерую ${videoStyle === "seedance" ? "Seedance" : "Kling"} відео...\nЦе займе 1-3 хв ⌛`);
+      const modeLabel = videoInputMode === "text" ? "з тексту" : "з фото";
+      await ctx.reply(`⏳ Генерую ${videoStyle === "seedance" ? "Seedance" : "Kling"} відео ${modeLabel}...\nЦе займе 1-3 хв ⌛`);
 
-      const image = await getImage(ctx, photo.file_id);
+      const image = videoInputMode === "text" ? null : await getImage(ctx, photo.file_id);
 
       try {
         let videoUrl = null;
         if (videoStyle === "seedance") {
-          const result = await falWithRetry(
-            "fal-ai/bytedance/seedance-2.0/image-to-video", // ✅ Seedance 2.0
-            {
-              prompt,
-              image_url: image,
-              duration: cfg.seedanceDurationSec === 5 ? "auto" : String(cfg.seedanceDurationSec),
-              aspect_ratio: cfg.seedanceAspectRatio || "auto",
-              resolution: "720p",
-              generate_audio: false, // вимикаємо аудіо — швидше і дешевше
-            },
-            cfg.seedanceTimeoutMs
-          );
-          videoUrl = result?.data?.video?.url;
+          const videoInputMode = ctx.session.videoInputMode || "image";
+          if (videoInputMode === "text") {
+            // ✍️ Текст → Відео
+            const result = await falWithRetry(
+              "fal-ai/bytedance/seedance-2.0/fast/text-to-video",
+              {
+                prompt,
+                duration: "auto",
+                aspect_ratio: cfg.seedanceAspectRatio || "9:16",
+                resolution: "720p",
+                generate_audio: false,
+              },
+              cfg.seedanceTimeoutMs
+            );
+            videoUrl = result?.data?.video?.url;
+          } else {
+            // 📸 Фото → Відео
+            const result = await falWithRetry(
+              "fal-ai/bytedance/seedance-2.0/image-to-video",
+              {
+                prompt,
+                image_url: image,
+                duration: "auto",
+                aspect_ratio: cfg.seedanceAspectRatio || "auto",
+                resolution: "720p",
+                generate_audio: false,
+              },
+              cfg.seedanceTimeoutMs
+            );
+            videoUrl = result?.data?.video?.url;
+          }
         } else {
-          const result = await falWithRetry(
-            "fal-ai/kling-video/v1.6/pro/image-to-video",
-            { prompt, image_url: image, duration: String(cfg.klingDurationSec), aspect_ratio: cfg.klingAspectRatio },
-            cfg.klingTimeoutMs
-          );
-          videoUrl = result?.data?.video?.url;
+          const videoInputMode = ctx.session.videoInputMode || "image";
+          if (videoInputMode === "text") {
+            // ✍️ Текст → Відео
+            const result = await falWithRetry(
+              "fal-ai/kling-video/v3/pro/text-to-video",
+              {
+                prompt,
+                duration: String(cfg.klingDurationSec),
+                aspect_ratio: cfg.klingAspectRatio || "9:16",
+                generate_audio: false,
+                negative_prompt: "blur, distort, and low quality",
+                cfg_scale: 0.5,
+              },
+              cfg.klingTimeoutMs
+            );
+            videoUrl = result?.data?.video?.url;
+          } else {
+            // 📸 Фото → Відео
+            const result = await falWithRetry(
+              "fal-ai/kling-video/v3/pro/image-to-video",
+              {
+                prompt,
+                start_image_url: image,
+                duration: String(cfg.klingDurationSec),
+                generate_audio: false,
+                negative_prompt: "blur, distort, and low quality",
+                cfg_scale: 0.5,
+              },
+              cfg.klingTimeoutMs
+            );
+            videoUrl = result?.data?.video?.url;
+          }
         }
 
         stopProgress();
@@ -1420,16 +1597,16 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     }
 
     // ══ ФОТО ══
-    const style      = ctx.session.style;
     const customType = ctx.session.customType;
+    const photoMode  = ctx.session.photoMode || "edit"; // edit або create
     let prompt = "";
 
-    if (customType === "custom_photo") {
+    if (customType === "custom_photo" || customType === "create_photo") {
       if (!ctx.session.customPrompt) { userGenerating.delete(userId); return ctx.reply("Спочатку напиши промт текстом.", photoMenu()); }
       prompt = ctx.session.customPrompt;
     } else {
-      if (!style || !prompts[style]) { userGenerating.delete(userId); return ctx.reply("Спочатку обери стиль 🖼 Фото", photoMenu()); }
-      prompt = prompts[style];
+      userGenerating.delete(userId);
+      return ctx.reply("Обери режим: 🖼 Редагувати фото або ✨ Створити фото", photoMenu());
     }
 
     if (!isAdmin(userId)) {
@@ -1439,10 +1616,44 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       saveUsers();
     }
 
-    await ctx.reply("⏳ Генерую фото...");
-    const image  = await getImage(ctx, photo.file_id);
-    const result = await falWithRetry("fal-ai/nano-banana-2/edit", { prompt, image_urls: [image], resolution: "1K" }, cfg.photoTimeoutMs);
-    const url    = result?.data?.images?.[0]?.url;
+    let url = null;
+
+    if (photoMode === "create") {
+      // ✨ Створення фото з тексту — fal-ai/nano-banana-2 (text-to-image)
+      await ctx.reply("⏳ Створюю фото з нуля...");
+      const result = await falWithRetry(
+        "fal-ai/nano-banana-2",
+        {
+          prompt,
+          num_images: 1,
+          aspect_ratio: "auto",
+          output_format: "png",
+          resolution: "1K",
+          limit_generations: true,
+        },
+        cfg.photoTimeoutMs
+      );
+      url = result?.data?.images?.[0]?.url;
+    } else {
+      // 🖼 Редагування існуючого фото — fal-ai/nano-banana-2/edit
+      await ctx.reply("⏳ Редагую фото...");
+      const image  = await getImage(ctx, photo.file_id);
+      const result = await falWithRetry(
+        "fal-ai/nano-banana-2/edit",
+        {
+          prompt,
+          image_urls: [image],
+          num_images: 1,
+          aspect_ratio: "auto",
+          output_format: "png",
+          resolution: "1K",
+          limit_generations: true,
+        },
+        cfg.photoTimeoutMs
+      );
+      url = result?.data?.images?.[0]?.url;
+    }
+
     if (!url) throw new Error("fal не повернув зображення");
 
     user.generations = (user.generations || 0) + 1;

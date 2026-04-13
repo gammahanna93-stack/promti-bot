@@ -1866,12 +1866,18 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             // 📸 Фото → Відео — завантажуємо фото на FAL для отримання публічного URL
             const imageUrl = await uploadImageToFal(image);
             console.log("SEEDANCE INPUT:", { prompt: prompt?.slice(0, 50), imageUrl });
-            // Мінімальний запит згідно docs — тільки обов'язкові поля
+            if (!imageUrl || imageUrl.startsWith("data:")) {
+              throw new Error("imageUrl invalid or fallback base64 — upload failed");
+            }
+            console.log("SEEDANCE FINAL INPUT:", { prompt, image_url: imageUrl });
             const result = await falWithRetry(
               "bytedance/seedance-2.0/fast/image-to-video",
               {
                 prompt: prompt || "cinematic motion, smooth animation",
                 image_url: imageUrl,
+                duration: "auto",
+                aspect_ratio: "auto",
+                resolution: "720p",
               },
               cfg.seedanceTimeoutMs
             );
@@ -1896,6 +1902,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             videoUrl = result?.data?.video?.url;
           } else {
             // 📸 Фото → Відео
+            if (!image) throw new Error("No image provided for Kling");
             const result = await falWithRetry(
               "fal-ai/kling-video/v3/pro/image-to-video",
               {
@@ -2198,11 +2205,11 @@ app.post("/payment",
           saveUsersSync();
           try {
             await bot.telegram.sendMessage(
-              buyer.referredBy,
+              user.referredBy,
               `🎉 Твій друг зробив першу оплату!\n+${REFERRAL_PHOTO_BONUS} фото нараховано 🖼\nБаланс фото: ${referrer.balance}`
             );
           } catch (e) { console.error("REFERRAL BONUS NOTIFY:", e.message); }
-          log("REFERRAL_BONUS", buyer.referredBy, `from user:${userId} +${REFERRAL_PHOTO_BONUS} фото`);
+          log("REFERRAL_BONUS", user.referredBy, `from user:${userId} +${REFERRAL_PHOTO_BONUS} фото`);
         }
       }
 

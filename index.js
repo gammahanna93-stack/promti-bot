@@ -512,25 +512,21 @@ async function tgSendWithRetry(fn, maxRetries = 3) {
 // ─── FAL UPLOAD IMAGE → отримати публічний URL ───────────────────────────────
 async function uploadImageToFal(base64DataUrl) {
   try {
-    // ✅ Використовуємо Buffer напряму — працює в будь-якій версії Node
     const base64Data = base64DataUrl.replace(/^data:image\/[^;]+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
-    // Записуємо тимчасово на диск і завантажуємо через fs
-    const tmpPath = `/tmp/fal_upload_${Date.now()}.jpg`;
-    fs.writeFileSync(tmpPath, buffer);
-
-    const fileStream = fs.createReadStream(tmpPath);
-    fileStream.name = `img_${Date.now()}.jpg`;
-    fileStream.type = "image/jpeg";
-
-    const url = await fal.storage.upload(fileStream);
-    try { fs.unlinkSync(tmpPath); } catch {}
+    // ✅ Використовуємо Blob через глобальний Buffer — сумісно з Node 18+
+    const blob = new Blob([buffer], { type: "image/jpeg" });
+    const url = await fal.storage.upload(blob, {
+      filename: `img_${Date.now()}.jpg`,
+      contentType: "image/jpeg",
+    });
     console.log("FAL UPLOAD URL:", url);
     return url;
   } catch (e) {
     console.error("FAL UPLOAD ERROR:", e.message);
-    return base64DataUrl; // fallback
+    // ✅ Fallback — data URI як base64 (Seedance 2.0 підтримує)
+    return base64DataUrl;
   }
 }
 

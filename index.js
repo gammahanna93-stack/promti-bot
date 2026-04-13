@@ -461,18 +461,13 @@ async function handleReferral(ctx, referrerId) {
   const newUser  = getUser(newUserId);
   if (newUser.referredBy) return;
   if (!referrer.totalSpent && (referrer.referralCount || 0) >= 20) { console.warn(`REFERRAL ABUSE: user ${referrerId}`); return; }
-  const grantBonus = !!referrer.username;
+  // ✅ Тільки зберігаємо refBy — бонус буде після першої оплати
   newUser.referredBy     = referrerId;
+  newUser.refPaid        = false;
   referrer.referralCount = (referrer.referralCount || 0) + 1;
-  if (grantBonus) {
-    referrer.balance += REFERRAL_PHOTO_BONUS;
-    saveUsers();
-    try { await bot.telegram.sendMessage(referrerId, `🎉 Новий друг зареєструвався!\n+${REFERRAL_PHOTO_BONUS} фото 🖼\nБаланс фото: ${referrer.balance}`); }
-    catch (e) { console.error("REFERRAL NOTIFY:", e.message); }
-  } else {
-    saveUsers();
-    console.log(`REFERRAL: user ${newUserId} referred by ${referrerId} — bonus skipped`);
-  }
+  saveUsers();
+  try { await bot.telegram.sendMessage(referrerId, `👋 Новий друг зареєструвався по твоєму лінку!\n🎁 Бонус +${REFERRAL_PHOTO_BONUS} фото отримаєш коли він зробить першу оплату.`); }
+  catch (e) { console.error("REFERRAL NOTIFY:", e.message); }
 }
 
 // ─── ВАЛІДАЦІЯ ФОТО ───────────────────────────────────────────────────────────
@@ -1842,7 +1837,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           if (videoInputMode === "text") {
             // ✍️ Текст → Відео
             const result = await falWithRetry(
-              "fal-ai/bytedance/seedance-2.0/fast/text-to-video",
+              "bytedance/seedance-2.0/fast/text-to-video",
               {
                 prompt,
                 duration: "auto",        // auto, 4-15
@@ -1858,7 +1853,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             const imageUrl = await uploadImageToFal(image);
             console.log("SEEDANCE INPUT:", { prompt: prompt?.slice(0, 50), imageUrl });
             const result = await falWithRetry(
-              "fal-ai/bytedance/seedance-2.0/fast/image-to-video",
+              "bytedance/seedance-2.0/fast/image-to-video",
               {
                 prompt: prompt || "cinematic motion, smooth animation, realistic movement",
                 image_url: imageUrl,
@@ -2181,6 +2176,24 @@ app.post("/payment",
 
       log("CREDITED", userId, `pack:${packKey} +${pack.count} amount:${data.amount}грн`);
       console.log(`✅ CREDITED: user ${userId}, pack ${packKey}, +${pack.count}`);
+
+      // ✅ Реферальний бонус після першої оплати
+      if (user.referredBy && !user.refPaid) {
+        const referrer = getUser(user.referredBy);
+        if (referrer) {
+          user.refPaid       = true;
+          referrer.balance   = (referrer.balance || 0) + REFERRAL_PHOTO_BONUS;
+          referrer.referralEarned = (referrer.referralEarned || 0) + REFERRAL_PHOTO_BONUS;
+          saveUsersSync();
+          try {
+            await bot.telegram.sendMessage(
+              buyer.referredBy,
+              `🎉 Твій друг зробив першу оплату!\n+${REFERRAL_PHOTO_BONUS} фото нараховано 🖼\nБаланс фото: ${referrer.balance}`
+            );
+          } catch (e) { console.error("REFERRAL BONUS NOTIFY:", e.message); }
+          log("REFERRAL_BONUS", buyer.referredBy, `from user:${userId} +${REFERRAL_PHOTO_BONUS} фото`);
+        }
+      }
 
       const emoji        = pack.type === "video" ? (pack.model === "kling" ? "🎥" : "🎬") : "🖼";
       const balanceNow   = pack.type === "video" ? user.videoBalance : user.balance;

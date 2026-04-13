@@ -757,8 +757,9 @@ function getBotStats() {
 const mainMenu  = () => Markup.keyboard([
   ["🖼 Фото", "🎬 Відео"],
   ["📊 Баланс", "💰 Ціни"],
-  ["💡 Ідея для промтів", "ℹ️ Інформація"],
-  ["❓ Допомога", "🆘 Підтримка"]
+  ["👫 Запросити друга", "💡 Ідея для промтів"],
+  ["ℹ️ Інформація", "❓ Допомога"],
+  ["🆘 Підтримка"]
 ]).resize();
 const photoMenu = () => Markup.keyboard([
   ["🖼 Редагувати фото", "✨ Створити фото"],
@@ -1337,6 +1338,26 @@ bot.hears("ℹ️ Інформація",     (ctx) => { touchUser(ctx); return c
 bot.hears("❓ Допомога",       (ctx) => { touchUser(ctx); return ctx.reply(content.helpText,    mainMenu()); });
 bot.hears("🆘 Підтримка",      (ctx) => { touchUser(ctx); return ctx.reply(content.supportText, mainMenu()); });
 bot.hears("💰 Ціни",           (ctx) => { touchUser(ctx); return ctx.reply(content.pricesText || "💰 Ціни тимчасово недоступні", mainMenu()); });
+bot.hears("👫 Запросити друга", async (ctx) => {
+  touchUser(ctx);
+  const userId  = ctx.from.id;
+  const user    = getUser(userId);
+  const botName = ctx.botInfo?.username || "promtibotai";
+  const refLink = `https://t.me/${botName}?start=ref_${userId}`;
+  const earned  = user.referralEarned || 0;
+  const count   = user.referralCount  || 0;
+  return ctx.reply(
+    `👫 Реферальна програма\n\n` +
+    `Запроси друга — отримай бонус!\n` +
+    `🎁 За кожного друга який оплатить: +1 фото\n\n` +
+    `📊 Твоя статистика:\n` +
+    `  Запрошено друзів: ${count}\n` +
+    `  Зароблено: +${earned} фото\n\n` +
+    `🔗 Твоє посилання:\n${refLink}\n\n` +
+    `💡 Поділись з друзями — вони отримають 1 безкоштовне фото при реєстрації!`,
+    mainMenu()
+  );
+});
 bot.hears("💡 Ідея для промтів",(ctx) => { touchUser(ctx); return ctx.reply(content.ideaText,   mainMenu()); });
 
 // ─── БАЛАНС ───────────────────────────────────────────────────────────────────

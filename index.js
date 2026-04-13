@@ -1853,14 +1853,11 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           const videoInputMode = ctx.session.videoInputMode || "image";
           if (videoInputMode === "text") {
             // ✍️ Текст → Відео
+            // Мінімальний запит для text-to-video
             const result = await falWithRetry(
               "bytedance/seedance-2.0/fast/text-to-video",
               {
                 prompt,
-                duration: "auto",        // auto, 4-15
-                aspect_ratio: "auto",    // auto інферить з промту
-                resolution: "720p",      // 480p або 720p
-                generate_audio: false,
               },
               cfg.seedanceTimeoutMs
             );
@@ -1869,15 +1866,12 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             // 📸 Фото → Відео — завантажуємо фото на FAL для отримання публічного URL
             const imageUrl = await uploadImageToFal(image);
             console.log("SEEDANCE INPUT:", { prompt: prompt?.slice(0, 50), imageUrl });
+            // Мінімальний запит згідно docs — тільки обов'язкові поля
             const result = await falWithRetry(
               "bytedance/seedance-2.0/fast/image-to-video",
               {
-                prompt: prompt || "cinematic motion, smooth animation, realistic movement",
+                prompt: prompt || "cinematic motion, smooth animation",
                 image_url: imageUrl,
-                duration: "5",
-                aspect_ratio: "9:16",
-                resolution: "720p",
-                generate_audio: false,
               },
               cfg.seedanceTimeoutMs
             );

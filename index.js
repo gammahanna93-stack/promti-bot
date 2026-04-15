@@ -1885,6 +1885,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
               "bytedance/seedance-2.0/fast/text-to-video",
               {
                 prompt,
+                generate_audio: false, // ✅ вимикаємо аудіо
               },
               cfg.seedanceTimeoutMs
             );
@@ -1902,6 +1903,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
               {
                 prompt: prompt || "cinematic motion, smooth animation",
                 image_url: imageUrl,
+                generate_audio: false, // ✅ вимикаємо аудіо — воно блокується content policy
               },
               cfg.seedanceTimeoutMs
             );

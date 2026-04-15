@@ -5,7 +5,7 @@
 
   "photoTimeoutMs": 120000,
   "seedanceTimeoutMs": 300000,
-  "klingTimeoutMs": 360000,
+  "klingTimeoutMs": 480000,
 
   "seedanceDurationSec": 5,
   "klingDurationSec": 5,

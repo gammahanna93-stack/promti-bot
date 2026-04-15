@@ -75,9 +75,31 @@ for (const [src, dst] of [
   [path.join(__dirname, "content.json"),  CONTENT_PATH],
   [path.join(__dirname, "settings.json"), SETTINGS_PATH],
 ]) {
-  if (!fs.existsSync(dst) && fs.existsSync(src)) {
-    fs.copyFileSync(src, dst);
-    console.log(`📋 Copied ${path.basename(src)} to Volume`);
+  if (fs.existsSync(src)) {
+    // ✅ Завжди оновлюємо settings/prompts/content з GitHub при деплої
+    // Але не перезаписуємо якщо адмін змінював через бот (перевіряємо по розміру)
+    const srcStat = fs.statSync(src);
+    const dstExists = fs.existsSync(dst);
+    if (!dstExists) {
+      fs.copyFileSync(src, dst);
+      console.log(`📋 Copied ${path.basename(src)} to Volume`);
+    } else if (path.basename(src) === "settings.json") {
+      // settings.json — завжди беремо з GitHub (там актуальні налаштування)
+      const srcContent = fs.readFileSync(src, "utf8");
+      const dstContent = fs.readFileSync(dst, "utf8");
+      try {
+        const srcJson = JSON.parse(srcContent);
+        JSON.parse(dstContent); // перевіряємо чи dst валідний
+        // Зливаємо: Volume має пріоритет для admin-змін, GitHub для нових полів
+        const merged = { ...srcJson, ...JSON.parse(dstContent) };
+        fs.writeFileSync(dst, JSON.stringify(merged, null, 2));
+        console.log(`🔄 Merged settings.json`);
+      } catch (e) {
+        // dst пошкоджений — перезаписуємо з GitHub
+        fs.copyFileSync(src, dst);
+        console.log(`🔧 Fixed corrupted settings.json from GitHub`);
+      }
+    }
   }
 }
 
@@ -1876,15 +1898,10 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             }
             console.log("SEEDANCE FINAL INPUT:", { prompt, image_url: imageUrl });
             const result = await falWithRetry(
-              "bytedance/seedance-2.0/image-to-video", // non-fast версія — менш суворий content policy
+              "bytedance/seedance-2.0/fast/image-to-video",
               {
                 prompt: prompt || "cinematic motion, smooth animation",
                 image_url: imageUrl,
-                duration: "auto",
-                aspect_ratio: "auto",
-                resolution: "720p",
-                generate_audio: false,
-                end_user_id: String(userId), // ✅ передаємо userId для верифікації
               },
               cfg.seedanceTimeoutMs
             );

@@ -109,8 +109,8 @@ const DEFAULT_SETTINGS = {
   videoRateLimitMs:    60000,
   aiPromptRateLimitMs: 30000,
   photoTimeoutMs:      120000,
-  seedanceTimeoutMs:   180000,
-  klingTimeoutMs:      300000,
+  seedanceTimeoutMs:   300000,
+  klingTimeoutMs:      480000,
   seedanceDurationSec: 5,
   klingDurationSec:    5,
   seedanceAspectRatio: "9:16",
@@ -273,7 +273,7 @@ function processQueue() {
     if (job.notifiedPosition !== idx + 1) {
       job.notifiedPosition = idx + 1;
       if (job.ctx) {
-        job.ctx.reply(`⏳ Ти в черзі: #${idx + 1}\nЗараз обробляється фото...\nОрієнтовно ~1 хв ⌛`).catch(() => {});
+        job.ctx.reply(`⏳ Ти в черзі: #${idx + 1}\nЗараз обробляється фото...\nОрієнтовно 45 сек — 1 хв ⌛`).catch(() => {});
       }
     }
   });
@@ -282,7 +282,7 @@ function processQueue() {
     if (job.notifiedPosition !== idx + 1) {
       job.notifiedPosition = idx + 1;
       if (job.ctx) {
-        job.ctx.reply(`⏳ Ти в черзі: #${idx + 1}\nЗараз генерується відео...\nОрієнтовно ~3 хв ⌛`).catch(() => {});
+        job.ctx.reply(`⏳ Ти в черзі: #${idx + 1}\nЗараз генерується відео...\nОрієнтовно 1-8 хв ⌛`).catch(() => {});
       }
     }
   });
@@ -787,8 +787,8 @@ const mainMenu  = () => Markup.keyboard([
 const photoMenu = () => Markup.keyboard([
   ["🖼 Редагувати фото", "✨ Створити фото"],
   ["🤖 AI промт для фото"],
-  ["💳 Купити фото", "📊 Баланс фото"],
-  ["↩️ Назад"]
+  ["💳 Купити фото", "💰 Ціни фото"],
+  ["📊 Баланс фото", "↩️ Назад"]
 ]).resize();
 const videoMenu     = () => Markup.keyboard([
   ["🎬 Seedance", "🎥 Kling"],
@@ -799,13 +799,13 @@ const videoMenu     = () => Markup.keyboard([
 const seedanceMenu  = () => Markup.keyboard([
   ["⚡ Авто анімація", "🎬 Анімація + промт"],
   ["🎥 Відео з тексту"],
-  ["💳 Купити Seedance"],
+  ["💳 Купити Seedance", "💰 Ціни Seedance"],
   ["↩️ Назад до відео"]
 ]).resize();
 const klingMenu     = () => Markup.keyboard([
   ["⚡ Авто анімація", "🎬 Анімація + промт"],
   ["🎥 Відео з тексту"],
-  ["💳 Купити Kling"],
+  ["💳 Купити Kling", "💰 Ціни Kling"],
   ["↩️ Назад до відео"]
 ]).resize();
 const buyPhotoMenu    = () => Markup.keyboard([
@@ -865,25 +865,38 @@ bot.command("admin", (ctx) => {
   resetState(ctx);
   return ctx.reply(
     "👑 Адмін панель\n\n" +
-    "📊 Кнопки меню:\n" +
-    "📊 Статус бота — статистика, черга, ключі\n" +
-    "👥 Користувачі — останні 15 юзерів\n" +
+
+    "📊 КНОПКИ МЕНЮ:\n" +
+    "📊 Статус бота — черга, воркери, ключі API, сегменти юзерів, виручка\n" +
+    "👤 Мій ID — показує твій Telegram ID\n" +
+    "👥 Користувачі — останні 15 юзерів з балансом\n" +
     "💳 Останні оплати — останні 15 транзакцій\n" +
-    
-    "✏️ Змінити текст — редагувати тексти бота\n" +
-    "⚙️ Налаштування — ліміти, таймаути\n" +
-    "📦 Пакети — переглянути всі пакети\n\n" +
-    "⌨️ Команди:\n" +
-    "/setprice photo_pack10 120 — змінити ціну\n" +
-    "/addpackage kling_pack15 video 15 1199 15 Kling — додати пакет\n" +
-    "/setlink support_link https://t.me/... — змінити посилання\n" +
-    "/packages — всі пакети і ціни\n" +
-    "/addphoto ID 10 — додати фото юзеру\n" +
-    "/addvideo ID 5 — додати відео юзеру\n" +
-    "/userinfo ID — інфо про юзера\n" +
-    "/ban ID — заблокувати\n" +
-    "/unban ID — розблокувати\n" +
-    "/broadcast Текст — розсилка всім",
+    "📈 Аналітика — конверсія, топ пакети, виручка 7 днів\n" +
+    "📦 Пакети — всі пакети з цінами\n" +
+    "✏️ Змінити текст — редагувати тексти бота (welcome, info, ціни...)\n" +
+    "📝 Поточні тексти — переглянути всі тексти\n" +
+    "⚙️ Налаштування — ліміти черги, таймаути, денні ліміти\n" +
+    "📊 Баланс — поточний баланс адміна\n\n" +
+
+    "💰 ЦІНИ ТА ПАКЕТИ:\n" +
+    "/packages — переглянути всі пакети і ціни\n" +
+    "/setprice photo_pack10 120 — змінити ціну пакету\n" +
+    "  Ключі фото: photo_pack10, photo_pack20, photo_pack30, photo_pack50\n" +
+    "  Ключі Seedance: seedance_pack3, seedance_pack5, seedance_pack10\n" +
+    "  Ключі Kling: kling_pack3, kling_pack5, kling_pack10\n" +
+    "/addpackage kling_pack15 video 15 1199 15 Kling — додати новий пакет\n" +
+    "/setlink support_link https://t.me/... — змінити посилання підтримки\n\n" +
+
+    "👥 КЕРУВАННЯ ЮЗЕРАМИ:\n" +
+    "/userinfo ID — повна інфо про юзера (баланс, генерації, витрати)\n" +
+    "/addphoto ID 10 — нарахувати фото юзеру вручну\n" +
+    "/addvideo ID 5 — нарахувати відео юзеру вручну\n" +
+    "/ban ID — заблокувати юзера\n" +
+    "/unban ID — розблокувати юзера\n\n" +
+
+    "📢 РОЗСИЛКА:\n" +
+    "/broadcast Текст — надіслати всім юзерам (пачками по 25, без банів)\n" +
+    "/analytics — детальна аналітика (також є кнопка 📈)",
     adminMenu()
   );
 });
@@ -1361,6 +1374,52 @@ bot.hears("ℹ️ Інформація",     (ctx) => { touchUser(ctx); return c
 bot.hears("❓ Допомога",       (ctx) => { touchUser(ctx); return ctx.reply(content.helpText,    mainMenu()); });
 bot.hears("🆘 Підтримка",      (ctx) => { touchUser(ctx); return ctx.reply(content.supportText, mainMenu()); });
 bot.hears("💰 Ціни",           (ctx) => { touchUser(ctx); return ctx.reply(content.pricesText || "💰 Ціни тимчасово недоступні", mainMenu()); });
+
+// ✅ Ціни фото — з packages.json (завжди актуальні)
+bot.hears("💰 Ціни фото", (ctx) => {
+  touchUser(ctx);
+  const pkgs = dynamicPackages();
+  const lines = ["💰 Ціни на фото\n"];
+  for (const [key, pkg] of Object.entries(pkgs)) {
+    if (pkg.type === "photo") {
+      lines.push(`${key === "photo_pack50" ? "🔥" : "📦"} ${pkg.count} фото — ${pkg.amount} грн`);
+    }
+  }
+  lines.push("\n🎁 1 фото безкоштовно при реєстрації!");
+  lines.push("👫 +1 фото за кожного друга який оплатить");
+  return ctx.reply(lines.join("\n"), photoMenu());
+});
+
+// ✅ Ціни Seedance — з packages.json
+bot.hears("💰 Ціни Seedance", (ctx) => {
+  touchUser(ctx);
+  const pkgs = dynamicPackages();
+  const lines = ["💰 Ціни Seedance\n"];
+  for (const [key, pkg] of Object.entries(pkgs)) {
+    if (pkg.type === "video" && pkg.model === "seedance") {
+      lines.push(`🎬 ${pkg.count} відео — ${pkg.amount} грн`);
+    }
+  }
+  lines.push("\n🔇 Відео без звуку (додай музику в Instagram/TikTok)");
+  lines.push("⛔️ Не підтримує фото реальних людей");
+  lines.push("👉 Для людей — використовуй Kling");
+  return ctx.reply(lines.join("\n"), seedanceMenu());
+});
+
+// ✅ Ціни Kling — з packages.json
+bot.hears("💰 Ціни Kling", (ctx) => {
+  touchUser(ctx);
+  const pkgs = dynamicPackages();
+  const lines = ["💰 Ціни Kling\n"];
+  for (const [key, pkg] of Object.entries(pkgs)) {
+    if (pkg.type === "video" && pkg.model === "kling") {
+      lines.push(`🎥 ${pkg.count} відео — ${pkg.amount} грн`);
+    }
+  }
+  lines.push("\n✅ Підходить для анімації людей");
+  lines.push("🎬 Кінематографічна якість");
+  return ctx.reply(lines.join("\n"), klingMenu());
+});
 bot.hears("👫 Запросити друга", async (ctx) => {
   touchUser(ctx);
   const userId  = ctx.from.id;
@@ -1886,7 +1945,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       const videoInputMode = ctx.session.videoInputMode || "image";
       const stopProgress = startVideoProgress(ctx);
       const modeLabel = videoInputMode === "text" ? "з тексту" : "з фото";
-      await ctx.reply(`⏳ Генерую ${videoStyle === "seedance" ? "Seedance" : "Kling"} відео ${modeLabel}...\nЦе займе 1-3 хв ⌛`);
+      await ctx.reply(`⏳ Генерую ${videoStyle === "seedance" ? "Seedance" : "Kling"} відео ${modeLabel}...\nЦе займе 1-8 хв ⌛`);
 
       const image = videoInputMode === "text" ? null : await getImage(ctx, photo.file_id);
 
@@ -2020,7 +2079,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
 
     if (photoMode === "create") {
       // ✨ Створення фото з тексту — fal-ai/nano-banana-2 (text-to-image)
-      await ctx.reply("⏳ Створюю фото з нуля...");
+      await ctx.reply("⏳ Створюю фото з нуля... (~45 сек)");
       const result = await falWithRetry(
         "fal-ai/nano-banana-2",
         {
@@ -2036,7 +2095,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       url = result?.data?.images?.[0]?.url;
     } else {
       // 🖼 Редагування існуючого фото — fal-ai/nano-banana-2/edit
-      await ctx.reply("⏳ Редагую фото...");
+      await ctx.reply("⏳ Редагую фото... (~45 сек)");
       const image  = await getImage(ctx, photo.file_id);
       const result = await falWithRetry(
         "fal-ai/nano-banana-2/edit",

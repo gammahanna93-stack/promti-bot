@@ -1487,9 +1487,17 @@ bot.hears("🎬 Seedance", (ctx) => {
   ctx.session.videoInputMode = null;
   return ctx.reply(
     "🎬 Seedance 2.0\n\n" +
-    "📸 Фото → Відео — надішли фото + промт, оживлю!\n" +
-    "✍️ Текст → Відео — напиши промт, створю відео з нуля\n\n" +
-    "Приклад: \"hair gently flowing in wind\"\n\n" +
+    "Спеціалізується на анімації об'єктів, природи, мультиплікації та фантастичних сцен.\n\n" +
+    "⚡ Авто анімація — надішли фото, оживлю автоматично\n" +
+    "🎬 Анімація + промт — надішли фото зі своїм описом руху\n" +
+    "🎥 Відео з тексту — створю відео з нуля по опису\n\n" +
+    "✅ Підходить для:\n" +
+    "• Ляльки, іграшки, фігурки\n" +
+    "• Природа, пейзажі, тварини\n" +
+    "• Арт, мультиплікація, фентезі\n" +
+    "• Продукти, предмети, логотипи\n\n" +
+    "⛔️ Не підтримує фото реальних людей\n" +
+    "👉 Для анімації людей — використовуй 🎥 Kling\n\n" +
     "💡 Ідеї: t.me/promteamai",
     seedanceMenu()
   );
@@ -1506,8 +1514,11 @@ bot.hears("⚡ Авто анімація", (ctx) => {
   ctx.session.customPrompt = null;
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
   const defaultPrompt = prompts[style] || "cinematic motion, smooth animation";
+  const isSeeedance = style === "seedance";
   return ctx.reply(
-    `⚡ Авто анімація\n\nНадішли фото — оживлю з дефолтним промтом:\n📝 "${defaultPrompt}"\n\n✍️ Хочеш свій промт? Напиши його перед фото.`,
+    `⚡ Авто анімація\n\nНадішли фото — оживлю з дефолтним промтом:\n📝 "${defaultPrompt}"\n\n` +
+    (isSeeedance ? "⛔️ Лише для об'єктів та природи (не людей)\n👉 Для людей — використовуй Kling\n\n" : "") +
+    `✍️ Хочеш свій промт? Напиши його перед фото.`,
     menu
   );
 });
@@ -1522,8 +1533,13 @@ bot.hears("🎬 Анімація + промт", (ctx) => {
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
+  const isSeedanceStyle = style === "seedance";
   return ctx.reply(
-    `🎬 Анімація + промт\n\nНапиши промт, потім надішли фото.\n\nПриклад: "eyes slowly opening, cinematic"\n\n💡 t.me/promteamai`,
+    `🎬 Анімація + промт\n\nНапиши промт, потім надішли фото.\n\n` +
+    (isSeedanceStyle
+      ? `Приклад: "gentle swaying in wind, soft light"\n\n⛔️ Лише для об'єктів та природи — не людей\n👉 Для анімації людей — Kling\n\n`
+      : `Приклад: "cinematic close-up, eyes slowly opening"\n\n`) +
+    `💡 t.me/promteamai`,
     menu
   );
 });

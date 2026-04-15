@@ -1876,13 +1876,15 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             }
             console.log("SEEDANCE FINAL INPUT:", { prompt, image_url: imageUrl });
             const result = await falWithRetry(
-              "bytedance/seedance-2.0/fast/image-to-video",
+              "bytedance/seedance-2.0/image-to-video", // non-fast версія — менш суворий content policy
               {
                 prompt: prompt || "cinematic motion, smooth animation",
                 image_url: imageUrl,
                 duration: "auto",
                 aspect_ratio: "auto",
                 resolution: "720p",
+                generate_audio: false,
+                end_user_id: String(userId), // ✅ передаємо userId для верифікації
               },
               cfg.seedanceTimeoutMs
             );

@@ -1378,7 +1378,7 @@ bot.hears("💰 Ціни",           (ctx) => { touchUser(ctx); return ctx.reply
 // ✅ Ціни фото — з packages.json (завжди актуальні)
 bot.hears("💰 Ціни фото", (ctx) => {
   touchUser(ctx);
-  const pkgs = dynamicPackages();
+  const pkgs = getPackages();
   const lines = ["💰 Ціни на фото\n"];
   for (const [key, pkg] of Object.entries(pkgs)) {
     if (pkg.type === "photo") {
@@ -1393,7 +1393,7 @@ bot.hears("💰 Ціни фото", (ctx) => {
 // ✅ Ціни Seedance — з packages.json
 bot.hears("💰 Ціни Seedance", (ctx) => {
   touchUser(ctx);
-  const pkgs = dynamicPackages();
+  const pkgs = getPackages();
   const lines = ["💰 Ціни Seedance\n"];
   for (const [key, pkg] of Object.entries(pkgs)) {
     if (pkg.type === "video" && pkg.model === "seedance") {
@@ -1409,7 +1409,7 @@ bot.hears("💰 Ціни Seedance", (ctx) => {
 // ✅ Ціни Kling — з packages.json
 bot.hears("💰 Ціни Kling", (ctx) => {
   touchUser(ctx);
-  const pkgs = dynamicPackages();
+  const pkgs = getPackages();
   const lines = ["💰 Ціни Kling\n"];
   for (const [key, pkg] of Object.entries(pkgs)) {
     if (pkg.type === "video" && pkg.model === "kling") {

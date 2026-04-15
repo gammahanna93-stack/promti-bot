@@ -541,6 +541,11 @@ async function falWithRetry(model, input, timeoutMs, maxRetries = 3) {
     } catch (e) {
       lastError = e;
       if (e.message === "FAL_TIMEOUT") throw e;
+      // ✅ Детальний лог для діагностики
+      console.error(`FAL ERROR attempt ${attempt}/${maxRetries}:`);
+      console.error(`  message: ${e.message}`);
+      console.error(`  status: ${e.status || e.statusCode || "unknown"}`);
+      console.error(`  body: ${JSON.stringify(e.body || e.response?.data || e.detail || {}, null, 2)}`);
       const retryable = e?.status >= 500 || String(e?.message).includes("503") || String(e?.message).includes("500");
       if (!retryable || attempt === maxRetries) throw e;
       console.warn(`FAL RETRY ${attempt}/${maxRetries}:`, e.message);
@@ -1865,7 +1870,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           } else {
             // 📸 Фото → Відео — завантажуємо фото на FAL для отримання публічного URL
             const imageUrl = await uploadImageToFal(image);
-            console.log("SEEDANCE INPUT:", { prompt: prompt?.slice(0, 50), imageUrl });
+            console.log("SEEDANCE INPUT:", { prompt: prompt?.slice(0, 50), image_url: imageUrl });
             if (!imageUrl || imageUrl.startsWith("data:")) {
               throw new Error("imageUrl invalid or fallback base64 — upload failed");
             }

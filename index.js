@@ -21,17 +21,17 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // ─── ПЕРСИСТЕНТНА СЕСІЯ ───────────────────────────────────────────────────────
 const localSession = new LocalSession({
-  database: path.join(DATA_DIR, "sessions.json"), // ✅ у Volume — не зникає при деплої
+  database: path.join(DATA_DIR, "sessions.json"),
   property: "session",
   storage: LocalSession.storageFileAsync,
   format: { serialize: JSON.stringify, deserialize: JSON.parse },
-  getSessionKey: (ctx) => ctx.from ? String(ctx.from.id) : null, // ✅ простий і правильний ключ
+  getSessionKey: (ctx) => ctx.from ? String(ctx.from.id) : null,
 });
 bot.use(localSession.middleware());
 
 fal.config({ credentials: process.env.FAL_KEY });
 
-// ✅ Глобальний обробник помилок — бот не зависає при будь-якій помилці
+// ✅ Глобальний обробник помилок
 bot.use(async (ctx, next) => {
   try {
     await next();
@@ -52,22 +52,25 @@ const WAYFORPAY = {
   serviceUrl:      process.env.WAYFORPAY_SERVICE_URL || "",
 };
 
-const REFERRAL_PHOTO_BONUS = 1;
+const REFERRAL_PROMTI_BONUS = 5;
+
+// ─── ЦІНИ ПОСЛУГ ─────────────────────────────────────────────────────────────
+const PROMTI_PRICES = {
+  photo:    1,   // Редагувати / Створити фото
+  seedance: 10,  // Seedance відео
+  kling:    15,  // Kling відео
+};
 
 // ─── ШЛЯХИ ДО ФАЙЛІВ ─────────────────────────────────────────────────────────
-// DATA_DIR визначено вище перед LocalSession
-
 const USERS_PATH        = path.join(DATA_DIR, "users.json");
 const PAYMENTS_PATH     = path.join(DATA_DIR, "payments.json");
 const PAYMENT_LOCK_PATH = path.join(DATA_DIR, "payment.lock.json");
 const PACKAGES_PATH     = path.join(DATA_DIR, "packages.json");
 const GEN_LOG_PATH      = path.join(DATA_DIR, "generation_logs.jsonl");
 
-// ✅ Тексти/промти/налаштування теж у Volume — зміни адміна зберігаються між деплоями
-// При першому запуску — копіюємо з GitHub у Volume якщо ще немає
-const PROMPTS_PATH      = path.join(DATA_DIR, "prompts.json");
-const CONTENT_PATH      = path.join(DATA_DIR, "content.json");
-const SETTINGS_PATH     = path.join(DATA_DIR, "settings.json");
+const PROMPTS_PATH  = path.join(DATA_DIR, "prompts.json");
+const CONTENT_PATH  = path.join(DATA_DIR, "content.json");
+const SETTINGS_PATH = path.join(DATA_DIR, "settings.json");
 
 // Копіюємо дефолтні файли з репо у Volume якщо їх ще немає
 for (const [src, dst] of [
@@ -76,26 +79,20 @@ for (const [src, dst] of [
   [path.join(__dirname, "settings.json"), SETTINGS_PATH],
 ]) {
   if (fs.existsSync(src)) {
-    // ✅ Завжди оновлюємо settings/prompts/content з GitHub при деплої
-    // Але не перезаписуємо якщо адмін змінював через бот (перевіряємо по розміру)
-    const srcStat = fs.statSync(src);
     const dstExists = fs.existsSync(dst);
     if (!dstExists) {
       fs.copyFileSync(src, dst);
       console.log(`📋 Copied ${path.basename(src)} to Volume`);
     } else if (path.basename(src) === "settings.json") {
-      // settings.json — завжди беремо з GitHub (там актуальні налаштування)
       const srcContent = fs.readFileSync(src, "utf8");
       const dstContent = fs.readFileSync(dst, "utf8");
       try {
         const srcJson = JSON.parse(srcContent);
-        JSON.parse(dstContent); // перевіряємо чи dst валідний
-        // Зливаємо: Volume має пріоритет для admin-змін, GitHub для нових полів
+        JSON.parse(dstContent);
         const merged = { ...srcJson, ...JSON.parse(dstContent) };
         fs.writeFileSync(dst, JSON.stringify(merged, null, 2));
         console.log(`🔄 Merged settings.json`);
       } catch (e) {
-        // dst пошкоджений — перезаписуємо з GitHub
         fs.copyFileSync(src, dst);
         console.log(`🔧 Fixed corrupted settings.json from GitHub`);
       }
@@ -123,7 +120,6 @@ const DEFAULT_SETTINGS = {
   dailyAiPromptLimit:  10,
 };
 
-// ✅ Кешування settings — читаємо з диску не частіше 1 разу на 30 сек
 let _settingsCache = null;
 let _settingsCacheTime = 0;
 const SETTINGS_CACHE_MS = 30000;
@@ -165,7 +161,6 @@ function appendLog(entry) {
   catch (e) { console.error("LOG APPEND ERROR:", e.message); }
 }
 
-// ✅ Структуроване логування з userId, типом і часом
 function log(type, userId, details = "") {
   const ts = new Date().toISOString().slice(0, 19);
   console.log(`[${ts}] ${type} | user:${userId || "-"} | ${details}`);
@@ -183,13 +178,13 @@ const DEFAULT_PROMPTS = {
 };
 
 const DEFAULT_CONTENT = {
-  welcomeText:  "Привіт ✨\n\nОбери що хочеш зробити:\n🖼 Фото — генерація фото по стилях\n🎬 Відео — анімація фото у відео\n\n🎁 1 фото безкоштовно",
-  infoText:     "PROMTI AI Bot\n\n🖼 Фото:\n10/99грн · 20/179грн · 30/249грн · 50/399грн\n\n🎬 Seedance:\n3/199грн · 5/349грн · 10/599грн\n\n🎥 Kling:\n3/299грн · 5/499грн · 10/899грн",
-  helpText:     "Допомога:\n\n🖼 Фото:\n1. Натисни 🖼 Фото\n2. Обери стиль\n3. Надішли фото\n\n🎬 Відео:\n1. Натисни 🎬 Відео\n2. Обери модель\n3. Надішли фото для анімації",
+  welcomeText:  "Привіт ✨\n\nОбери що хочеш зробити:\n🖼 Фото — генерація фото по стилях\n🎬 Відео — анімація фото у відео\n\n🎁 1 ✨ Promti безкоштовно при реєстрації",
+  infoText:     "PROMTI AI Bot\n\n💎 Валюта: Promti ✨\n\n📦 Пакети:\n🌱 10 ✨ — 99 грн\n📦 30 ✨ — 249 грн\n🎯 60 ✨ — 449 грн\n🔥 150 ✨ — 999 грн\n\n💰 Ціни послуг:\n🖼 Фото — 1 ✨\n🎬 Seedance — 10 ✨\n🎥 Kling — 15 ✨",
+  helpText:     "Допомога:\n\n🖼 Фото (1 ✨):\n1. Натисни 🖼 Фото\n2. Обери режим\n3. Напиши промт і надішли фото\n\n🎬 Відео:\n1. Натисни 🎬 Відео\n2. Обери модель (Seedance 10 ✨ / Kling 15 ✨)\n3. Надішли фото для анімації",
   supportText:  "Напиши в підтримку: https://t.me/promteamai?direct",
-  ideaText:     "💡 Ідеї для промтів:\n\n🖼 Фото:\n• \"portrait in Renaissance style\"\n• \"cyberpunk neon portrait\"\n\n🎬 Відео:\n• \"hair gently flowing in wind\"\n• \"eyes slowly opening, cinematic\"",
+  ideaText:     "💡 Ідеї для промтів:\n\n🖼 Фото (1 ✨):\n• \"portrait in Renaissance style\"\n• \"cyberpunk neon portrait\"\n\n🎬 Відео:\n• \"hair gently flowing in wind\" (Seedance 10 ✨)\n• \"eyes slowly opening, cinematic\" (Kling 15 ✨)",
   support_link: "https://t.me/promteamai?direct",
-  pricesText:   "💰 PROMTI AI — Ціни\n\n🖼 Фото\n📦 10 фото — 99 грн\n📦 20 фото — 179 грн\n📦 30 фото — 249 грн\n🔥 50 фото — 399 грн (найкраща ціна!)\n\n🎬 Seedance (анімація фото)\n3 відео — 199 грн\n5 відео — 349 грн\n10 відео — 599 грн\n\n🎥 Kling (кінематограф)\n3 відео — 299 грн\n5 відео — 499 грн\n10 відео — 899 грн\n\n🎁 1 фото безкоштовно при реєстрації!\n👫 За кожного друга +1 фото\n\n💳 Обери пакет в меню Фото або Відео",
+  pricesText:   "💰 PROMTI AI — Ціни\n\n💎 Валюта: Promti ✨\n\n📦 Пакети:\n🌱 10 ✨ — 99 грн\n📦 30 ✨ — 249 грн\n🎯 60 ✨ — 449 грн\n🔥 150 ✨ — 999 грн\n\n💰 Ціни послуг:\n🖼 Фото — 1 ✨\n🎬 Seedance відео — 10 ✨\n🎥 Kling відео — 15 ✨\n\n🎁 1 ✨ безкоштовно при реєстрації!\n👫 +5 ✨ за кожного друга який оплатить",
 };
 
 let users    = loadJson(USERS_PATH,    {});
@@ -202,21 +197,14 @@ content = { ...DEFAULT_CONTENT, ...content };
 saveJson(PROMPTS_PATH, prompts);
 saveJson(CONTENT_PATH, content);
 
-// ─── ПАКЕТИ (базові + динамічні з файлу) ─────────────────────────────────────
+// ─── ПАКЕТИ ───────────────────────────────────────────────────────────────────
 const DEFAULT_PACKAGES = {
-  photo_pack10:    { key: "photo_pack10",    type: "photo", model: null,       title: "10 фото",           count: 10,  amount: 99,  priceText: "99 грн"  },
-  photo_pack20:    { key: "photo_pack20",    type: "photo", model: null,       title: "20 фото",           count: 20,  amount: 179, priceText: "179 грн" },
-  photo_pack30:    { key: "photo_pack30",    type: "photo", model: null,       title: "30 фото",           count: 30,  amount: 249, priceText: "249 грн" },
-  photo_pack50:    { key: "photo_pack50",    type: "photo", model: null,       title: "50 фото",           count: 50,  amount: 399, priceText: "399 грн" },
-  seedance_pack3:  { key: "seedance_pack3",  type: "video", model: "seedance", title: "3 Seedance відео",  count: 3,   amount: 199, priceText: "199 грн" },
-  seedance_pack5:  { key: "seedance_pack5",  type: "video", model: "seedance", title: "5 Seedance відео",  count: 5,   amount: 349, priceText: "349 грн" },
-  seedance_pack10: { key: "seedance_pack10", type: "video", model: "seedance", title: "10 Seedance відео", count: 10,  amount: 599, priceText: "599 грн" },
-  kling_pack3:     { key: "kling_pack3",     type: "video", model: "kling",    title: "3 Kling відео",     count: 3,   amount: 299, priceText: "299 грн" },
-  kling_pack5:     { key: "kling_pack5",     type: "video", model: "kling",    title: "5 Kling відео",     count: 5,   amount: 499, priceText: "499 грн" },
-  kling_pack10:    { key: "kling_pack10",    type: "video", model: "kling",    title: "10 Kling відео",    count: 10,  amount: 899, priceText: "899 грн" },
+  promti_pack10:  { key: "promti_pack10",  type: "promti", title: "10 Promti ✨",  promti: 10,  amount: 99,  priceText: "99 грн"  },
+  promti_pack30:  { key: "promti_pack30",  type: "promti", title: "30 Promti ✨",  promti: 30,  amount: 249, priceText: "249 грн" },
+  promti_pack60:  { key: "promti_pack60",  type: "promti", title: "60 Promti ✨",  promti: 60,  amount: 449, priceText: "449 грн" },
+  promti_pack150: { key: "promti_pack150", type: "promti", title: "150 Promti ✨", promti: 150, amount: 999, priceText: "999 грн" },
 };
 
-// Завантажуємо динамічні пакети (адмін може змінювати через бот)
 function loadPackages() {
   const saved = loadJson(PACKAGES_PATH, null);
   if (saved && Object.keys(saved).length > 0) return saved;
@@ -233,23 +221,21 @@ let creditedSet = new Set(loadJson(PAYMENT_LOCK_PATH, []));
 function markAsCredited(ref) { creditedSet.add(ref); saveJson(PAYMENT_LOCK_PATH, [...creditedSet]); }
 function isCredited(ref)     { return creditedSet.has(ref); }
 
-// ─── ЧЕРГА ГЕНЕРАЦІЙ (окремі черги для фото і відео) ─────────────────────────
+// ─── ЧЕРГА ГЕНЕРАЦІЙ ──────────────────────────────────────────────────────────
 const photoQueue = [];
 const videoQueue = [];
 let activePhotoWorkers = 0;
 let activeVideoWorkers = 0;
 
-// Залишаємо для сумісності зі статистикою
 const generationQueue = { get length() { return photoQueue.length + videoQueue.length; } };
-let activeWorkers = 0; // загальна для статистики
+let activeWorkers = 0;
 
-const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 хвилин hard timeout
+const JOB_TIMEOUT_MS = 10 * 60 * 1000;
 
 function enqueueGeneration(userId, taskFn, type = "photo", ctx = null) {
   return new Promise((resolve, reject) => {
     const queue = type === "video" ? videoQueue : photoQueue;
 
-    // ✅ Hard timeout — якщо FAL завис більше 10 хв — вбиваємо job
     const wrappedTask = () => {
       const timeoutPromise = new Promise((_, rej) =>
         setTimeout(() => rej(new Error("JOB_HARD_TIMEOUT")), JOB_TIMEOUT_MS)
@@ -268,7 +254,6 @@ function processQueue() {
   const maxPhoto = 6;
   const maxVideo = 4;
 
-  // ✅ Повідомляємо юзерів про позицію в черзі
   photoQueue.forEach((job, idx) => {
     if (job.notifiedPosition !== idx + 1) {
       job.notifiedPosition = idx + 1;
@@ -287,7 +272,6 @@ function processQueue() {
     }
   });
 
-  // ✅ Фото: макс 6 + загальний ліміт
   while (activePhotoWorkers < maxPhoto && activeWorkers < maxTotal && photoQueue.length > 0) {
     const job = photoQueue.shift();
     activePhotoWorkers++;
@@ -300,7 +284,6 @@ function processQueue() {
       .finally(() => { activePhotoWorkers--; activeWorkers--; processQueue(); });
   }
 
-  // ✅ Відео: макс 4 + загальний ліміт
   while (activeVideoWorkers < maxVideo && activeWorkers < maxTotal && videoQueue.length > 0) {
     const job = videoQueue.shift();
     activeVideoWorkers++;
@@ -383,16 +366,16 @@ function incrementDailyVideo(user, model) {
   else user.dailySeedanceCount = (user.dailySeedanceCount || 0) + 1;
 }
 
-// ─── ПОМИЛКИ → АДМІНИ (з debounce щоб не спамити) ───────────────────────────
+// ─── ПОМИЛКИ → АДМІНИ ────────────────────────────────────────────────────────
 const adminErrorLog = {};
-const ADMIN_ERROR_DEBOUNCE_MS = 60000; // одне повідомлення не частіше 1 рази/хв
+const ADMIN_ERROR_DEBOUNCE_MS = 60000;
 
 async function notifyAdminsError(message) {
   const now = Date.now();
   const key = message.slice(0, 100);
   if (adminErrorLog[key] && now - adminErrorLog[key] < ADMIN_ERROR_DEBOUNCE_MS) {
     console.log("ADMIN NOTIFY DEBOUNCED:", key);
-    return; // ✅ не спамимо адмінів
+    return;
   }
   adminErrorLog[key] = now;
   for (const adminId of ADMINS) {
@@ -422,12 +405,12 @@ function resetState(ctx) {
 function getUser(id) {
   if (!users[id]) {
     users[id] = {
-      id, freeUsed: false,
-      balance: 0, videoBalance: 0,
+      id,
+      promti: 1, // 🎁 1 ✨ безкоштовно при реєстрації
+      purchasedPromti: 0,
       generations: 0, seedanceGenerations: 0, klingGenerations: 0,
-      purchasedPhotos: 0, purchasedVideos: 0,
       totalSpent: 0, username: "", firstName: "",
-      referredBy: null, referralCount: 0, banned: false,
+      referredBy: null, referralCount: 0, referralEarned: 0, banned: false,
       dailyVideoDate: null, dailySeedanceCount: 0, dailyKlingCount: 0,
       dailyAiDate: null, dailyAiCount: 0,
       lastPaymentRequest: null, pendingOrderReference: null, lastPaidAt: null,
@@ -435,6 +418,7 @@ function getUser(id) {
     };
     saveJson(USERS_PATH, users);
   }
+  // Міграція старих полів якщо є
   if (users[id].videoGenerations !== undefined && users[id].seedanceGenerations === undefined) {
     users[id].seedanceGenerations = users[id].videoGenerations || 0;
     users[id].klingGenerations    = 0;
@@ -447,7 +431,6 @@ function touchUser(ctx) {
   const user = getUser(ctx.from.id);
   const newUsername  = ctx.from.username   || "";
   const newFirstName = ctx.from.first_name || "";
-  // ✅ Зберігаємо тільки якщо щось змінилось
   if (user.username !== newUsername || user.firstName !== newFirstName) {
     user.username  = newUsername;
     user.firstName = newFirstName;
@@ -456,17 +439,15 @@ function touchUser(ctx) {
   return user;
 }
 
-// ✅ Debounce saveUsers — захист від race condition при одночасних запитах
 let _saveUsersTimer = null;
 function saveUsers() {
   if (_saveUsersTimer) clearTimeout(_saveUsersTimer);
   _saveUsersTimer = setTimeout(() => {
     saveJson(USERS_PATH, users);
     _saveUsersTimer = null;
-  }, 300); // зберігаємо не частіше ніж раз на 300мс
+  }, 300);
 }
 
-// Синхронне збереження для критичних операцій (оплата, баланс)
 function saveUsersSync() { saveJson(USERS_PATH, users); }
 
 function savePrompts()  { saveJson(PROMPTS_PATH,  prompts);  }
@@ -483,12 +464,11 @@ async function handleReferral(ctx, referrerId) {
   const newUser  = getUser(newUserId);
   if (newUser.referredBy) return;
   if (!referrer.totalSpent && (referrer.referralCount || 0) >= 20) { console.warn(`REFERRAL ABUSE: user ${referrerId}`); return; }
-  // ✅ Тільки зберігаємо refBy — бонус буде після першої оплати
   newUser.referredBy     = referrerId;
   newUser.refPaid        = false;
   referrer.referralCount = (referrer.referralCount || 0) + 1;
   saveUsers();
-  try { await bot.telegram.sendMessage(referrerId, `👋 Новий друг зареєструвався по твоєму лінку!\n🎁 Бонус +${REFERRAL_PHOTO_BONUS} фото отримаєш коли він зробить першу оплату.`); }
+  try { await bot.telegram.sendMessage(referrerId, `👋 Новий друг зареєструвався по твоєму лінку!\n🎁 Бонус +${REFERRAL_PROMTI_BONUS} ✨ Promti отримаєш коли він зробить першу оплату.`); }
   catch (e) { console.error("REFERRAL NOTIFY:", e.message); }
 }
 
@@ -531,13 +511,11 @@ async function tgSendWithRetry(fn, maxRetries = 3) {
   throw lastErr;
 }
 
-// ─── FAL UPLOAD IMAGE → отримати публічний URL ───────────────────────────────
+// ─── FAL UPLOAD IMAGE ─────────────────────────────────────────────────────────
 async function uploadImageToFal(base64DataUrl) {
   try {
     const base64Data = base64DataUrl.replace(/^data:image\/[^;]+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
-
-    // ✅ Використовуємо Blob через глобальний Buffer — сумісно з Node 18+
     const blob = new Blob([buffer], { type: "image/jpeg" });
     const url = await fal.storage.upload(blob, {
       filename: `img_${Date.now()}.jpg`,
@@ -547,7 +525,6 @@ async function uploadImageToFal(base64DataUrl) {
     return url;
   } catch (e) {
     console.error("FAL UPLOAD ERROR:", e.message);
-    // ✅ Fallback — data URI як base64 (Seedance 2.0 підтримує)
     return base64DataUrl;
   }
 }
@@ -563,7 +540,6 @@ async function falWithRetry(model, input, timeoutMs, maxRetries = 3) {
     } catch (e) {
       lastError = e;
       if (e.message === "FAL_TIMEOUT") throw e;
-      // ✅ Детальний лог для діагностики
       console.error(`FAL ERROR attempt ${attempt}/${maxRetries}:`);
       console.error(`  message: ${e.message}`);
       console.error(`  status: ${e.status || e.statusCode || "unknown"}`);
@@ -583,7 +559,7 @@ function startVideoProgress(ctx) {
   return () => clearInterval(iv);
 }
 
-// ─── AI ПРОМТ (Claude Vision) — використовуємо claude-haiku для економії ──────
+// ─── AI ПРОМТ (Claude Vision) ─────────────────────────────────────────────────
 async function generateAiPrompt(imageBase64, mode) {
   const cfg = loadSettings();
   if (!cfg.aiPromptEnabled) return null;
@@ -606,7 +582,7 @@ Preserve face identity. Consider: lighting, style, mood.
 Output ONLY the prompt text, nothing else.`;
 
     const response = await anthropic.messages.create({
-      model:      "claude-haiku-4-5-20251001", // ✅ дешевша модель замість opus
+      model:      "claude-haiku-4-5-20251001",
       max_tokens: 60,
       system:     systemPrompt,
       messages: [{
@@ -640,9 +616,7 @@ function signWfpPurchase({ merchantAccount, merchantDomainName, orderReference, 
   return crypto.createHmac("md5", WAYFORPAY.secretKey).update(vals.join(";"), "utf8").digest("hex");
 }
 
-// ✅ ВИПРАВЛЕНИЙ підпис — правильний порядок полів згідно документації WayForPay
 function signWfpCallback(data) {
-  // ✅ Правильний порядок згідно документації WayForPay (8 полів)
   const vals = [
     data.merchantAccount   || "",
     data.orderReference    || "",
@@ -664,16 +638,10 @@ function buildWfpAcceptResponse(ref) {
 
 function normalizeWayForPayCallbackBody(body) {
   if (!body) return {};
-
-  // якщо рядок — парсимо напряму
   if (typeof body === "string") {
     try { return JSON.parse(body); } catch { return {}; }
   }
-
-  // вже нормальний обʼєкт з підписом
   if (body.merchantSignature) return body;
-
-  // ✅ Головний кейс: JSON сидить як КЛЮЧ обʼєкта
   for (const key of Object.keys(body)) {
     if (typeof key === "string" && key.startsWith("{")) {
       try { return JSON.parse(key); } catch {}
@@ -682,7 +650,6 @@ function normalizeWayForPayCallbackBody(body) {
       try { return JSON.parse(body[key]); } catch {}
     }
   }
-
   return body;
 }
 
@@ -709,7 +676,6 @@ async function createWayForPayInvoice(userId, packKey) {
     productName: payload.productName, productCount: payload.productCount, productPrice: payload.productPrice,
   });
 
-  // ✅ Retry для WayForPay API
   let res;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
@@ -750,18 +716,19 @@ function getBotStats() {
   const all = Object.values(users);
   const cfg = loadSettings();
   return {
-    totalUsers:       all.length,
-    activeUsers:      all.filter(u => u.generations > 0 || getUserVideoTotal(u) > 0).length,
-    bannedUsers:      all.filter(u => u.banned).length,
-    totalPhotoGen:    all.reduce((s, u) => s + (u.generations          || 0), 0),
-    totalSeedanceGen: all.reduce((s, u) => s + (u.seedanceGenerations  || 0), 0),
-    totalKlingGen:    all.reduce((s, u) => s + (u.klingGenerations     || 0), 0),
-    totalReferrals:   all.reduce((s, u) => s + (u.referralCount        || 0), 0),
-    totalRevenue:     payments.filter(p => p.status === "credited").reduce((s, p) => s + (Number(p.amount) || 0), 0),
-    totalPaidOrders:  payments.filter(p => p.status === "credited").length,
-    queueLength:      generationQueue.length,
+    totalUsers:              all.length,
+    activeUsers:             all.filter(u => u.generations > 0 || getUserVideoTotal(u) > 0).length,
+    bannedUsers:             all.filter(u => u.banned).length,
+    totalPhotoGen:           all.reduce((s, u) => s + (u.generations          || 0), 0),
+    totalSeedanceGen:        all.reduce((s, u) => s + (u.seedanceGenerations  || 0), 0),
+    totalKlingGen:           all.reduce((s, u) => s + (u.klingGenerations     || 0), 0),
+    totalReferrals:          all.reduce((s, u) => s + (u.referralCount        || 0), 0),
+    totalPromtiInCirculation: all.reduce((s, u) => s + (u.promti              || 0), 0),
+    totalRevenue:            payments.filter(p => p.status === "credited").reduce((s, p) => s + (Number(p.amount) || 0), 0),
+    totalPaidOrders:         payments.filter(p => p.status === "credited").length,
+    queueLength:             generationQueue.length,
     activeWorkers,
-    maxWorkers:       cfg.maxWorkers,
+    maxWorkers:              cfg.maxWorkers,
     segments: {
       new:    all.filter(u => getUserSegment(u) === "🆕 New").length,
       active: all.filter(u => getUserSegment(u) === "🔥 Active").length,
@@ -784,48 +751,43 @@ const mainMenu  = () => Markup.keyboard([
   ["ℹ️ Інформація", "❓ Допомога"],
   ["🆘 Підтримка"]
 ]).resize();
+
 const photoMenu = () => Markup.keyboard([
   ["🖼 Редагувати фото", "✨ Створити фото"],
   ["🤖 AI промт для фото"],
-  ["💳 Купити фото", "💰 Ціни фото"],
-  ["📊 Баланс фото", "↩️ Назад"]
-]).resize();
-const videoMenu     = () => Markup.keyboard([
-  ["🎬 Seedance", "🎥 Kling"],
-  ["🤖 AI промт для відео"],
-  ["📊 Баланс відео"],
+  ["💳 Купити Promti"],
   ["↩️ Назад"]
 ]).resize();
-const seedanceMenu  = () => Markup.keyboard([
+
+const videoMenu = () => Markup.keyboard([
+  ["🎬 Seedance", "🎥 Kling"],
+  ["🤖 AI промт для відео"],
+  ["💳 Купити Promti"],
+  ["📊 Баланс"],
+  ["↩️ Назад"]
+]).resize();
+
+const seedanceMenu = () => Markup.keyboard([
   ["⚡ Авто анімація", "🎬 Анімація + промт"],
   ["🎥 Відео з тексту"],
-  ["💳 Купити Seedance", "💰 Ціни Seedance"],
+  ["💳 Купити Promti"],
   ["↩️ Назад до відео"]
 ]).resize();
-const klingMenu     = () => Markup.keyboard([
+
+const klingMenu = () => Markup.keyboard([
   ["⚡ Авто анімація", "🎬 Анімація + промт"],
   ["🎥 Відео з тексту"],
-  ["💳 Купити Kling", "💰 Ціни Kling"],
+  ["💳 Купити Promti"],
   ["↩️ Назад до відео"]
 ]).resize();
-const buyPhotoMenu    = () => Markup.keyboard([
-  ["📦 10 фото", "📦 20 фото"],
-  ["📦 30 фото", "🔥 50 фото"],
-  ["↩️ Назад до фото"]
+
+const buyPromtiMenu = () => Markup.keyboard([
+  ["🌱 10 Promti", "📦 30 Promti"],
+  ["🎯 60 Promti", "🔥 150 Promti"],
+  ["↩️ Назад"]
 ]).resize();
-const buySeedanceMenu = () => Markup.keyboard([
-  ["🎬 3 Seedance"],
-  ["🎬 5 Seedance"],
-  ["🎬 10 Seedance"],
-  ["↩️ Назад до відео"]
-]).resize();
-const buyKlingMenu    = () => Markup.keyboard([
-  ["🎥 3 Kling"],
-  ["🎥 5 Kling"],
-  ["🎥 10 Kling"],
-  ["↩️ Назад до відео"]
-]).resize();
-const adminMenu       = () => Markup.keyboard([
+
+const adminMenu = () => Markup.keyboard([
   ["📊 Статус бота", "👤 Мій ID"],
   ["👥 Користувачі", "💳 Останні оплати"],
   ["📈 Аналітика", "📦 Пакети"],
@@ -833,6 +795,7 @@ const adminMenu       = () => Markup.keyboard([
   ["⚙️ Налаштування", "📊 Баланс"],
   ["↩️ Назад"],
 ]).resize();
+
 const adminPromptsMenu = () => Markup.keyboard([["portrait", "beauty"], ["fashion", "art"], ["trend", "seedance"], ["kling"], ["↩️ Назад"]]).resize();
 const adminTextsMenu   = () => Markup.keyboard([["welcomeText", "infoText"], ["helpText", "supportText"], ["ideaText", "pricesText"], ["↩️ Назад"]]).resize();
 
@@ -859,13 +822,13 @@ bot.start(async (ctx) => {
 bot.command("help",  (ctx) => { touchUser(ctx); return ctx.reply(content.helpText,  mainMenu()); });
 bot.command("info",  (ctx) => { touchUser(ctx); return ctx.reply(content.infoText,  mainMenu()); });
 bot.command("myid",  (ctx) => { touchUser(ctx); return ctx.reply(`Твій ID: ${ctx.from.id}`); });
+
 bot.command("admin", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   resetState(ctx);
   return ctx.reply(
     "👑 Адмін панель\n\n" +
-
     "📊 КНОПКИ МЕНЮ:\n" +
     "📊 Статус бота — черга, воркери, ключі API, сегменти юзерів, виручка\n" +
     "👤 Мій ID — показує твій Telegram ID\n" +
@@ -873,30 +836,23 @@ bot.command("admin", (ctx) => {
     "💳 Останні оплати — останні 15 транзакцій\n" +
     "📈 Аналітика — конверсія, топ пакети, виручка 7 днів\n" +
     "📦 Пакети — всі пакети з цінами\n" +
-    "✏️ Змінити текст — редагувати тексти бота (welcome, info, ціни...)\n" +
+    "✏️ Змінити текст — редагувати тексти бота\n" +
     "📝 Поточні тексти — переглянути всі тексти\n" +
-    "⚙️ Налаштування — ліміти черги, таймаути, денні ліміти\n" +
-    "📊 Баланс — поточний баланс адміна\n\n" +
-
+    "⚙️ Налаштування — ліміти черги, таймаути, денні ліміти\n\n" +
     "💰 ЦІНИ ТА ПАКЕТИ:\n" +
     "/packages — переглянути всі пакети і ціни\n" +
-    "/setprice photo_pack10 120 — змінити ціну пакету\n" +
-    "  Ключі фото: photo_pack10, photo_pack20, photo_pack30, photo_pack50\n" +
-    "  Ключі Seedance: seedance_pack3, seedance_pack5, seedance_pack10\n" +
-    "  Ключі Kling: kling_pack3, kling_pack5, kling_pack10\n" +
-    "/addpackage kling_pack15 video 15 1199 15 Kling — додати новий пакет\n" +
+    "/setprice promti_pack10 120 — змінити ціну пакету\n" +
+    "  Ключі: promti_pack10, promti_pack30, promti_pack60, promti_pack150\n" +
+    "/addpackage promti_pack200 promti 200 1499 200 Promti — додати новий пакет\n" +
     "/setlink support_link https://t.me/... — змінити посилання підтримки\n\n" +
-
     "👥 КЕРУВАННЯ ЮЗЕРАМИ:\n" +
-    "/userinfo ID — повна інфо про юзера (баланс, генерації, витрати)\n" +
-    "/addphoto ID 10 — нарахувати фото юзеру вручну\n" +
-    "/addvideo ID 5 — нарахувати відео юзеру вручну\n" +
+    "/userinfo ID — повна інфо про юзера\n" +
+    "/addpromti ID 10 — нарахувати ✨ юзеру вручну\n" +
     "/ban ID — заблокувати юзера\n" +
     "/unban ID — розблокувати юзера\n\n" +
-
     "📢 РОЗСИЛКА:\n" +
-    "/broadcast Текст — надіслати всім юзерам (пачками по 25, без банів)\n" +
-    "/analytics — детальна аналітика (також є кнопка 📈)",
+    "/broadcast Текст — надіслати всім юзерам\n" +
+    "/analytics — детальна аналітика",
     adminMenu()
   );
 });
@@ -905,31 +861,19 @@ bot.command("ref", (ctx) => {
   touchUser(ctx);
   const botUsername = ctx.botInfo?.username || "Promtiai_bot";
   const link = `https://t.me/${botUsername}?start=ref_${ctx.from.id}`;
-  return ctx.reply(`🔗 Реферальне посилання:\n${link}\n\n🎁 За кожного друга +${REFERRAL_PHOTO_BONUS} фото\nЗапрошено: ${users[ctx.from.id]?.referralCount || 0}`);
+  return ctx.reply(`🔗 Реферальне посилання:\n${link}\n\n🎁 За кожного друга +${REFERRAL_PROMTI_BONUS} ✨ Promti\nЗапрошено: ${users[ctx.from.id]?.referralCount || 0}`);
 });
 
-bot.command("addphoto", async (ctx) => {
+bot.command("addpromti", async (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const [, id, amt] = ctx.message.text.split(/\s+/);
-  if (!id || !amt) return ctx.reply("Формат: /addphoto ID КІЛЬКІСТЬ");
+  if (!id || !amt) return ctx.reply("Формат: /addpromti ID КІЛЬКІСТЬ");
   const user = getUser(Number(id));
-  user.balance += Number(amt);
+  user.promti = (user.promti || 0) + Number(amt);
   saveUsers();
-  await ctx.reply(`✅ +${amt} фото → user ${id}. Баланс: ${user.balance}`);
-  bot.telegram.sendMessage(Number(id), `🎉 +${amt} фото на баланс!\nБаланс фото: ${user.balance}`, mainMenu()).catch(() => {});
-});
-
-bot.command("addvideo", async (ctx) => {
-  touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
-  const [, id, amt] = ctx.message.text.split(/\s+/);
-  if (!id || !amt) return ctx.reply("Формат: /addvideo ID КІЛЬКІСТЬ");
-  const user = getUser(Number(id));
-  user.videoBalance = (user.videoBalance || 0) + Number(amt);
-  saveUsers();
-  await ctx.reply(`✅ +${amt} відео → user ${id}. Баланс: ${user.videoBalance}`);
-  bot.telegram.sendMessage(Number(id), `🎉 +${amt} відео на баланс!\nБаланс відео: ${user.videoBalance}`, mainMenu()).catch(() => {});
+  await ctx.reply(`✅ +${amt} ✨ → user ${id}. Баланс: ${user.promti} ✨`);
+  bot.telegram.sendMessage(Number(id), `🎉 +${amt} ✨ Promti на баланс!\nБаланс: ${user.promti} ✨`, mainMenu()).catch(() => {});
 });
 
 bot.command("userinfo", (ctx) => {
@@ -941,7 +885,7 @@ bot.command("userinfo", (ctx) => {
   const cfg = loadSettings();
   return ctx.reply(
     `👤 ID: ${u.id} ${getUserSegment(u)}\n@${u.username || "-"} | ${u.firstName || "-"}\n\n` +
-    `🖼 Баланс фото: ${u.balance}\n🎬 Баланс відео: ${u.videoBalance || 0}\n\n` +
+    `✨ Баланс Promti: ${u.promti || 0}\n\n` +
     `⚡ Фото: ${u.generations || 0}\n🎬 Seedance: ${u.seedanceGenerations || 0}\n🎥 Kling: ${u.klingGenerations || 0}\n\n` +
     `💰 Витрачено: ${u.totalSpent || 0} грн\n👫 Рефералів: ${u.referralCount || 0}\n` +
     `🚫 Бан: ${u.banned ? "так" : "ні"}\n📅 З: ${(u.createdAt || "").slice(0, 10)}\n\n` +
@@ -978,10 +922,9 @@ bot.command("broadcast", async (ctx) => {
   let sent = 0, failed = 0;
   await ctx.reply(`⏳ Надсилаю ${all.length} користувачам...`);
 
-  // ✅ Пачками по 25 з паузою між пачками — захист від Telegram rate limit
   const BATCH_SIZE  = 25;
-  const BATCH_DELAY = 1500; // пауза між пачками
-  const MSG_DELAY   = 50;   // пауза між повідомленнями в пачці
+  const BATCH_DELAY = 1500;
+  const MSG_DELAY   = 50;
 
   for (let i = 0; i < all.length; i++) {
     const u = all[i];
@@ -990,42 +933,32 @@ bot.command("broadcast", async (ctx) => {
       sent++;
     } catch { failed++; }
 
-    // пауза між повідомленнями
     await new Promise(r => setTimeout(r, MSG_DELAY));
 
-    // пауза після кожної пачки
     if ((i + 1) % BATCH_SIZE === 0) {
       await ctx.reply(`⏳ Надіслано ${sent}/${all.length}...`);
       await new Promise(r => setTimeout(r, BATCH_DELAY));
     }
   }
 
-  return ctx.reply(`✅ Broadcast завершено!
-Надіслано: ${sent}
-Помилок: ${failed}`);
+  return ctx.reply(`✅ Broadcast завершено!\nНадіслано: ${sent}\nПомилок: ${failed}`);
 });
 
-// ─── АДМІН: КЕРУВАННЯ ПАКЕТАМИ ────────────────────────────────────────────────
-
-// /analytics — детальна аналітика
+// ─── АДМІН: АНАЛІТИКА ────────────────────────────────────────────────────────
 bot.command("analytics", (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
 
   const all = Object.values(users);
   const paid = payments.filter(p => p.status === "credited");
 
-  // Топ пакети
   const packCount = {};
-  paid.forEach(p => {
-    packCount[p.packKey] = (packCount[p.packKey] || 0) + 1;
-  });
+  paid.forEach(p => { packCount[p.packKey] = (packCount[p.packKey] || 0) + 1; });
   const topPacks = Object.entries(packCount)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([key, cnt]) => `  ${key}: ${cnt} разів`)
     .join("\n");
 
-  // Виручка по днях (останні 7 днів)
   const now = Date.now();
   const DAY = 86400000;
   const revenueByDay = {};
@@ -1041,24 +974,17 @@ bot.command("analytics", (ctx) => {
     .map(([d, amt]) => `  ${d.slice(5)}: ${amt} грн`)
     .join("\n");
 
-  // Конверсія
-  const totalUsers   = all.length;
-  const payingUsers  = all.filter(u => (u.totalSpent || 0) > 0).length;
-  const activeUsers  = all.filter(u => (u.generations || 0) > 0 || (u.seedanceGenerations || 0) > 0 || (u.klingGenerations || 0) > 0).length;
-  const conversion   = totalUsers > 0 ? ((payingUsers / totalUsers) * 100).toFixed(1) : 0;
+  const totalUsers    = all.length;
+  const payingUsers   = all.filter(u => (u.totalSpent || 0) > 0).length;
+  const activeUsers   = all.filter(u => (u.generations || 0) > 0 || (u.seedanceGenerations || 0) > 0 || (u.klingGenerations || 0) > 0).length;
+  const conversion    = totalUsers > 0 ? ((payingUsers / totalUsers) * 100).toFixed(1) : 0;
   const actConversion = activeUsers > 0 ? ((payingUsers / activeUsers) * 100).toFixed(1) : 0;
-
-  // Середній чек
-  const totalRevenue = paid.reduce((s, p) => s + Number(p.amount || 0), 0);
-  const avgCheck     = payingUsers > 0 ? Math.round(totalRevenue / payingUsers) : 0;
-
-  // Коли відвалюються (юзери без оплати після генерацій)
+  const totalRevenue  = paid.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const avgCheck      = payingUsers > 0 ? Math.round(totalRevenue / payingUsers) : 0;
   const triedNoPayment = all.filter(u =>
     ((u.generations || 0) > 0 || (u.seedanceGenerations || 0) > 0 || (u.klingGenerations || 0) > 0) &&
     (u.totalSpent || 0) === 0
   ).length;
-
-  // Повторні покупки
   const repeatBuyers = all.filter(u => {
     const userPaid = paid.filter(p => p.userId == u.id);
     return userPaid.length > 1;
@@ -1082,26 +1008,24 @@ bot.command("analytics", (ctx) => {
   );
 });
 
-// /packages — показати всі пакети
+// ─── АДМІН: ПАКЕТИ ───────────────────────────────────────────────────────────
 bot.command("packages", (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const pkgs = getPackages();
   const text = Object.values(pkgs).map(p =>
-    `${p.key}\n  💰 ${p.amount} грн | ${p.count} шт | ${p.type}${p.model ? " / " + p.model : ""}`
+    `${p.key}\n  💰 ${p.amount} грн | ${p.promti} ✨ | ${p.type}`
   ).join("\n\n");
   return ctx.reply(
     `📦 Всі пакети:\n\n${text}\n\n` +
-    `Змінити ціну:\n/setprice photo_pack10 120\n\n` +
-    `Додати пакет:\n/addpackage kling_pack15 video 15 1199 15 Kling відео\n\n` +
-    `Посилання:\n/setlink support_link https://t.me/support`
+    `Змінити ціну:\n/setprice promti_pack10 120\n\n` +
+    `Додати пакет:\n/addpackage promti_pack200 promti 200 1499 200 Promti`
   );
 });
 
-// /setprice packKey ціна
 bot.command("setprice", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const parts = ctx.message.text.split(/\s+/);
-  if (parts.length < 3) return ctx.reply("Формат: /setprice КЛЮЧ_ПАКЕТУ ЦІНА\n\nПриклад: /setprice photo_pack10 120");
+  if (parts.length < 3) return ctx.reply("Формат: /setprice КЛЮЧ_ПАКЕТУ ЦІНА\n\nПриклад: /setprice promti_pack10 120");
   const packKey = parts[1];
   const amount  = Number(parts[2]);
   if (!getPackages()[packKey]) return ctx.reply(`❌ Пакет "${packKey}" не знайдено.\n\nДоступні ключі:\n${Object.keys(getPackages()).join("\n")}`);
@@ -1112,39 +1036,29 @@ bot.command("setprice", async (ctx) => {
   return ctx.reply(`✅ Ціна "${packKey}" оновлена: ${amount} грн`);
 });
 
-// /addpackage KEY TYPE COUNT AMOUNT TITLE
 bot.command("addpackage", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const text  = ctx.message.text.replace("/addpackage", "").trim();
   const parts = text.split(/\s+/);
   if (parts.length < 5) {
     return ctx.reply(
-      "Формат: /addpackage КЛЮЧ ТИП КІЛЬКІСТЬ ЦІНА НАЗВА\n\n" +
-      "Типи: photo, video\n" +
-      "Приклад фото: /addpackage photo_pack100 photo 100 699 100 фото\n" +
-      "Приклад відео: /addpackage kling_pack15 video 15 1199 15 Kling відео"
+      "Формат: /addpackage КЛЮЧ promti КІЛЬКІСТЬ_PROMTI ЦІНА НАЗВА\n\n" +
+      "Приклад: /addpackage promti_pack200 promti 200 1499 200 Promti"
     );
   }
   const [key, type, countStr, amountStr, ...titleParts] = parts;
   const count  = Number(countStr);
   const amount = Number(amountStr);
   const title  = titleParts.join(" ");
-  if (!["photo", "video"].includes(type)) return ctx.reply("❌ Тип має бути: photo або video");
+  if (type !== "promti") return ctx.reply("❌ Тип має бути: promti");
   if (isNaN(count)  || count  <= 0) return ctx.reply("❌ Кількість має бути числом > 0");
   if (isNaN(amount) || amount <= 0) return ctx.reply("❌ Ціна має бути числом > 0");
   if (getPackages()[key]) return ctx.reply(`❌ Пакет "${key}" вже існує. Для зміни ціни: /setprice ${key} ЦІНА`);
-  let model = null;
-  if (type === "video") {
-    if (key.includes("kling"))    model = "kling";
-    if (key.includes("seedance")) model = "seedance";
-    if (!model) return ctx.reply("❌ Для відео-пакету ключ має містити 'kling' або 'seedance'\nПриклад: kling_pack15 або seedance_pack15");
-  }
-  dynamicPackages[key] = { key, type, model, title, count, amount, priceText: `${amount} грн` };
+  dynamicPackages[key] = { key, type: "promti", title, promti: count, amount, priceText: `${amount} грн` };
   saveDynamicPackages();
-  return ctx.reply(`✅ Пакет додано!\n\nКлюч: ${key}\nНазва: ${title}\nТип: ${type}${model ? " / " + model : ""}\nКількість: ${count}\nЦіна: ${amount} грн`);
+  return ctx.reply(`✅ Пакет додано!\n\nКлюч: ${key}\nНазва: ${title}\nPromti: ${count} ✨\nЦіна: ${amount} грн`);
 });
 
-// /setlink KEY URL — зберегти посилання
 bot.command("setlink", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const text  = ctx.message.text.replace("/setlink", "").trim();
@@ -1178,13 +1092,14 @@ bot.hears("📊 Статус бота", (ctx) => {
     `🎬 Seedance: ${s.totalSeedanceGen}\n` +
     `🎥 Kling: ${s.totalKlingGen}\n` +
     `👫 Рефералів: ${s.totalReferrals}\n` +
+    `✨ Promti в обігу: ${s.totalPromtiInCirculation}\n` +
     `💰 Зароблено: ${s.totalRevenue} грн\n` +
     `🧾 Оплат: ${s.totalPaidOrders}`,
     adminMenu()
   );
 });
 
-bot.hears("👤 Мій ID",         (ctx) => { touchUser(ctx); if (!isAdmin(ctx.from.id)) return ctx.reply("❌"); return ctx.reply(`Твій ID: ${ctx.from.id}`, adminMenu()); });
+bot.hears("👤 Мій ID", (ctx) => { touchUser(ctx); if (!isAdmin(ctx.from.id)) return ctx.reply("❌"); return ctx.reply(`Твій ID: ${ctx.from.id}`, adminMenu()); });
 
 bot.hears("👥 Користувачі", (ctx) => {
   touchUser(ctx);
@@ -1193,7 +1108,7 @@ bot.hears("👥 Користувачі", (ctx) => {
   if (!all.length) return ctx.reply("Немає", adminMenu());
   const text = all.slice(-15).reverse().map(u =>
     `${u.banned ? "🚫 " : ""}ID: ${u.id} @${u.username || "-"}\n` +
-    `🖼 ${u.balance} | 🎬 ${u.videoBalance || 0} | 💰 ${u.totalSpent || 0}грн\n` +
+    `✨ ${u.promti || 0} Promti | 💰 ${u.totalSpent || 0}грн\n` +
     `⚡ ${u.generations || 0}ф ${u.seedanceGenerations || 0}s ${u.klingGenerations || 0}k | 👫 ${u.referralCount || 0}\n` +
     `📅 ${(u.createdAt || "").slice(0, 10)}`
   ).join("\n\n");
@@ -1271,15 +1186,17 @@ bot.hears("⚙️ Налаштування", (ctx) => {
     `📅 Денний ліміт Kling: ${cfg.dailyKlingLimit} (0=∞)\n\n` +
     `🤖 AI промт: ${cfg.aiPromptEnabled ? "✅" : "❌"}\n` +
     `🎬 Відео: ${cfg.videoEnabled ? "✅" : "❌"}\n\n` +
+    `✨ Ціни послуг:\n` +
+    `🖼 Фото: ${PROMTI_PRICES.photo} ✨\n` +
+    `🎬 Seedance: ${PROMTI_PRICES.seedance} ✨\n` +
+    `🎥 Kling: ${PROMTI_PRICES.kling} ✨\n\n` +
     `Редагуй settings.json на сервері та перезапусти бота.`,
     adminMenu()
   );
 });
 
-// ✅ НОВА кнопка — Пакети
 bot.hears("📈 Аналітика", (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
-  // Викликаємо ту саму логіку що і /analytics
   const all = Object.values(users);
   const paid = payments.filter(p => p.status === "credited");
   const packCount = {};
@@ -1334,19 +1251,19 @@ bot.hears("📦 Пакети", (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const pkgs = getPackages();
   const text = Object.values(pkgs).map(p =>
-    `${p.key}: ${p.amount} грн | ${p.count} шт | ${p.type}${p.model ? "/" + p.model : ""}`
+    `${p.key}: ${p.amount} грн | ${p.promti} ✨ | ${p.type}`
   ).join("\n");
   return ctx.reply(
     `📦 Пакети:\n\n${text}\n\n` +
-    `Змінити ціну:\n/setprice photo_pack10 120\n\n` +
-    `Додати пакет:\n/addpackage kling_pack15 video 15 1199 15 Kling відео\n\n` +
-    `Додати посилання:\n/setlink support_link https://t.me/support`,
+    `Змінити ціну:\n/setprice promti_pack10 120\n\n` +
+    `Додати пакет:\n/addpackage promti_pack200 promti 200 1499 200 Promti`,
     adminMenu()
   );
 });
 
 // ─── НАВІГАЦІЯ ────────────────────────────────────────────────────────────────
-bot.hears("↩️ Назад",          (ctx) => { touchUser(ctx); resetState(ctx); return ctx.reply("Головне меню ✨", mainMenu()); });
+bot.hears("↩️ Назад", (ctx) => { touchUser(ctx); resetState(ctx); return ctx.reply("Головне меню ✨", mainMenu()); });
+
 bot.hears("↩️ Назад до фото", (ctx) => {
   touchUser(ctx); resetState(ctx);
   ctx.session.mode = "photo";
@@ -1359,67 +1276,24 @@ bot.hears("↩️ Назад до фото", (ctx) => {
     photoMenu()
   );
 });
+
 bot.hears("↩️ Назад до відео", (ctx) => {
   touchUser(ctx); resetState(ctx);
   ctx.session.mode = "video";
   return ctx.reply(
     "🎬 Меню відео\n\n" +
-    "🎬 Seedance — ByteDance модель, реалістична анімація\n" +
-    "🎥 Kling — кінематографічна якість відео\n\n" +
+    "🎬 Seedance — ByteDance модель, реалістична анімація (10 ✨)\n" +
+    "🎥 Kling — кінематографічна якість відео (15 ✨)\n\n" +
     "💡 Ідеї: t.me/promteamai",
     videoMenu()
   );
 });
-bot.hears("ℹ️ Інформація",     (ctx) => { touchUser(ctx); return ctx.reply(content.infoText,    mainMenu()); });
-bot.hears("❓ Допомога",       (ctx) => { touchUser(ctx); return ctx.reply(content.helpText,    mainMenu()); });
-bot.hears("🆘 Підтримка",      (ctx) => { touchUser(ctx); return ctx.reply(content.supportText, mainMenu()); });
-bot.hears("💰 Ціни",           (ctx) => { touchUser(ctx); return ctx.reply(content.pricesText || "💰 Ціни тимчасово недоступні", mainMenu()); });
 
-// ✅ Ціни фото — з packages.json (завжди актуальні)
-bot.hears("💰 Ціни фото", (ctx) => {
-  touchUser(ctx);
-  const pkgs = getPackages();
-  const lines = ["💰 Ціни на фото\n"];
-  for (const [key, pkg] of Object.entries(pkgs)) {
-    if (pkg.type === "photo") {
-      lines.push(`${key === "photo_pack50" ? "🔥" : "📦"} ${pkg.count} фото — ${pkg.amount} грн`);
-    }
-  }
-  lines.push("\n🎁 1 фото безкоштовно при реєстрації!");
-  lines.push("👫 +1 фото за кожного друга який оплатить");
-  return ctx.reply(lines.join("\n"), photoMenu());
-});
+bot.hears("ℹ️ Інформація", (ctx) => { touchUser(ctx); return ctx.reply(content.infoText,    mainMenu()); });
+bot.hears("❓ Допомога",    (ctx) => { touchUser(ctx); return ctx.reply(content.helpText,    mainMenu()); });
+bot.hears("🆘 Підтримка",   (ctx) => { touchUser(ctx); return ctx.reply(content.supportText, mainMenu()); });
+bot.hears("💰 Ціни",        (ctx) => { touchUser(ctx); return ctx.reply(content.pricesText || "💰 Ціни тимчасово недоступні", mainMenu()); });
 
-// ✅ Ціни Seedance — з packages.json
-bot.hears("💰 Ціни Seedance", (ctx) => {
-  touchUser(ctx);
-  const pkgs = getPackages();
-  const lines = ["💰 Ціни Seedance\n"];
-  for (const [key, pkg] of Object.entries(pkgs)) {
-    if (pkg.type === "video" && pkg.model === "seedance") {
-      lines.push(`🎬 ${pkg.count} відео — ${pkg.amount} грн`);
-    }
-  }
-  lines.push("\n🔇 Відео без звуку (додай музику в Instagram/TikTok)");
-  lines.push("⛔️ Не підтримує фото реальних людей");
-  lines.push("👉 Для людей — використовуй Kling");
-  return ctx.reply(lines.join("\n"), seedanceMenu());
-});
-
-// ✅ Ціни Kling — з packages.json
-bot.hears("💰 Ціни Kling", (ctx) => {
-  touchUser(ctx);
-  const pkgs = getPackages();
-  const lines = ["💰 Ціни Kling\n"];
-  for (const [key, pkg] of Object.entries(pkgs)) {
-    if (pkg.type === "video" && pkg.model === "kling") {
-      lines.push(`🎥 ${pkg.count} відео — ${pkg.amount} грн`);
-    }
-  }
-  lines.push("\n✅ Підходить для анімації людей");
-  lines.push("🎬 Кінематографічна якість");
-  return ctx.reply(lines.join("\n"), klingMenu());
-});
 bot.hears("👫 Запросити друга", async (ctx) => {
   touchUser(ctx);
   const userId  = ctx.from.id;
@@ -1431,16 +1305,17 @@ bot.hears("👫 Запросити друга", async (ctx) => {
   return ctx.reply(
     `👫 Реферальна програма\n\n` +
     `Запроси друга — отримай бонус!\n` +
-    `🎁 За кожного друга який оплатить: +1 фото\n\n` +
+    `🎁 За кожного друга який оплатить: +${REFERRAL_PROMTI_BONUS} ✨ Promti\n\n` +
     `📊 Твоя статистика:\n` +
     `  Запрошено друзів: ${count}\n` +
-    `  Зароблено: +${earned} фото\n\n` +
+    `  Зароблено: +${earned} ✨\n\n` +
     `🔗 Твоє посилання:\n${refLink}\n\n` +
-    `💡 Поділись з друзями — вони отримають 1 безкоштовне фото при реєстрації!`,
+    `💡 Поділись з друзями — вони отримають 1 ✨ безкоштовно при реєстрації!`,
     mainMenu()
   );
 });
-bot.hears("💡 Ідея для промтів",(ctx) => { touchUser(ctx); return ctx.reply(content.ideaText,   mainMenu()); });
+
+bot.hears("💡 Ідея для промтів", (ctx) => { touchUser(ctx); return ctx.reply(content.ideaText, mainMenu()); });
 
 // ─── БАЛАНС ───────────────────────────────────────────────────────────────────
 bot.hears("📊 Баланс", (ctx) => {
@@ -1449,31 +1324,16 @@ bot.hears("📊 Баланс", (ctx) => {
   const botUsername = ctx.botInfo?.username || "Promtiai_bot";
   const cfg = loadSettings();
   return ctx.reply(
-    `📊 Твій баланс:\n\n🖼 Фото: ${user.balance}\n🎬 Відео: ${user.videoBalance || 0}\n\n` +
-    `Безкоштовне фото: ${user.freeUsed ? "використано" : "доступне ✅"}\n` +
+    `📊 Твій баланс: ${user.promti || 0} ✨ Promti\n\n` +
+    `💰 Ціни послуг:\n` +
+    `🖼 Фото — ${PROMTI_PRICES.photo} ✨\n` +
+    `🎬 Seedance — ${PROMTI_PRICES.seedance} ✨\n` +
+    `🎥 Kling — ${PROMTI_PRICES.kling} ✨\n\n` +
     `📅 Seedance сьогодні: ${user.dailySeedanceCount || 0}/${cfg.dailySeedanceLimit}\n` +
     `📅 Kling сьогодні: ${user.dailyKlingCount || 0}/${cfg.dailyKlingLimit}\n\n` +
     `👫 Запрошено друзів: ${user.referralCount || 0}\n` +
     `🔗 https://t.me/${botUsername}?start=ref_${user.id}`,
     mainMenu()
-  );
-});
-
-bot.hears("📊 Баланс фото", (ctx) => {
-  const user = touchUser(ctx);
-  return ctx.reply(`🖼 Баланс фото: ${user.balance}\nБезкоштовне: ${user.freeUsed ? "використано" : "✅"}\nВсього генерацій: ${user.generations || 0}`, photoMenu());
-});
-
-bot.hears("📊 Баланс відео", (ctx) => {
-  const user = touchUser(ctx);
-  const cfg  = loadSettings();
-  return ctx.reply(
-    `🎬 Баланс відео: ${user.videoBalance || 0}\n\n` +
-    `🎬 Seedance генерацій: ${user.seedanceGenerations || 0}\n` +
-    `🎥 Kling генерацій: ${user.klingGenerations || 0}\n\n` +
-    `📅 Сьогодні Seedance: ${user.dailySeedanceCount || 0}/${cfg.dailySeedanceLimit}\n` +
-    `📅 Сьогодні Kling: ${user.dailyKlingCount || 0}/${cfg.dailyKlingLimit}`,
-    videoMenu()
   );
 });
 
@@ -1483,13 +1343,14 @@ bot.hears("🖼 Фото", (ctx) => {
   ctx.session.mode = "photo";
   return ctx.reply(
     "🖼 Меню фото\n\n" +
-    "🖼 Редагувати фото — надішли своє фото + промт, змінимо стиль!\n" +
-    "✨ Створити фото — напиши промт, створю фото з нуля\n" +
+    `🖼 Редагувати фото — ${PROMTI_PRICES.photo} ✨\n` +
+    `✨ Створити фото — ${PROMTI_PRICES.photo} ✨\n` +
     "🤖 AI промт — аналізую твоє фото і пропоную промт\n\n" +
     "💡 Ідеї: t.me/promteamai",
     photoMenu()
   );
 });
+
 bot.hears("🎬 Відео", (ctx) => {
   const cfg = loadSettings();
   if (!cfg.videoEnabled) return ctx.reply("🎬 Відео тимчасово недоступне. Спробуй пізніше.", mainMenu());
@@ -1497,39 +1358,36 @@ bot.hears("🎬 Відео", (ctx) => {
   ctx.session.mode = "video";
   return ctx.reply(
     "🎬 Меню відео\n\n" +
-    "🎬 Seedance — ByteDance модель, реалістична анімація\n" +
-    "🎥 Kling — кінематографічна якість відео\n\n" +
+    `🎬 Seedance — ByteDance модель, реалістична анімація (${PROMTI_PRICES.seedance} ✨)\n` +
+    `🎥 Kling — кінематографічна якість відео (${PROMTI_PRICES.kling} ✨)\n\n` +
     "💡 Ідеї: t.me/promteamai",
     videoMenu()
   );
 });
 
 // ─── ФОТО РЕЖИМИ ──────────────────────────────────────────────────────────────
-
-// 🖼 Редагування — своє фото + промт (nano-banana-2/edit)
 bot.hears("🖼 Редагувати фото", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   ctx.session.mode = "photo";
-  ctx.session.photoMode = "edit"; // редагування існуючого фото
+  ctx.session.photoMode = "edit";
   ctx.session.customType = "custom_photo";
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   return ctx.reply(
-    "✏️ Режим редагування фото\n\nНапиши промт як хочеш змінити фото, потім надішли своє фото.\n\nПриклад: \"beauty editorial, glossy skin\"\n\n💡 Ідеї: t.me/promteamai",
+    `✏️ Режим редагування фото (${PROMTI_PRICES.photo} ✨)\n\nНапиши промт як хочеш змінити фото, потім надішли своє фото.\n\nПриклад: "beauty editorial, glossy skin"\n\n💡 Ідеї: t.me/promteamai`,
     photoMenu()
   );
 });
 
-// ✨ Створення — тільки текст → нове фото (nano-banana-2/text-to-image)
 bot.hears("✨ Створити фото", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   ctx.session.mode = "photo";
-  ctx.session.photoMode = "create"; // генерація з тексту
+  ctx.session.photoMode = "create";
   ctx.session.customType = "create_photo";
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   return ctx.reply(
-    "✨ Режим створення фото\n\nНапиши що хочеш згенерувати — фото буде створено з нуля.\n\nПриклад: \"portrait of woman in Renaissance style, cinematic lighting\"\n\n💡 Ідеї: t.me/promteamai",
+    `✨ Режим створення фото (${PROMTI_PRICES.photo} ✨)\n\nНапиши що хочеш згенерувати — фото буде створено з нуля.\n\nПриклад: "portrait of woman in Renaissance style, cinematic lighting"\n\n💡 Ідеї: t.me/promteamai`,
     photoMenu()
   );
 });
@@ -1545,7 +1403,7 @@ bot.hears("🎬 Seedance", (ctx) => {
   ctx.session.customType = null; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   ctx.session.videoInputMode = null;
   return ctx.reply(
-    "🎬 Seedance 2.0\n\n" +
+    `🎬 Seedance 2.0 (${PROMTI_PRICES.seedance} ✨ за відео)\n\n` +
     "Спеціалізується на анімації об'єктів, природи, мультиплікації та фантастичних сцен.\n\n" +
     "⚡ Авто анімація — надішли фото, оживлю автоматично\n" +
     "🎬 Анімація + промт — надішли фото зі своїм описом руху\n" +
@@ -1562,7 +1420,6 @@ bot.hears("🎬 Seedance", (ctx) => {
   );
 });
 
-// Seedance: Фото → Відео
 bot.hears("⚡ Авто анімація", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
@@ -1573,16 +1430,16 @@ bot.hears("⚡ Авто анімація", (ctx) => {
   ctx.session.customPrompt = null;
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
   const defaultPrompt = prompts[style] || "cinematic motion, smooth animation";
-  const isSeeedance = style === "seedance";
+  const isSeedance = style === "seedance";
+  const cost = style === "kling" ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance;
   return ctx.reply(
-    `⚡ Авто анімація\n\nНадішли фото — оживлю з дефолтним промтом:\n📝 "${defaultPrompt}"\n\n` +
-    (isSeeedance ? "⛔️ Лише для об'єктів та природи (не людей)\n👉 Для людей — використовуй Kling\n\n" : "") +
+    `⚡ Авто анімація (${cost} ✨)\n\nНадішли фото — оживлю з дефолтним промтом:\n📝 "${defaultPrompt}"\n\n` +
+    (isSeedance ? "⛔️ Лише для об'єктів та природи (не людей)\n👉 Для людей — використовуй Kling\n\n" : "") +
     `✍️ Хочеш свій промт? Напиши його перед фото.`,
     menu
   );
 });
 
-// 🎬 Анімація + промт
 bot.hears("🎬 Анімація + промт", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
@@ -1593,8 +1450,9 @@ bot.hears("🎬 Анімація + промт", (ctx) => {
   ctx.session.customPrompt = null;
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
   const isSeedanceStyle = style === "seedance";
+  const cost = style === "kling" ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance;
   return ctx.reply(
-    `🎬 Анімація + промт\n\nНапиши промт, потім надішли фото.\n\n` +
+    `🎬 Анімація + промт (${cost} ✨)\n\nНапиши промт, потім надішли фото.\n\n` +
     (isSeedanceStyle
       ? `Приклад: "gentle swaying in wind, soft light"\n\n⛔️ Лише для об'єктів та природи — не людей\n👉 Для анімації людей — Kling\n\n`
       : `Приклад: "cinematic close-up, eyes slowly opening"\n\n`) +
@@ -1603,7 +1461,6 @@ bot.hears("🎬 Анімація + промт", (ctx) => {
   );
 });
 
-// Seedance/Kling: Текст → Відео
 bot.hears("🎥 Відео з тексту", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
@@ -1613,8 +1470,9 @@ bot.hears("🎥 Відео з тексту", (ctx) => {
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
+  const cost = style === "kling" ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance;
   return ctx.reply(
-    `🎥 Відео з тексту\n\nНапиши детальний промт — створю відео з нуля!\n\nПриклад: "cinematic portrait of woman, wind in hair, golden hour"\n\n💡 t.me/promteamai`,
+    `🎥 Відео з тексту (${cost} ✨)\n\nНапиши детальний промт — створю відео з нуля!\n\nПриклад: "cinematic portrait of woman, wind in hair, golden hour"\n\n💡 t.me/promteamai`,
     menu
   );
 });
@@ -1625,7 +1483,7 @@ bot.hears("🎥 Kling", (ctx) => {
   ctx.session.customType = null; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   ctx.session.videoInputMode = null;
   return ctx.reply(
-    "🎥 Kling\n\n" +
+    `🎥 Kling (${PROMTI_PRICES.kling} ✨ за відео)\n\n` +
     "📸 Фото → Відео — надішли фото + промт, оживлю!\n" +
     "✍️ Текст → Відео — напиши промт, створю кінематографічне відео\n\n" +
     "Приклад: \"cinematic close-up, soft bokeh\"\n\n" +
@@ -1634,17 +1492,14 @@ bot.hears("🎥 Kling", (ctx) => {
   );
 });
 
-
-
 // ─── AI ПРОМТ ─────────────────────────────────────────────────────────────────
 bot.hears("🤖 AI промт для фото", (ctx) => {
   const cfg  = loadSettings();
   const user = touchUser(ctx);
-  // ✅ Доступно тільки після покупки пакету
   if (!cfg.aiPromptEnabled) return ctx.reply("🤖 AI промт тимчасово вимкнено.", photoMenu());
   if (!isAdmin(ctx.from.id) && (user.totalSpent || 0) <= 0) {
     return ctx.reply(
-      "🔒 AI промт доступний після покупки будь-якого пакету 💳\n\nКупи пакет фото або відео — і отримаєш доступ до AI промтів!",
+      "🔒 AI промт доступний після покупки будь-якого пакету 💳\n\nКупи пакет Promti — і отримаєш доступ до AI промтів!",
       photoMenu()
     );
   }
@@ -1657,11 +1512,10 @@ bot.hears("🤖 AI промт для фото", (ctx) => {
 bot.hears("🤖 AI промт для відео", (ctx) => {
   const cfg  = loadSettings();
   const user = touchUser(ctx);
-  // ✅ Доступно тільки після покупки пакету
   if (!cfg.aiPromptEnabled) return ctx.reply("🤖 AI промт тимчасово вимкнено.", videoMenu());
   if (!isAdmin(ctx.from.id) && (user.totalSpent || 0) <= 0) {
     return ctx.reply(
-      "🔒 AI промт доступний після покупки будь-якого пакету 💳\n\nКупи пакет фото або відео — і отримаєш доступ до AI промтів!",
+      "🔒 AI промт доступний після покупки будь-якого пакету 💳\n\nКупи пакет Promti — і отримаєш доступ до AI промтів!",
       videoMenu()
     );
   }
@@ -1673,7 +1527,7 @@ bot.hears("🤖 AI промт для відео", (ctx) => {
   return ctx.reply(`🤖 AI промт для відео (${label})\n\nНадішли:\n📸 Фото — опишу рух\n🎬 Відео до 10 сек — проаналізую рух\n\nПромт: макс. 10 слів.`, videoMenu());
 });
 
-// ─── ПОКУПКА ──────────────────────────────────────────────────────────────────
+// ─── ПОКУПКА PROMTI ───────────────────────────────────────────────────────────
 async function sendAutoPayment(ctx, packKey) {
   try {
     const user = touchUser(ctx);
@@ -1690,28 +1544,23 @@ async function sendAutoPayment(ctx, packKey) {
   }
 }
 
-bot.hears("💳 Купити фото",    (ctx) => { touchUser(ctx); if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu()); return ctx.reply("Обери пакет фото:", buyPhotoMenu()); });
-bot.hears("💳 Купити Seedance", (ctx) => {
-  const cfg = loadSettings();
-  if (cfg.seedanceEnabled === false) {
-    return ctx.reply(cfg.seedanceComingSoonText || "🎬 Seedance тимчасово недоступний. Скоро повернеться!", videoMenu());
-  }
+bot.hears("💳 Купити Promti", (ctx) => {
   touchUser(ctx);
   if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
-  return ctx.reply("Обери пакет Seedance 🎬:", buySeedanceMenu());
+  return ctx.reply(
+    `💎 Обери пакет Promti ✨\n\n` +
+    `💰 Ціни послуг:\n` +
+    `🖼 Фото — ${PROMTI_PRICES.photo} ✨\n` +
+    `🎬 Seedance — ${PROMTI_PRICES.seedance} ✨\n` +
+    `🎥 Kling — ${PROMTI_PRICES.kling} ✨`,
+    buyPromtiMenu()
+  );
 });
-bot.hears("💳 Купити Kling",    (ctx) => { touchUser(ctx); if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu()); return ctx.reply("Обери пакет Kling 🎥:", buyKlingMenu()); });
 
-bot.hears("📦 10 фото",   (ctx) => sendAutoPayment(ctx, "photo_pack10"));
-bot.hears("📦 20 фото",   (ctx) => sendAutoPayment(ctx, "photo_pack20"));
-bot.hears("📦 30 фото",   (ctx) => sendAutoPayment(ctx, "photo_pack30"));
-bot.hears("🔥 50 фото",   (ctx) => sendAutoPayment(ctx, "photo_pack50"));
-bot.hears("🎬 3 Seedance", (ctx) => sendAutoPayment(ctx, "seedance_pack3"));
-bot.hears("🎬 5 Seedance", (ctx) => sendAutoPayment(ctx, "seedance_pack5"));
-bot.hears("🎬 10 Seedance",(ctx) => sendAutoPayment(ctx, "seedance_pack10"));
-bot.hears("🎥 3 Kling",   (ctx) => sendAutoPayment(ctx, "kling_pack3"));
-bot.hears("🎥 5 Kling",   (ctx) => sendAutoPayment(ctx, "kling_pack5"));
-bot.hears("🎥 10 Kling",  (ctx) => sendAutoPayment(ctx, "kling_pack10"));
+bot.hears("🌱 10 Promti",  (ctx) => sendAutoPayment(ctx, "promti_pack10"));
+bot.hears("📦 30 Promti",  (ctx) => sendAutoPayment(ctx, "promti_pack30"));
+bot.hears("🎯 60 Promti",  (ctx) => sendAutoPayment(ctx, "promti_pack60"));
+bot.hears("🔥 150 Promti", (ctx) => sendAutoPayment(ctx, "promti_pack150"));
 
 bot.action(/^checkpay_(.+)$/, async (ctx) => {
   try { await ctx.answerCbQuery("Якщо оплата пройшла — буде зараховано автоматично ✅"); }
@@ -1719,14 +1568,11 @@ bot.action(/^checkpay_(.+)$/, async (ctx) => {
 });
 
 // ─── АПСЕЛ INLINE КНОПКИ ─────────────────────────────────────────────────────
-bot.action("upsell_seedance", async (ctx) => {
-  try { await ctx.answerCbQuery(); ensureSession(ctx); ctx.session.mode = "video"; ctx.session.style = "seedance"; await ctx.reply("Обери пакет Seedance 🎬:", buySeedanceMenu()); }
-  catch (e) { console.error("UPSELL SEEDANCE:", e.message); }
-});
-
-bot.action("upsell_kling", async (ctx) => {
-  try { await ctx.answerCbQuery(); ensureSession(ctx); ctx.session.mode = "video"; ctx.session.style = "kling"; await ctx.reply("Обери пакет Kling 🎥:", buyKlingMenu()); }
-  catch (e) { console.error("UPSELL KLING:", e.message); }
+bot.action("upsell_promti", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    await ctx.reply("💎 Обери пакет Promti ✨", buyPromtiMenu());
+  } catch (e) { console.error("UPSELL PROMTI:", e.message); }
 });
 
 // ─── AI ПРОМТ INLINE КНОПКИ ───────────────────────────────────────────────────
@@ -1756,22 +1602,19 @@ const ALL_BUTTONS = [
   "🖼 Редагувати фото","✨ Створити фото",
   "⚡ Авто анімація","🎬 Анімація + промт","🎥 Відео з тексту",
   "🤖 AI промт для фото","🤖 AI промт для відео",
-  "💳 Купити фото","📊 Баланс фото","💳 Купити Seedance","💳 Купити Kling","📊 Баланс відео",
+  "💳 Купити Promti",
   "🎬 Seedance","🎥 Kling",
-  "📦 10 фото","📦 20 фото","📦 30 фото","🔥 50 фото",
-  "🎬 3 Seedance","🎬 5 Seedance","🎬 10 Seedance",
-  "🎥 3 Kling","🎥 5 Kling","🎥 10 Kling",
+  "🌱 10 Promti","📦 30 Promti","🎯 60 Promti","🔥 150 Promti",
   "📊 Статус бота","👤 Мій ID","👥 Користувачі","💳 Останні оплати","📈 Аналітика",
   "✏️ Змінити текст","📝 Поточні тексти","⚙️ Налаштування","📦 Пакети",
   "portrait","beauty","fashion","art","trend","seedance","kling",
-  "welcomeText","infoText","helpText","supportText","ideaText",
+  "welcomeText","infoText","helpText","supportText","ideaText","pricesText",
   "↩️ Назад","↩️ Назад до фото","↩️ Назад до відео",
 ];
 
 bot.on("text", async (ctx, next) => {
   try {
     ensureSession(ctx); touchUser(ctx);
-    // ✅ Перевірка бану
     if (users[ctx.from.id]?.banned) return ctx.reply("🚫 Ваш акаунт заблокований. Напишіть в підтримку.");
     const text = ctx.message.text;
     if (ALL_BUTTONS.includes(text) || text.startsWith("/")) return next();
@@ -1787,13 +1630,11 @@ bot.on("text", async (ctx, next) => {
       return ctx.reply(`✅ Текст "${key}" оновлено.`, adminMenu());
     }
 
-    // ✅ Валідація довжини промту
     if ((ctx.session.customType === "custom_photo" || ctx.session.customType === "create_photo") && ctx.session.awaitingCustomPrompt) {
       ctx.session.customPrompt = text;
       ctx.session.awaitingCustomPrompt = false;
 
       if (ctx.session.customType === "create_photo") {
-        // ✅ Запускаємо генерацію БЕЗ фото
         const user = getUser(ctx.from.id);
         if (userGenerating.has(ctx.from.id)) return ctx.reply("⏳ Зачекай, ще обробляється...");
         userGenerating.add(ctx.from.id);
@@ -1807,7 +1648,7 @@ bot.on("text", async (ctx, next) => {
       }
       return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", photoMenu());
     }
-    // ✅ Якщо авто анімація і юзер пише текст — це опціональний промт
+
     if (ctx.session.mode === "video" && ctx.session.videoInputMode === "image" && !ctx.session.awaitingCustomPrompt) {
       ctx.session.customPrompt = text;
       const style = ctx.session.style;
@@ -1823,7 +1664,6 @@ bot.on("text", async (ctx, next) => {
       const menu = style === "kling" ? klingMenu() : seedanceMenu();
 
       if (videoInputMode === "text") {
-        // ✅ Запускаємо text-to-video БЕЗ фото
         const user = getUser(ctx.from.id);
         if (userGenerating.has(ctx.from.id)) return ctx.reply("⏳ Зачекай, ще обробляється...");
         userGenerating.add(ctx.from.id);
@@ -1900,13 +1740,10 @@ bot.on("photo", async (ctx) => {
   const MAX_QUEUE = 50;
   const currentQueue = ctx.session.mode === "video" ? videoQueue : photoQueue;
   if (currentQueue.length >= MAX_QUEUE) return ctx.reply("⚠️ Сервіс зараз перевантажений. Спробуй через кілька хвилин.");
-  // ✅ Не дублюємо — processQueue сам повідомить про позицію в черзі
 
   userGenerating.add(userId);
 
-  // ✅ ВИПРАВЛЕНИЙ catch блок
   const genType = ctx.session.mode === "video" ? "video" : "photo";
-  // ✅ Без await — бот не зависає поки генерує
   enqueueGeneration(userId, () => _processGeneration(ctx, user, userId, ctx.session.mode, photo), genType, ctx)
     .catch(e => {
       userGenerating.delete(userId);
@@ -1918,9 +1755,8 @@ bot.on("photo", async (ctx) => {
 // ─── ПРОЦЕСИНГ ГЕНЕРАЦІЇ ─────────────────────────────────────────────────────
 async function _processGeneration(ctx, user, userId, mode, photo) {
   const cfg = loadSettings();
-  let chargedFromBalance = false;
-  let usedFree           = false;
-  const startMs          = Date.now();
+  let chargedCost = 0;
+  const startMs   = Date.now();
 
   try {
     touchRateLimit(userId, mode === "video" ? "video" : "photo");
@@ -1931,14 +1767,21 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       if (!videoStyle) { userGenerating.delete(userId); return ctx.reply("Обери модель: 🎬 Seedance або 🎥 Kling", videoMenu()); }
       if (ctx.session.awaitingCustomPrompt) { userGenerating.delete(userId); return ctx.reply("Спочатку напиши промт текстом.", videoMenu()); }
 
+      const cost = videoStyle === "kling" ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance;
+
       if (!isAdmin(userId)) {
         const dailyErr = checkDailyVideoLimit(user, videoStyle);
         if (dailyErr) { userGenerating.delete(userId); return ctx.reply(dailyErr, videoMenu()); }
-        if ((user.videoBalance || 0) <= 0) {
+        if ((user.promti || 0) < cost) {
           userGenerating.delete(userId);
-          return ctx.reply(`❌ Баланс відео вичерпано\n💳 Купи ${videoStyle === "seedance" ? "Seedance" : "Kling"}`, videoMenu());
+          return ctx.reply(
+            `❌ Недостатньо Promti ✨\n\nПотрібно: ${cost} ✨\nБаланс: ${user.promti || 0} ✨\n\n💳 Купи пакет Promti`,
+            Markup.inlineKeyboard([[Markup.button.callback("💎 Купити Promti ✨", "upsell_promti")]])
+          );
         }
-        user.videoBalance -= 1; chargedFromBalance = true; saveUsers();
+        user.promti -= cost;
+        chargedCost = cost;
+        saveUsers();
       }
 
       const prompt       = ctx.session.customPrompt || prompts[videoStyle];
@@ -1952,42 +1795,28 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       try {
         let videoUrl = null;
         if (videoStyle === "seedance") {
-          const videoInputMode = ctx.session.videoInputMode || "image";
           if (videoInputMode === "text") {
-            // ✍️ Текст → Відео
-            // Мінімальний запит для text-to-video
             const result = await falWithRetry(
               "bytedance/seedance-2.0/fast/text-to-video",
-              {
-                prompt,
-                generate_audio: false, // ✅ вимикаємо аудіо
-              },
+              { prompt, generate_audio: false },
               cfg.seedanceTimeoutMs
             );
             videoUrl = result?.data?.video?.url;
           } else {
-            // 📸 Фото → Відео — завантажуємо фото на FAL для отримання публічного URL
             const imageUrl = await uploadImageToFal(image);
             console.log("SEEDANCE INPUT:", { prompt: prompt?.slice(0, 50), image_url: imageUrl });
             if (!imageUrl || imageUrl.startsWith("data:")) {
               throw new Error("imageUrl invalid or fallback base64 — upload failed");
             }
-            console.log("SEEDANCE FINAL INPUT:", { prompt, image_url: imageUrl });
             const result = await falWithRetry(
               "bytedance/seedance-2.0/fast/image-to-video",
-              {
-                prompt: prompt || "cinematic motion, smooth animation",
-                image_url: imageUrl,
-                generate_audio: false, // ✅ вимикаємо аудіо — воно блокується content policy
-              },
+              { prompt: prompt || "cinematic motion, smooth animation", image_url: imageUrl, generate_audio: false },
               cfg.seedanceTimeoutMs
             );
             videoUrl = result?.data?.video?.url;
           }
         } else {
-          const videoInputMode = ctx.session.videoInputMode || "image";
           if (videoInputMode === "text") {
-            // ✍️ Текст → Відео
             const result = await falWithRetry(
               "fal-ai/kling-video/v3/pro/text-to-video",
               {
@@ -2002,7 +1831,6 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             );
             videoUrl = result?.data?.video?.url;
           } else {
-            // 📸 Фото → Відео
             if (!image) throw new Error("No image provided for Kling");
             const result = await falWithRetry(
               "fal-ai/kling-video/v3/pro/image-to-video",
@@ -2034,22 +1862,22 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
 
         const caption = isAdmin(userId)
           ? `🎬 Відео готове ✨\nМодель: ${videoStyle}\nАдмін: безліміт ✅`
-          : `🎬 Відео готове ✨\n${videoStyle === "seedance" ? "🎬" : "🎥"} Залишилось: ${user.videoBalance}`;
+          : `🎬 Відео готове ✨\n✨ Залишилось: ${user.promti} Promti`;
 
         await tgSendWithRetry(() => ctx.replyWithVideo({ url: videoUrl }, { caption }));
 
-        if (!isAdmin(userId) && user.videoBalance <= 2) {
-          const buyBtn = videoStyle === "kling"
-            ? [Markup.button.callback("💳 Купити Kling", "upsell_kling"), Markup.button.callback("💳 Купити Seedance", "upsell_seedance")]
-            : [Markup.button.callback("💳 Купити Seedance", "upsell_seedance"), Markup.button.callback("💳 Купити Kling", "upsell_kling")];
-          await ctx.reply(`💡 Залишилось відео: ${user.videoBalance}. Поповни пакет!`, Markup.inlineKeyboard([buyBtn]));
+        if (!isAdmin(userId) && user.promti <= 5) {
+          await ctx.reply(
+            `💡 Залишилось ${user.promti} ✨ Promti. Поповни баланс щоб продовжити!`,
+            Markup.inlineKeyboard([[Markup.button.callback("💎 Купити Promti ✨", "upsell_promti")]])
+          );
         }
         return;
 
       } catch (e) {
         stopProgress();
         userGenerating.delete(userId);
-        if (!isAdmin(userId) && chargedFromBalance) { user.videoBalance += 1; saveUsers(); }
+        if (!isAdmin(userId) && chargedCost > 0) { user.promti = (user.promti || 0) + chargedCost; saveUsers(); }
         appendLog({ type: "video", model: videoStyle, userId, prompt, success: false, error: e.message, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
         throw e;
       }
@@ -2057,7 +1885,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
 
     // ══ ФОТО ══
     const customType = ctx.session.customType;
-    const photoMode  = ctx.session.photoMode || "edit"; // edit або create
+    const photoMode  = ctx.session.photoMode || "edit";
     let prompt = "";
 
     if (customType === "custom_photo" || customType === "create_photo") {
@@ -2068,17 +1896,24 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       return ctx.reply("Обери режим: 🖼 Редагувати фото або ✨ Створити фото", photoMenu());
     }
 
+    const cost = PROMTI_PRICES.photo;
+
     if (!isAdmin(userId)) {
-      if (!user.freeUsed) { user.freeUsed = true; usedFree = true; }
-      else if (user.balance <= 0) { userGenerating.delete(userId); return ctx.reply("❌ Баланс фото вичерпано\n💳 Купити фото", photoMenu()); }
-      else { user.balance -= 1; chargedFromBalance = true; }
+      if ((user.promti || 0) < cost) {
+        userGenerating.delete(userId);
+        return ctx.reply(
+          `❌ Недостатньо Promti ✨\n\nПотрібно: ${cost} ✨\nБаланс: ${user.promti || 0} ✨\n\n💳 Купи пакет Promti`,
+          Markup.inlineKeyboard([[Markup.button.callback("💎 Купити Promti ✨", "upsell_promti")]])
+        );
+      }
+      user.promti -= cost;
+      chargedCost = cost;
       saveUsers();
     }
 
     let url = null;
 
     if (photoMode === "create") {
-      // ✨ Створення фото з тексту — fal-ai/nano-banana-2 (text-to-image)
       await ctx.reply("⏳ Створюю фото з нуля... (~45 сек)");
       const result = await falWithRetry(
         "fal-ai/nano-banana-2",
@@ -2094,7 +1929,6 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       );
       url = result?.data?.images?.[0]?.url;
     } else {
-      // 🖼 Редагування існуючого фото — fal-ai/nano-banana-2/edit
       await ctx.reply("⏳ Редагую фото... (~45 сек)");
       const image  = await getImage(ctx, photo.file_id);
       const result = await falWithRetry(
@@ -2121,13 +1955,18 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     log("PHOTO_OK", userId, `dur:${Date.now()-startMs}ms`);
     appendLog({ type: "photo", model: customType || "custom", userId, prompt, success: true, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
 
-    const caption = isAdmin(userId) ? "Готово ✨\nАдмін: безліміт ✅" : `Готово ✨\n🖼 Залишилось фото: ${user.balance}`;
+    const caption = isAdmin(userId) ? "Готово ✨\nАдмін: безліміт ✅" : `Готово ✨\n✨ Залишилось: ${user.promti} Promti`;
     await tgSendWithRetry(() => ctx.replyWithPhoto({ url }, { caption }));
 
-    if (!isAdmin(userId) && user.generations % 3 === 0) {
+    if (!isAdmin(userId) && user.promti <= 5) {
+      await ctx.reply(
+        `💡 Залишилось ${user.promti} ✨ Promti. Поповни баланс!`,
+        Markup.inlineKeyboard([[Markup.button.callback("💎 Купити Promti ✨", "upsell_promti")]])
+      );
+    } else if (!isAdmin(userId) && user.generations % 3 === 0) {
       await ctx.reply(
         "💡 Хочеш оживити це фото? Спробуй відео-генерацію!",
-        Markup.inlineKeyboard([[Markup.button.callback("🎬 Seedance", "upsell_seedance"), Markup.button.callback("🎥 Kling", "upsell_kling")]])
+        Markup.inlineKeyboard([[Markup.button.callback("💎 Купити Promti ✨", "upsell_promti")]])
       );
     }
     return;
@@ -2135,9 +1974,8 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
   } catch (e) {
     userGenerating.delete(userId);
     console.error("GENERATION ERROR:", e.message);
-    if (!isAdmin(userId)) {
-      if (chargedFromBalance) { if (mode === "video") user.videoBalance = (user.videoBalance || 0) + 1; else user.balance += 1; }
-      if (usedFree) user.freeUsed = false;
+    if (!isAdmin(userId) && chargedCost > 0) {
+      user.promti = (user.promti || 0) + chargedCost;
       saveUsers();
     }
     notifyAdminsError(`${mode === "video" ? "VIDEO" : "PHOTO"} ERROR: user ${userId}\n${e.message}`).catch(() => {});
@@ -2192,7 +2030,7 @@ bot.on(["video", "video_note"], async (ctx) => {
 const app = express();
 app.set("trust proxy", 1);
 app.use((req, res, next) => {
-  if (req.path === "/payment") return next(); // пропускаємо — обробляємо окремо
+  if (req.path === "/payment") return next();
   express.json({ limit: "1mb" })(req, res, (err) => {
     if (err) return next(err);
     express.urlencoded({ extended: true })(req, res, next);
@@ -2209,6 +2047,7 @@ app.get("/health", (_, res) => {
     totalUsers: s.totalUsers, bannedUsers: s.bannedUsers,
     photo: s.totalPhotoGen, seedance: s.totalSeedanceGen, kling: s.totalKlingGen,
     revenue: s.totalRevenue,
+    promtiInCirculation: s.totalPromtiInCirculation,
     flags: { aiPrompt: cfg.aiPromptEnabled, video: cfg.videoEnabled },
     keys: { fal: s.hasFalKey, wfp: s.hasWfp, anthropic: s.hasAnthropicKey },
   });
@@ -2227,10 +2066,8 @@ app.post("/payment",
     console.log("RAW PREVIEW:", typeof raw === "string" ? raw.slice(0, 100) : JSON.stringify(raw).slice(0, 100));
 
     if (typeof raw === "string") {
-      // WayForPay надіслав як text — парсимо напряму
       try { data = JSON.parse(raw); }
       catch(e) {
-        // можливо urlencoded — шукаємо JSON в ключах
         try {
           const decoded = decodeURIComponent(raw);
           if (decoded.includes("merchantAccount")) data = JSON.parse(decoded);
@@ -2241,17 +2078,11 @@ app.post("/payment",
     }
 
     console.log("=== WFP CALLBACK ===", JSON.stringify(data));
-    console.log("merchantSignature:", data.merchantSignature);
 
-    // ✅ Діагностика підпису  
     const expectedSig = signWfpCallback(data);
-    console.log("EXPECTED SIG:", expectedSig);
-    console.log("RECEIVED SIG:", data.merchantSignature);
-    console.log("MATCH:", expectedSig === data.merchantSignature);
-
     if (expectedSig !== data.merchantSignature) {
       log("WFP_SIG_INVALID", null, `ref:${data.orderReference}`);
-    console.error("WFP SIGNATURE INVALID");
+      console.error("WFP SIGNATURE INVALID");
       return res.status(200).json(buildWfpAcceptResponse(data.orderReference || "unknown"));
     }
 
@@ -2263,7 +2094,6 @@ app.post("/payment",
 
     const { userId, packKey } = parsed;
 
-    // ✅ ВАЛІДАЦІЯ PACK — захист від краша
     const pack = getPackages()[packKey];
     if (!pack) {
       console.error("WFP UNKNOWN PACK:", packKey);
@@ -2281,47 +2111,40 @@ app.post("/payment",
       const p = payments.find(x => x.orderReference === data.orderReference);
       if (p) { p.status = "credited"; p.updatedAt = new Date().toISOString(); p.amount = Number(data.amount || 0); p.callback = data; }
 
-      if (pack.type === "video") {
-        user.videoBalance    = (user.videoBalance    || 0) + pack.count;
-        user.purchasedVideos = (user.purchasedVideos || 0) + pack.count;
-      } else {
-        user.balance         += pack.count;
-        user.purchasedPhotos = (user.purchasedPhotos || 0) + pack.count;
-      }
+      // ✅ Нараховуємо Promti
+      user.promti          = (user.promti          || 0) + pack.promti;
+      user.purchasedPromti = (user.purchasedPromti || 0) + pack.promti;
+
       user.totalSpent            = (user.totalSpent || 0) + Number(data.amount || 0);
       user.pendingOrderReference = null;
       user.lastPaidAt            = new Date().toISOString();
       saveUsersSync(); savePayments();
 
-      log("CREDITED", userId, `pack:${packKey} +${pack.count} amount:${data.amount}грн`);
-      console.log(`✅ CREDITED: user ${userId}, pack ${packKey}, +${pack.count}`);
+      log("CREDITED", userId, `pack:${packKey} +${pack.promti}✨ amount:${data.amount}грн`);
+      console.log(`✅ CREDITED: user ${userId}, pack ${packKey}, +${pack.promti} Promti`);
 
       // ✅ Реферальний бонус після першої оплати
       if (user.referredBy && !user.refPaid) {
         const referrer = getUser(user.referredBy);
         if (referrer) {
           user.refPaid       = true;
-          referrer.balance   = (referrer.balance || 0) + REFERRAL_PHOTO_BONUS;
-          referrer.referralEarned = (referrer.referralEarned || 0) + REFERRAL_PHOTO_BONUS;
+          referrer.promti    = (referrer.promti || 0) + REFERRAL_PROMTI_BONUS;
+          referrer.referralEarned = (referrer.referralEarned || 0) + REFERRAL_PROMTI_BONUS;
           saveUsersSync();
           try {
             await bot.telegram.sendMessage(
               user.referredBy,
-              `🎉 Твій друг зробив першу оплату!\n+${REFERRAL_PHOTO_BONUS} фото нараховано 🖼\nБаланс фото: ${referrer.balance}`
+              `🎉 Твій друг зробив першу оплату!\n+${REFERRAL_PROMTI_BONUS} ✨ Promti нараховано\nБаланс: ${referrer.promti} ✨`
             );
           } catch (e) { console.error("REFERRAL BONUS NOTIFY:", e.message); }
-          log("REFERRAL_BONUS", user.referredBy, `from user:${userId} +${REFERRAL_PHOTO_BONUS} фото`);
+          log("REFERRAL_BONUS", user.referredBy, `from user:${userId} +${REFERRAL_PROMTI_BONUS}✨`);
         }
       }
-
-      const emoji        = pack.type === "video" ? (pack.model === "kling" ? "🎥" : "🎬") : "🖼";
-      const balanceNow   = pack.type === "video" ? user.videoBalance : user.balance;
-      const balanceLabel = pack.type === "video" ? "Баланс відео" : "Баланс фото";
 
       try {
         await bot.telegram.sendMessage(
           userId,
-          `✅ Оплату підтверджено!\n\n${emoji} ${pack.title}\nЗараховано: ${pack.count}\n${balanceLabel}: ${balanceNow}`,
+          `✅ Оплату підтверджено!\n\n✨ ${pack.title}\nНараховано: +${pack.promti} Promti\nБаланс: ${user.promti} ✨`,
           mainMenu()
         );
       } catch (e) { console.error("SEND USER MSG:", e.message); }
@@ -2355,6 +2178,7 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`⚙️  maxWorkers: ${cfg.maxWorkers} | photoRL: ${cfg.photoRateLimitMs}ms | videoRL: ${cfg.videoRateLimitMs}ms`);
   console.log(`📅 Seedance limit/day: ${cfg.dailySeedanceLimit} | Kling: ${cfg.dailyKlingLimit}`);
   console.log(`🤖 AI промт: ${cfg.aiPromptEnabled ? "✅" : "❌"} | Anthropic key: ${process.env.ANTHROPIC_API_KEY ? "✅" : "❌"}`);
+  console.log(`✨ Promti prices: photo=${PROMTI_PRICES.photo} | seedance=${PROMTI_PRICES.seedance} | kling=${PROMTI_PRICES.kling}`);
 });
 
 // ─── BACKUP КОЖНІ 6 ГОДИН ────────────────────────────────────────────────────
@@ -2387,12 +2211,11 @@ bot.launch({
   allowedUpdates: ["message", "callback_query"],
 })
   .then(() => {
-    console.log("🔥 Бот запущений (v5)");
+    console.log("🔥 Бот запущений (v6 — Promti ✨)");
     runBackup();
   })
   .catch(err => {
     console.error("BOT LAUNCH ERROR:", err.message);
-    // Retry після 5 сек якщо таймаут
     if (err.message && err.message.includes("timed out")) {
       console.log("🔄 Retrying bot launch in 5s...");
       setTimeout(() => {
@@ -2407,13 +2230,10 @@ bot.launch({
 async function gracefulShutdown(signal) {
   console.log(`⏳ ${signal} — чекаємо завершення генерацій...`);
 
-  // Повідомляємо адмінів
   for (const adminId of ADMINS) {
-    bot.telegram.sendMessage(adminId, `⚠️ Бот перезапускається (${signal})
-Активних генерацій: ${activeWorkers}`).catch(() => {});
+    bot.telegram.sendMessage(adminId, `⚠️ Бот перезапускається (${signal})\nАктивних генерацій: ${activeWorkers}`).catch(() => {});
   }
 
-  // Чекаємо поки всі воркери завершать (макс 5 хвилин)
   const maxWait = 5 * 60 * 1000;
   const start   = Date.now();
 
@@ -2424,16 +2244,11 @@ async function gracefulShutdown(signal) {
 
   if (activeWorkers > 0) {
     console.log(`⚠️ Таймаут очікування — зупиняємось з ${activeWorkers} активними генераціями`);
-    // Повертаємо баланс всім хто генерує
     for (const userId of userGenerating) {
-      const user = users[userId];
-      if (user) {
-        // Повідомляємо юзера
-        bot.telegram.sendMessage(
-          userId,
-          "⚠️ Генерацію перервано через оновлення бота.\nБаланс збережено — спробуй ще раз!"
-        ).catch(() => {});
-      }
+      bot.telegram.sendMessage(
+        userId,
+        "⚠️ Генерацію перервано через оновлення бота.\nБаланс збережено — спробуй ще раз!"
+      ).catch(() => {});
     }
     saveUsers();
   }

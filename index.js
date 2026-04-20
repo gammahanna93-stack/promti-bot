@@ -492,6 +492,29 @@ function validatePhoto(photo) {
 }
 
 // ─── ОТРИМАННЯ ЗОБРАЖЕННЯ ─────────────────────────────────────────────────────
+// ─── ХЕЛПЕР: надіслати текст з опціональним фото ────────────────────────────
+// Якщо фото є і текст ≤1024 символів → фото з caption
+// Якщо фото є і текст довший → фото без caption + текст окремим повідомленням
+// Якщо фото немає → звичайний текст
+async function sendWithOptionalPhoto(ctx, text, photoFileId, menu) {
+  try {
+    if (!photoFileId) {
+      return await ctx.reply(text, menu);
+    }
+    const CAPTION_LIMIT = 1024;
+    if (text.length <= CAPTION_LIMIT) {
+      return await ctx.replyWithPhoto(photoFileId, { caption: text, ...menu });
+    }
+    // Текст задовгий → фото без caption + текст окремо
+    await ctx.replyWithPhoto(photoFileId).catch(() => {});
+    return await ctx.reply(text, menu);
+  } catch (e) {
+    console.error("sendWithOptionalPhoto ERROR:", e.message);
+    // Fallback на звичайний текст якщо фото не вдалось надіслати
+    try { return await ctx.reply(text, menu); } catch {}
+  }
+}
+
 async function getImage(ctx, fileId, maxRetries = 3) {
   let lastErr = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -763,10 +786,11 @@ function getBotStats() {
 // ─── МЕНЮ ─────────────────────────────────────────────────────────────────────
 const mainMenu  = () => Markup.keyboard([
   ["🖼 Фото", "🎬 Відео"],
-  ["✨ Купити Promti", "📊 Баланс"],
-  ["💰 Ціни", "💡 Ідея для промтів"],
-  ["👫 Запросити друга", "ℹ️ Інформація"],
-  ["❓ Допомога", "🆘 Підтримка"]
+  ["✨ Купити Promti ✨"],
+  ["📊 Баланс", "💰 Ціни"],
+  ["💡 Ідея для промтів", "👫 Запросити друга"],
+  ["ℹ️ Інформація", "❓ Допомога"],
+  ["🆘 Підтримка"]
 ]).resize();
 const photoMenu = () => Markup.keyboard([
   ["🖼 Редагувати фото", "✨ Створити фото"],
@@ -795,11 +819,17 @@ const adminMenu       = () => Markup.keyboard([
   ["👥 Користувачі", "💳 Останні оплати"],
   ["📈 Аналітика", "📦 Пакети"],
   ["✏️ Змінити текст", "📝 Поточні тексти"],
-  ["⚙️ Налаштування"],
+  ["🖼 Прикріпити фото", "⚙️ Налаштування"],
   ["↩️ Назад"],
 ]).resize();
 const adminPromptsMenu = () => Markup.keyboard([["portrait", "beauty"], ["fashion", "art"], ["trend", "seedance"], ["kling"], ["↩️ Назад"]]).resize();
 const adminTextsMenu   = () => Markup.keyboard([["welcomeText", "infoText"], ["helpText", "supportText"], ["ideaText", "pricesText"], ["↩️ Назад"]]).resize();
+const adminPhotosMenu  = () => Markup.keyboard([
+  ["📷 welcomePhoto", "📷 infoPhoto"],
+  ["📷 helpPhoto", "📷 pricesPhoto"],
+  ["📷 ideaPhoto", "📷 broadcastPhoto"],
+  ["↩️ Назад"]
+]).resize();
 
 const paymentInlineKeyboard = (payUrl, pack) => Markup.inlineKeyboard([
   [Markup.button.url(`💳 Оплатити ${pack.title} — ${pack.priceText}`, payUrl)],
@@ -817,12 +847,12 @@ bot.start(async (ctx) => {
     const refId = Number(payload.replace("ref_", ""));
     if (refId && refId !== ctx.from.id) await handleReferral(ctx, refId);
   }
-  return ctx.reply(content.welcomeText, mainMenu());
+  return sendWithOptionalPhoto(ctx, content.welcomeText, content.welcomePhoto, mainMenu());
 });
 
 // ─── КОМАНДИ ──────────────────────────────────────────────────────────────────
-bot.command("help",  (ctx) => { touchUser(ctx); return ctx.reply(content.helpText,  mainMenu()); });
-bot.command("info",  (ctx) => { touchUser(ctx); return ctx.reply(content.infoText,  mainMenu()); });
+bot.command("help",  (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.helpText, content.helpPhoto, mainMenu()); });
+bot.command("info",  (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.infoText, content.infoPhoto, mainMenu()); });
 bot.command("myid",  (ctx) => { touchUser(ctx); return ctx.reply(`Твій ID: ${ctx.from.id}`); });
 bot.command("admin", (ctx) => {
   touchUser(ctx);
@@ -840,7 +870,8 @@ bot.command("admin", (ctx) => {
     "📦 Пакети — всі пакети з цінами\n" +
     "✏️ Змінити текст — редагувати тексти бота\n" +
     "📝 Поточні тексти — переглянути всі тексти\n" +
-    "⚙️ Налаштування — ліміти черги, таймаути, денні ліміти\n\n" +
+    "⚙️ Налаштування — ліміти черги, таймаути, денні ліміти\n" +
+    "🖼 Прикріпити фото — додати/видалити фото до welcomeText, infoText, helpText, pricesText, ideaText або broadcast\n\n" +
 
     "💰 ЦІНИ ТА ПАКЕТИ:\n" +
     "/packages — переглянути всі пакети і ціни\n" +
@@ -949,20 +980,31 @@ bot.command("broadcast", async (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const text = ctx.message.text.replace("/broadcast", "").trim();
-  if (!text) return ctx.reply("Формат: /broadcast Текст");
+  if (!text) return ctx.reply("Формат: /broadcast Текст\n\nЯкщо прикріплено 📷 broadcastPhoto — надішлеться з фото.");
 
   const all = Object.values(users).filter(u => !u.banned);
   let sent = 0, failed = 0;
-  await ctx.reply(`⏳ Надсилаю ${all.length} користувачам...`);
+  const photoId = content.broadcastPhoto || null;
+  await ctx.reply(`⏳ Надсилаю ${all.length} користувачам${photoId ? " (з фото)" : ""}...`);
 
   const BATCH_SIZE  = 25;
   const BATCH_DELAY = 1500;
   const MSG_DELAY   = 50;
+  const CAPTION_LIMIT = 1024;
 
   for (let i = 0; i < all.length; i++) {
     const u = all[i];
     try {
-      await bot.telegram.sendMessage(u.id, text, mainMenu());
+      if (photoId) {
+        if (text.length <= CAPTION_LIMIT) {
+          await bot.telegram.sendPhoto(u.id, photoId, { caption: text, ...mainMenu() });
+        } else {
+          await bot.telegram.sendPhoto(u.id, photoId).catch(() => {});
+          await bot.telegram.sendMessage(u.id, text, mainMenu());
+        }
+      } else {
+        await bot.telegram.sendMessage(u.id, text, mainMenu());
+      }
       sent++;
     } catch { failed++; }
 
@@ -1206,6 +1248,52 @@ bot.hears(["welcomeText", "infoText", "helpText", "supportText", "ideaText", "pr
   return ctx.reply(`Ключ: ${ctx.message.text}\n\nПоточний:\n${content[ctx.message.text]}\n\nНадішли новий.`, adminMenu());
 });
 
+// ─── АДМІН: УПРАВЛІННЯ ФОТО ───────────────────────────────────────────────────
+bot.hears("🖼 Прикріпити фото", (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+  resetState(ctx);
+  const statuses = [
+    `welcomePhoto   — ${content.welcomePhoto ? "✅" : "❌"}`,
+    `infoPhoto      — ${content.infoPhoto ? "✅" : "❌"}`,
+    `helpPhoto      — ${content.helpPhoto ? "✅" : "❌"}`,
+    `pricesPhoto    — ${content.pricesPhoto ? "✅" : "❌"}`,
+    `ideaPhoto      — ${content.ideaPhoto ? "✅" : "❌"}`,
+    `broadcastPhoto — ${content.broadcastPhoto ? "✅" : "❌"}`,
+  ].join("\n");
+  return ctx.reply(
+    `🖼 Прикріпити фото до тексту\n\n` +
+    `Поточний стан:\n${statuses}\n\n` +
+    `Обери який текст — потім надішли фото.\n` +
+    `Щоб видалити існуюче — надішли "видалити" замість фото.`,
+    adminPhotosMenu()
+  );
+});
+
+bot.hears(["📷 welcomePhoto", "📷 infoPhoto", "📷 helpPhoto", "📷 pricesPhoto", "📷 ideaPhoto", "📷 broadcastPhoto"], (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return;
+  const map = {
+    "📷 welcomePhoto":   "welcomePhoto",
+    "📷 infoPhoto":      "infoPhoto",
+    "📷 helpPhoto":      "helpPhoto",
+    "📷 pricesPhoto":    "pricesPhoto",
+    "📷 ideaPhoto":      "ideaPhoto",
+    "📷 broadcastPhoto": "broadcastPhoto",
+  };
+  const key = map[ctx.message.text];
+  if (!key) return;
+  ctx.session.awaitingPhotoForKey = key;
+  const current = content[key];
+  return ctx.reply(
+    `Ключ: ${key}\n\n` +
+    `Поточне фото: ${current ? "✅ є" : "❌ нема"}\n\n` +
+    `Надішли нове фото. Або напиши "видалити" щоб прибрати існуюче.`,
+    adminMenu()
+  );
+});
+
+
 bot.hears("⚙️ Налаштування", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
@@ -1320,10 +1408,10 @@ bot.hears("↩️ Назад до відео", (ctx) => {
     videoMenu()
   );
 });
-bot.hears("ℹ️ Інформація",     (ctx) => { touchUser(ctx); return ctx.reply(content.infoText,    mainMenu()); });
-bot.hears("❓ Допомога",       (ctx) => { touchUser(ctx); return ctx.reply(content.helpText,    mainMenu()); });
+bot.hears("ℹ️ Інформація",     (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.infoText,    content.infoPhoto,    mainMenu()); });
+bot.hears("❓ Допомога",       (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.helpText,    content.helpPhoto,    mainMenu()); });
 bot.hears("🆘 Підтримка",      (ctx) => { touchUser(ctx); return ctx.reply(content.supportText, mainMenu()); });
-bot.hears("💰 Ціни",           (ctx) => { touchUser(ctx); return ctx.reply(content.pricesText || "💰 Ціни тимчасово недоступні", mainMenu()); });
+bot.hears("💰 Ціни",           (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.pricesText || "💰 Ціни тимчасово недоступні", content.pricesPhoto, mainMenu()); });
 
 bot.hears("💬 Своя сума", async (ctx) => {
   touchUser(ctx);
@@ -1335,7 +1423,7 @@ bot.hears("💬 Своя сума", async (ctx) => {
   );
 });
 
-bot.hears(["✨ Купити Promti", "💳 Купити Promti"], (ctx) => {
+bot.hears(["✨ Купити Promti ✨", "✨ Купити Promti", "💳 Купити Promti"], (ctx) => {
   touchUser(ctx);
   if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
   return ctx.reply(
@@ -1380,7 +1468,7 @@ bot.hears("👫 Запросити друга", async (ctx) => {
     mainMenu()
   );
 });
-bot.hears("💡 Ідея для промтів",(ctx) => { touchUser(ctx); return ctx.reply(content.ideaText,   mainMenu()); });
+bot.hears("💡 Ідея для промтів",(ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.ideaText, content.ideaPhoto, mainMenu()); });
 
 // ─── БАЛАНС ───────────────────────────────────────────────────────────────────
 bot.hears("📊 Баланс", (ctx) => {
@@ -1706,11 +1794,13 @@ const ALL_BUTTONS = [
   "🖼 Редагувати фото","✨ Створити фото",
   "⚡ Авто анімація","🎬 Анімація + промт","🎥 Відео з тексту",
   "🤖 AI промт для фото","🤖 AI промт для відео",
-  "✨ Купити Promti","💳 Купити Promti","💬 Своя сума",
+  "✨ Купити Promti ✨","✨ Купити Promti","💳 Купити Promti","💬 Своя сума",
   "🎬 Seedance","🎥 Kling",
   "↩️ Назад","↩️ Назад до відео","↩️ Назад до фото",
   "📊 Статус бота","👤 Мій ID","👥 Користувачі","💳 Останні оплати","📈 Аналітика",
   "📦 Пакети","✏️ Змінити текст","📝 Поточні тексти","⚙️ Налаштування",
+  "🖼 Прикріпити фото",
+  "📷 welcomePhoto","📷 infoPhoto","📷 helpPhoto","📷 pricesPhoto","📷 ideaPhoto","📷 broadcastPhoto",
 ];
 
 bot.on("text", async (ctx, next) => {
@@ -1731,6 +1821,15 @@ bot.on("text", async (ctx, next) => {
       const key = ctx.session.awaitingTextEditKey; content[key] = text; saveContent();
       ctx.session.awaitingTextEditKey = null;
       return ctx.reply(`✅ Текст "${key}" оновлено.`, adminMenu());
+    }
+
+    // ✅ Адмін написав "видалити" щоб прибрати фото
+    if (isAdmin(ctx.from.id) && ctx.session.awaitingPhotoForKey && text.toLowerCase().trim() === "видалити") {
+      const key = ctx.session.awaitingPhotoForKey;
+      ctx.session.awaitingPhotoForKey = null;
+      delete content[key];
+      saveContent();
+      return ctx.reply(`✅ Фото "${key}" видалено.`, adminMenu());
     }
 
     if ((ctx.session.customType === "custom_photo" || ctx.session.customType === "create_photo") && ctx.session.awaitingCustomPrompt) {
@@ -1821,6 +1920,16 @@ bot.on("photo", async (ctx) => {
   if (user.banned) return ctx.reply("🚫 Ваш акаунт заблокований.");
 
   const photo         = ctx.message.photo[ctx.message.photo.length - 1];
+
+  // ✅ Адмін прикріпляє фото до текстового ключа (welcomePhoto/infoPhoto тощо)
+  if (isAdmin(userId) && ctx.session.awaitingPhotoForKey) {
+    const key = ctx.session.awaitingPhotoForKey;
+    ctx.session.awaitingPhotoForKey = null;
+    content[key] = photo.file_id;
+    saveContent();
+    return ctx.reply(`✅ Фото прикріплено до "${key}".\n\nПеревір як виглядає — натисни відповідну кнопку в головному меню.`, adminMenu());
+  }
+
   const validationErr = validatePhoto(photo);
   if (validationErr) return ctx.reply(validationErr);
 

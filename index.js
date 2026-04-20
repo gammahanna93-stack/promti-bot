@@ -205,9 +205,22 @@ const DEFAULT_PACKAGES = {
 
 function loadPackages() {
   const saved = loadJson(PACKAGES_PATH, null);
-  if (saved && Object.keys(saved).length > 0) return saved;
-  saveJson(PACKAGES_PATH, DEFAULT_PACKAGES);
-  return JSON.parse(JSON.stringify(DEFAULT_PACKAGES));
+  // ✅ Якщо файлу нема або в ньому відсутні ключі DEFAULT_PACKAGES — мержимо
+  if (!saved || Object.keys(saved).length === 0) {
+    saveJson(PACKAGES_PATH, DEFAULT_PACKAGES);
+    return JSON.parse(JSON.stringify(DEFAULT_PACKAGES));
+  }
+  // ✅ Якщо хоча б одного дефолтного пакету нема в saved — додаємо
+  let changed = false;
+  for (const key of Object.keys(DEFAULT_PACKAGES)) {
+    if (!saved[key]) {
+      saved[key] = DEFAULT_PACKAGES[key];
+      changed = true;
+      console.log(`📦 Додано дефолтний пакет: ${key}`);
+    }
+  }
+  if (changed) saveJson(PACKAGES_PATH, saved);
+  return saved;
 }
 
 let dynamicPackages = loadPackages();
@@ -864,6 +877,14 @@ bot.command("addpromti", async (ctx) => {
   saveUsersSync();
   await ctx.reply(`✅ +${amt} Promti ✨ → user ${id}. Баланс: ${user.promti} Promti ✨`);
   bot.telegram.sendMessage(Number(id), `🎉 +${amt} Promti ✨ на баланс!\nБаланс: ${user.promti} Promti ✨`, mainMenu()).catch(() => {});
+});
+
+bot.command("reset_packages", (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+  dynamicPackages = JSON.parse(JSON.stringify(DEFAULT_PACKAGES));
+  saveDynamicPackages();
+  const list = Object.keys(dynamicPackages).join("\n");
+  return ctx.reply(`✅ Пакети скинуто до дефолтних:\n\n${list}`);
 });
 
 bot.command("delete_user", (ctx) => {

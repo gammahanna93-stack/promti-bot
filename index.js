@@ -618,7 +618,9 @@ function buildOrderReference(userId, packKey) {
 }
 
 function parseOrderReference(ref) {
-  const m = /^tg_(\d+)_([\w]+_pack[\w]+)_\d+$/.exec(ref || "");
+  // ✅ Формат: tg_{userId}_{packKey}_{timestamp}
+  // packKey може бути: promti_pack10, custom_1776681162229, photo_pack20 і т.д.
+  const m = /^tg_(\d+)_(.+)_(\d+)$/.exec(ref || "");
   if (!m) return null;
   return { userId: Number(m[1]), packKey: m[2] };
 }
@@ -1770,6 +1772,7 @@ bot.on("text", async (ctx, next) => {
         priceText: `${amount} грн`,
         temporary: true,
       };
+      saveDynamicPackages(); // ✅ зберігаємо на диск щоб callback міг знайти пакет навіть після рестарту
       await ctx.reply(
         `💎 Твій пакет:\n${promtiCount} Promti ✨ — ${amount} грн\n\nПерейти до оплати?`,
         Markup.inlineKeyboard([[Markup.button.callback("💳 Оплатити", `pay_custom_${tempKey}`)]])

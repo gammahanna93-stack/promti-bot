@@ -748,15 +748,15 @@ function getBotStats() {
 // ─── МЕНЮ ─────────────────────────────────────────────────────────────────────
 const mainMenu  = () => Markup.keyboard([
   ["🖼 Фото", "🎬 Відео"],
-  ["📊 Баланс", "💰 Ціни"],
-  ["👫 Запросити друга", "💡 Ідея для промтів"],
-  ["ℹ️ Інформація", "❓ Допомога"],
-  ["🆘 Підтримка"]
+  ["✨ Купити Promti", "📊 Баланс"],
+  ["💰 Ціни", "💡 Ідея для промтів"],
+  ["👫 Запросити друга", "ℹ️ Інформація"],
+  ["❓ Допомога", "🆘 Підтримка"]
 ]).resize();
 const photoMenu = () => Markup.keyboard([
   ["🖼 Редагувати фото", "✨ Створити фото"],
   ["🤖 AI промт для фото"],
-  ["💳 Купити Promti", "📊 Баланс"],
+  ["📊 Баланс"],
   ["↩️ Назад"]
 ]).resize();
 const videoMenu     = () => Markup.keyboard([
@@ -768,20 +768,12 @@ const videoMenu     = () => Markup.keyboard([
 const seedanceMenu  = () => Markup.keyboard([
   ["⚡ Авто анімація", "🎬 Анімація + промт"],
   ["🎥 Відео з тексту"],
-  ["💳 Купити Promti"],
   ["↩️ Назад до відео"]
 ]).resize();
 const klingMenu     = () => Markup.keyboard([
   ["⚡ Авто анімація", "🎬 Анімація + промт"],
   ["🎥 Відео з тексту"],
-  ["💳 Купити Promti"],
   ["↩️ Назад до відео"]
-]).resize();
-const buyPromtiMenu   = () => Markup.keyboard([
-  ["10 Promti ✨", "30 Promti ✨"],
-  ["60 Promti ✨", "150 Promti ✨"],
-  ["💬 Своя сума"],
-  ["↩️ Назад"]
 ]).resize();
 const adminMenu       = () => Markup.keyboard([
   ["📊 Статус бота", "👤 Мій ID"],
@@ -1320,7 +1312,7 @@ bot.hears("💬 Своя сума", async (ctx) => {
   );
 });
 
-bot.hears("💳 Купити Promti", (ctx) => {
+bot.hears(["✨ Купити Promti", "💳 Купити Promti"], (ctx) => {
   touchUser(ctx);
   if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
   return ctx.reply(
@@ -1335,7 +1327,13 @@ bot.hears("💳 Купити Promti", (ctx) => {
     `🎬 Seedance — 5 Promti ✨\n` +
     `🎥 Kling — 8 Promti ✨\n\n` +
     `🎁 При реєстрації: 1 Promti ✨ безкоштовно`,
-    buyPromtiMenu()
+    Markup.inlineKeyboard([
+      [Markup.button.callback("10 Promti ✨ — 99 грн",  "buy_pack_promti_pack10")],
+      [Markup.button.callback("30 Promti ✨ — 249 грн", "buy_pack_promti_pack30")],
+      [Markup.button.callback("60 Promti ✨ — 449 грн", "buy_pack_promti_pack60")],
+      [Markup.button.callback("150 Promti ✨ — 999 грн 🔥", "buy_pack_promti_pack150")],
+      [Markup.button.callback("💬 Своя сума", "buy_custom_amount")],
+    ])
   );
 });
 
@@ -1584,10 +1582,36 @@ async function sendAutoPayment(ctx, packKey) {
   }
 }
 
-bot.hears("10 Promti ✨",  (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack10"); });
-bot.hears("30 Promti ✨",  (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack30"); });
-bot.hears("60 Promti ✨",  (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack60"); });
-bot.hears("150 Promti ✨", (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack150"); });
+// ✅ Inline callback обробники для покупки пакетів (надійніше ніж reply-кнопки)
+bot.action(/^buy_pack_(.+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const packKey = ctx.match[1];
+    await sendAutoPayment(ctx, packKey);
+  } catch (e) {
+    console.error("BUY_PACK CALLBACK ERROR:", e.message);
+    try { await ctx.reply("❌ Не вдалося створити рахунок. Спробуй ще раз."); } catch {}
+  }
+});
+
+bot.action("buy_custom_amount", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    touchUser(ctx);
+    if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
+    ctx.session.awaitingCustomAmount = true;
+    return ctx.reply(
+      `💬 Введи бажану суму в гривнях\n\n1 Promti ✨ = 9.9 грн\nМінімум: 50 грн\n\nПриклад: 200`,
+      Markup.keyboard([["↩️ Назад"]]).resize()
+    );
+  } catch (e) { console.error("BUY CUSTOM AMOUNT:", e.message); }
+});
+
+// ✅ Залишаю старі reply-hears як fallback (раптом юзер якось натисне)
+bot.hears(/^10\s+Promti/i,  (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack10"); });
+bot.hears(/^30\s+Promti/i,  (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack30"); });
+bot.hears(/^60\s+Promti/i,  (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack60"); });
+bot.hears(/^150\s+Promti/i, (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack150"); });
 
 bot.action(/^checkpay_(.+)$/, async (ctx) => {
   try { await ctx.answerCbQuery("Якщо оплата пройшла — буде зараховано автоматично ✅"); }
@@ -1607,9 +1631,26 @@ bot.action(/^pay_custom_(.+)$/, async (ctx) => {
 bot.action("upsell_promti", async (ctx) => {
   try {
     await ctx.answerCbQuery();
+    touchUser(ctx);
+    if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.");
     await ctx.reply(
-      `💎 Обери пакет Promti ✨\n\nЦіни:\n🖼 Фото — 1 Promti ✨\n🎬 Seedance — 5 Promti ✨\n🎥 Kling — 8 Promti ✨`,
-      buyPromtiMenu()
+      `💎 Обери пакет Promti ✨\n\n` +
+      `📦 Пакети:\n` +
+      `10 Promti ✨ — 99 грн\n` +
+      `30 Promti ✨ — 249 грн\n` +
+      `60 Promti ✨ — 449 грн\n` +
+      `150 Promti ✨ — 999 грн 🔥\n\n` +
+      `💰 Ціни послуг:\n` +
+      `🖼 Фото — 1 Promti ✨\n` +
+      `🎬 Seedance — 5 Promti ✨\n` +
+      `🎥 Kling — 8 Promti ✨`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("10 Promti ✨ — 99 грн",  "buy_pack_promti_pack10")],
+        [Markup.button.callback("30 Promti ✨ — 249 грн", "buy_pack_promti_pack30")],
+        [Markup.button.callback("60 Promti ✨ — 449 грн", "buy_pack_promti_pack60")],
+        [Markup.button.callback("150 Promti ✨ — 999 грн 🔥", "buy_pack_promti_pack150")],
+        [Markup.button.callback("💬 Своя сума", "buy_custom_amount")],
+      ])
     );
   } catch (e) { console.error("UPSELL PROMTI:", e.message); }
 });
@@ -1642,8 +1683,7 @@ const ALL_BUTTONS = [
   "🖼 Редагувати фото","✨ Створити фото",
   "⚡ Авто анімація","🎬 Анімація + промт","🎥 Відео з тексту",
   "🤖 AI промт для фото","🤖 AI промт для відео",
-  "💳 Купити Promti","💬 Своя сума",
-  "10 Promti ✨","30 Promti ✨","60 Promti ✨","150 Promti ✨",
+  "✨ Купити Promti","💳 Купити Promti","💬 Своя сума",
   "🎬 Seedance","🎥 Kling",
   "↩️ Назад","↩️ Назад до відео","↩️ Назад до фото",
   "📊 Статус бота","👤 Мій ID","👥 Користувачі","💳 Останні оплати","📈 Аналітика",
@@ -1655,7 +1695,9 @@ bot.on("text", async (ctx, next) => {
     ensureSession(ctx); touchUser(ctx);
     if (users[ctx.from.id]?.banned) return ctx.reply("🚫 Ваш акаунт заблокований. Напишіть в підтримку.");
     const text = ctx.message.text;
-    if (ALL_BUTTONS.includes(text) || text.startsWith("/")) return next();
+    // ✅ Перевіряємо також рядки що починаються з "N Promti" — це пакети, їх ловлять regex bot.hears
+    const isPackButton = /^\d+\s+Promti/i.test(text);
+    if (ALL_BUTTONS.includes(text) || text.startsWith("/") || isPackButton) return next();
 
     if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptEditKey) {
       const key = ctx.session.awaitingPromptEditKey; prompts[key] = text; savePrompts();

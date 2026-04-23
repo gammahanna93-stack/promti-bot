@@ -53,6 +53,7 @@ const WAYFORPAY = {
 
 const REFERRAL_PROMTI_BONUS = 5;
 const START_PROMTI_BONUS = 3;
+const MAX_PROMPT_EXAMPLE_PHOTOS = 12;
 
 const PROMTI_PRICES = {
   photo:    1,
@@ -686,13 +687,24 @@ function normalizePromptKey(key = "") {
   return String(key).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+function normalizePromptExamplePhotos(value) {
+  const source = Array.isArray(value) ? value : (value ? [value] : []);
+  return source
+    .map(item => String(item || "").trim())
+    .filter(Boolean)
+    .slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
+}
+
 function normalizePromptLibraryItem(item = {}, key = "") {
+  const examplePhotos = normalizePromptExamplePhotos(item.examplePhotos);
+  const previewPhoto = item.previewPhoto || examplePhotos[0] || null;
   return {
     key: item.key || key,
     title: item.title || key,
     prompt: item.prompt || "",
     category: item.category || "other",
-    previewPhoto: item.previewPhoto || null,
+    previewPhoto,
+    examplePhotos,
     isTrending: Boolean(item.isTrending),
     createdAt: Number(item.createdAt || Date.now()),
     clicks: Number(item.clicks || 0),
@@ -833,12 +845,14 @@ function buildPromptStyleCardText(style, options = {}) {
   const { admin = false, userId = null, botUsername = "Promtiai_bot" } = options;
   const trendMark = style.isTrending ? "🔥 Тренд\n" : "";
   const deepLink = getPromptDeepLink(botUsername, style.key);
+  const examplesCount = Array.isArray(style.examplePhotos) ? style.examplePhotos.length : 0;
   if (admin) {
     return (
       `🎨 <b>${escapeHtml(style.title)}</b>\n` +
       `${trendMark}` +
       `Ключ: <code>${escapeHtml(style.key)}</code>\n` +
       `Категорія: <b>${escapeHtml(style.category)}</b>\n\n` +
+      `Examples: <b>${examplesCount}/${MAX_PROMPT_EXAMPLE_PHOTOS}</b>\n` +
       `Clicks: <b>${style.clicks}</b>\n` +
       `Generations: <b>${style.generations}</b>\n` +
       `Purchases: <b>${style.purchases}</b>\n` +
@@ -854,6 +868,7 @@ function buildPromptStyleCardText(style, options = {}) {
     `🎨 <b>${escapeHtml(style.title)}</b>\n` +
     `${trendMark}` +
     `Категорія: <b>${escapeHtml(style.category)}</b>\n\n` +
+    (examplesCount ? `Приклади: <b>${examplesCount}</b>\n` : "") +
     `Надішли своє фото — бот зробить таке ж.\n` +
     `Баланс: <b>${escapeHtml(balanceText)}</b>`
   );
@@ -890,9 +905,34 @@ function buildPromptStyleKeyboard(style, admin = false) {
   return Markup.inlineKeyboard([
     [Markup.button.callback(style.isTrending ? "🔕 Зняти тренд" : "🔥 Зробити трендом", `admin_promptlib_trend_${style.key}_${style.isTrending ? "off" : "on"}`)],
     [Markup.button.callback("🖼 Preview фото", `admin_promptlib_preview_${style.key}`)],
+    [Markup.button.callback("🖼 Examples x12", `admin_promptlib_examples_${style.key}`)],
     [Markup.button.callback("🗑 Видалити", `admin_promptlib_delete_${style.key}`)],
     [Markup.button.callback("📚 До бібліотеки", "admin_promptlib_page_0")],
   ]);
+}
+
+function getPromptExamplePhotos(style) {
+  if (!style) return [];
+  const examples = normalizePromptExamplePhotos(style.examplePhotos);
+  if (examples.length) return examples;
+  return style.previewPhoto ? [style.previewPhoto] : [];
+}
+
+async function sendPromptExamplePhotos(ctx, style, caption = null) {
+  const photos = getPromptExamplePhotos(style).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
+  if (!photos.length) return false;
+
+  for (let index = 0; index < photos.length; index += 10) {
+    const chunk = photos.slice(index, index + 10);
+    const media = chunk.map((fileId, chunkIndex) => ({
+      type: "photo",
+      media: fileId,
+      ...(caption && index === 0 && chunkIndex === 0 ? { caption, parse_mode: "HTML" } : {}),
+    }));
+    await ctx.replyWithMediaGroup(media);
+  }
+
+  return true;
 }
 
 async function sendPromptLibraryPage(ctx, page = 0, admin = false) {
@@ -942,9 +982,10 @@ async function sendPromptStyleCard(ctx, promptKey, admin = false) {
   const botUsername = await resolveBotUsername(ctx);
   const text = buildPromptStyleCardText(style, { admin, userId: ctx.from?.id, botUsername });
   const markup = buildPromptStyleKeyboard(style, admin);
-  if (style.previewPhoto) {
-    return ctx.replyWithPhoto(style.previewPhoto, {
-      caption: text,
+  const examples = getPromptExamplePhotos(style);
+  if (examples.length) {
+    await sendPromptExamplePhotos(ctx, style, text);
+    return ctx.reply(admin ? "Фото-приклади надіслано вище." : "Обери дію нижче.", {
       parse_mode: "HTML",
       reply_markup: markup.reply_markup,
     });
@@ -964,11 +1005,9 @@ async function sendPromptReadyMessage(ctx, style, options = {}) {
     `Баланс: ${getPromptBalanceText(ctx.from.id)}\n\n` +
     `Надішли своє фото 📸`;
 
-  if (withPreview && style.previewPhoto) {
-    return ctx.replyWithPhoto(style.previewPhoto, {
-      caption: text,
-      reply_markup: photoMenu().reply_markup,
-    });
+  if (withPreview && getPromptExamplePhotos(style).length) {
+    await sendPromptExamplePhotos(ctx, style, text);
+    return ctx.reply("Надішли своє фото 📸", photoMenu());
   }
   return ctx.reply(text, photoMenu());
 }
@@ -1458,6 +1497,7 @@ bot.command("addprompt", async (ctx) => {
     prompt,
     category,
     previewPhoto: null,
+    examplePhotos: [],
     isTrending: false,
     createdAt: Date.now(),
     clicks: 0,
@@ -1563,6 +1603,21 @@ bot.command("setpromptpreview", (ctx) => {
   return ctx.reply(
     `🖼 Надішли preview-фото для стилю "${key}".\n` +
     `Або напиши "видалити", щоб прибрати поточне preview.`
+  );
+});
+
+bot.command("setpromptexamples", (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+
+  const key = normalizePromptKey(ctx.message.text.replace(/^\/setpromptexamples(@\w+)?\s*/i, ""));
+  const style = getPromptStyle(key);
+  if (!style) return ctx.reply(`❌ Стиль "${key}" не знайдено.`);
+
+  ctx.session.awaitingPromptExamplesKey = key;
+  return ctx.reply(
+    `Надішли до ${MAX_PROMPT_EXAMPLE_PHOTOS} фото для стилю "${key}".\n` +
+    `Напиши "готово" щоб завершити або "видалити" щоб очистити всі приклади.`
   );
 });
 
@@ -2521,6 +2576,22 @@ bot.action(/^admin_promptlib_preview_(.+)$/, async (ctx) => {
   } catch (e) { console.error("ADMIN PROMPTLIB PREVIEW:", e.message); }
 });
 
+bot.action(/^admin_promptlib_examples_(.+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery("Send up to 12 photos");
+    if (!isAdmin(ctx.from.id)) return;
+    const key = normalizePromptKey(ctx.match[1]);
+    const style = getPromptStyle(key);
+    if (!style) return ctx.reply("❌ Стиль не знайдено.");
+    ctx.session.awaitingPromptExamplesKey = key;
+    return ctx.reply(
+      `Надішли до ${MAX_PROMPT_EXAMPLE_PHOTOS} фото для стилю "${key}".\n` +
+      `Напиши "готово" щоб завершити або "видалити" щоб очистити всі приклади.`,
+      adminMenu()
+    );
+  } catch (e) { console.error("ADMIN PROMPTLIB EXAMPLES:", e.message); }
+});
+
 bot.action(/^admin_promptlib_delete_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -2595,6 +2666,28 @@ bot.on("text", async (ctx, next) => {
       const key = ctx.session.awaitingTextEditKey; content[key] = text; saveContent();
       ctx.session.awaitingTextEditKey = null;
       return ctx.reply(`✅ Текст "${key}" оновлено.`, adminMenu());
+    }
+
+    if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptExamplesKey) {
+      const lower = text.toLowerCase().trim();
+      const key = ctx.session.awaitingPromptExamplesKey;
+      const style = getPromptStyle(key);
+
+      if (lower === "готово") {
+        ctx.session.awaitingPromptExamplesKey = null;
+        const count = style ? getPromptExamplePhotos(style).length : 0;
+        return ctx.reply(`✅ Фото-приклади для "${key}" збережено: ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS}.`, adminMenu());
+      }
+
+      if (lower === "видалити") {
+        ctx.session.awaitingPromptExamplesKey = null;
+        if (!style) return ctx.reply(`❌ Стиль "${key}" не знайдено.`, adminMenu());
+        style.examplePhotos = [];
+        style.previewPhoto = null;
+        content.promptLibrary[key] = style;
+        saveContent();
+        return ctx.reply(`✅ Усі фото-приклади для "${key}" видалено.`, adminMenu());
+      }
     }
 
     if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptPreviewKey && text.toLowerCase().trim() === "видалити") {
@@ -2727,6 +2820,34 @@ bot.on("photo", async (ctx) => {
     content.promptLibrary[key] = style;
     saveContent();
     return ctx.reply(`✅ Preview-фото для стилю "${key}" збережено.`, adminMenu());
+  }
+
+  if (isAdmin(userId) && ctx.session.awaitingPromptExamplesKey) {
+    const key = ctx.session.awaitingPromptExamplesKey;
+    const style = getPromptStyle(key);
+    if (!style) {
+      ctx.session.awaitingPromptExamplesKey = null;
+      return ctx.reply(`❌ Стиль "${key}" не знайдено.`, adminMenu());
+    }
+
+    const examples = getPromptExamplePhotos(style);
+    if (examples.length >= MAX_PROMPT_EXAMPLE_PHOTOS) {
+      ctx.session.awaitingPromptExamplesKey = null;
+      return ctx.reply(`Ліміт досягнуто: ${MAX_PROMPT_EXAMPLE_PHOTOS}/${MAX_PROMPT_EXAMPLE_PHOTOS}.`, adminMenu());
+    }
+
+    style.examplePhotos = [...examples, photo.file_id].slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
+    if (!style.previewPhoto) style.previewPhoto = style.examplePhotos[0] || null;
+    content.promptLibrary[key] = style;
+    saveContent();
+
+    const count = style.examplePhotos.length;
+    if (count >= MAX_PROMPT_EXAMPLE_PHOTOS) {
+      ctx.session.awaitingPromptExamplesKey = null;
+      return ctx.reply(`✅ Додано фото ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS}. Ліміт заповнено.`, adminMenu());
+    }
+
+    return ctx.reply(`✅ Додано фото ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS} для стилю "${key}". Надішли ще або напиши "готово".`, adminMenu());
   }
 
   const validationErr = validatePhoto(photo);

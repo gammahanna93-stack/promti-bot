@@ -322,16 +322,24 @@
       position: relative;
       background: linear-gradient(160deg, rgba(115,199,255,0.18), rgba(255,111,200,0.22)), linear-gradient(180deg, #efeefe, #ffffff);
     }
+    .result-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center top;
+      display: block;
+    }
     .result-thumb span {
       position: absolute;
       left: 10px;
       bottom: 10px;
       padding: 6px 9px;
       border-radius: 999px;
-      background: rgba(255,255,255,0.82);
+      background: rgba(255,255,255,0.88);
       font-size: 0.74rem;
       font-weight: 700;
       color: #3c4774;
+      z-index: 1;
     }
     .floating-card {
       position: absolute;
@@ -696,7 +704,16 @@
                       <div class="result-card">
                         <strong>${escapeHtml(locale.hero.mockupResultTitle)}</strong>
                         <div class="result-grid">
-                          ${(locale.examples || []).slice(0, 4).map((item) => `<div class="result-thumb"><span>${escapeHtml(item.label)}</span></div>`).join("")}
+                          ${(locale.examples || []).slice(0, 4).map((item) => {
+                            const fallback = escapeHtml(item.gradient || "linear-gradient(160deg, #d9dcff, #ffd4ec)");
+                            const imageMarkup = item.image
+                              ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}">`
+                              : "";
+                            return `<div class="result-thumb" style="background:${fallback}">
+                              ${imageMarkup}
+                              <span>${escapeHtml(item.label)}</span>
+                            </div>`;
+                          }).join("")}
                         </div>
                       </div>
                     </div>

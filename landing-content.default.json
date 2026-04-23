@@ -1,0 +1,564 @@
+{
+  "locales": {
+    "uk": {
+      "brand": {
+        "name": "PROMTI AI",
+        "tagline": "AI фотосесія в Telegram"
+      },
+      "navigation": {
+        "examples": "Приклади",
+        "how": "Як це працює",
+        "promti": "Promti ✨",
+        "contacts": "Контакти",
+        "headerCta": "Відкрити бот",
+        "mobileCta": "Відкрити бот"
+      },
+      "hero": {
+        "badge": "AI контент для фото та відео прямо в боті",
+        "title": "AI фотосесія та контент у Telegram ✨",
+        "titleAccent": "контент",
+        "subtitle": "Завантаж фото, обери стиль, отримай готовий результат за лічені секунди",
+        "primaryCta": "Спробувати безкоштовно",
+        "secondaryCta": "Подивитися приклади",
+        "trust": "3 Promti ✨ безкоштовно при старті",
+        "mockupPromptTitle": "Стиль зйомки",
+        "mockupPromptText": "Б'юті, fashion, fantasy або свій промт",
+        "mockupResultTitle": "Готові генерації",
+        "floatTopTitle": "Promti баланс",
+        "floatTopText": "Фото та відео оплачуються всередині бота",
+        "floatBottomTitle": "Результат за секунди",
+        "floatBottomText": "Готово для Stories, Reels і постів"
+      },
+      "examplesSection": {
+        "badge": "Преміальні стилі для AI фотосесій",
+        "title": "Що ти отримаєш",
+        "subtitle": "Створюй естетичний контент для профілю, реклами чи особистого бренду без студії та складного монтажу."
+      },
+      "examples": [
+        {
+          "label": "Fashion",
+          "title": "Fashion",
+          "text": "Глянець, студійне світло, ready-to-post кадри",
+          "gradient": "linear-gradient(160deg, #c9d8ff 0%, #ffe3f2 100%)",
+          "image": ""
+        },
+        {
+          "label": "Beauty",
+          "title": "Beauty",
+          "text": "М'яка шкіра, делікатний glow, преміум-подача",
+          "gradient": "linear-gradient(160deg, #d8c9ff 0%, #ffd4ea 100%)",
+          "image": ""
+        },
+        {
+          "label": "Fantasy",
+          "title": "Fantasy",
+          "text": "Атмосферні образи, нові ролі та wow-ефект",
+          "gradient": "linear-gradient(160deg, #b7d9ff 0%, #efccff 100%)",
+          "image": ""
+        },
+        {
+          "label": "Hyperpop",
+          "title": "Hyperpop",
+          "text": "Яскравий digital-лук для соцмереж і відео",
+          "gradient": "linear-gradient(160deg, #c4e0ff 0%, #ffb6dd 100%)",
+          "image": ""
+        }
+      ],
+      "howSection": {
+        "badge": "Просто, швидко, без зайвих кроків",
+        "title": "Як це працює",
+        "steps": [
+          {
+            "icon": "📸",
+            "title": "Завантаж фото",
+            "text": "Надішли своє фото прямо в Telegram і почни генерацію без додаткових сервісів."
+          },
+          {
+            "icon": "✨",
+            "title": "Обери стиль або промт",
+            "text": "Скористайся готовими стилями або введи власний промт для більш точного результату."
+          },
+          {
+            "icon": "💬",
+            "title": "Отримай результат у боті",
+            "text": "Фото або відео повертається в бот, готове до публікації чи подальшого використання."
+          }
+        ]
+      },
+      "promtiSection": {
+        "badge": "Основний продукт сервісу",
+        "title": "Promti ✨ — внутрішня валюта бота",
+        "lead": "Ти купуєш Promti ✨, використовуєш їх на генерацію контенту й витрачаєш тільки на те, що хочеш створити: фото, короткі відео або більш складні AI-результати.",
+        "usage": [
+          {
+            "icon": "🖼",
+            "title": "Фото",
+            "text": "Швидка AI-фотосесія для портретів, beauty-кадрів і fashion-контенту.",
+            "value": "1 Promti ✨"
+          },
+          {
+            "icon": "🎬",
+            "title": "Seedance відео",
+            "text": "Динамічні короткі ролики для контенту, презентації образу чи Stories.",
+            "value": "5 Promti ✨"
+          },
+          {
+            "icon": "🎥",
+            "title": "Kling відео",
+            "text": "Більш виразна відеогенерація для преміального AI-контенту всередині бота.",
+            "value": "8 Promti ✨"
+          }
+        ]
+      },
+      "pricingSection": {
+        "badge": "Гнучкі пакети для різного обсягу контенту",
+        "title": "Пакети Promti ✨",
+        "packages": [
+          {
+            "name": "10 Promti ✨",
+            "price": "99 грн",
+            "badge": "",
+            "accent": "default",
+            "items": [
+              "Оплата онлайн",
+              "Promti використовуються всередині бота",
+              "Баланс нараховується автоматично"
+            ]
+          },
+          {
+            "name": "30 Promti ✨",
+            "price": "249 грн",
+            "badge": "Популярний",
+            "accent": "featured",
+            "items": [
+              "Зручно для регулярних фото",
+              "Підходить для тесту різних стилів",
+              "Баланс нараховується автоматично"
+            ]
+          },
+          {
+            "name": "60 Promti ✨",
+            "price": "449 грн",
+            "badge": "",
+            "accent": "default",
+            "items": [
+              "Для активного створення контенту",
+              "Комфортний запас для фото й відео",
+              "Promti витрачаються лише на обрані генерації"
+            ]
+          },
+          {
+            "name": "150 Promti ✨",
+            "price": "999 грн",
+            "badge": "Найвигідніше",
+            "accent": "best",
+            "items": [
+              "Максимальна вигода для частого використання",
+              "Підходить для контент-мейкерів і брендів",
+              "Після оплати баланс нараховується автоматично"
+            ]
+          }
+        ]
+      },
+      "benefitsSection": {
+        "badge": "Переваги для щоденного контенту",
+        "title": "Чому це зручно",
+        "items": [
+          {
+            "icon": "💄",
+            "title": "Без фотографа",
+            "text": "Створюй нові образи самостійно без пошуку команди та студійної підготовки."
+          },
+          {
+            "icon": "🏙",
+            "title": "Без студії",
+            "text": "Візуально дорогий результат без оренди локації, декору чи світла."
+          },
+          {
+            "icon": "💬",
+            "title": "Просто в Telegram",
+            "text": "Усе відбувається в знайомому інтерфейсі без переходів між сервісами."
+          },
+          {
+            "icon": "⚡",
+            "title": "Швидкий результат",
+            "text": "Отримуй готові фото й відео швидко, коли контент потрібен вже сьогодні."
+          },
+          {
+            "icon": "📲",
+            "title": "Готово для соцмереж",
+            "text": "Кадри та ролики легко використовувати для Stories, Reels, постів і реклами."
+          },
+          {
+            "icon": "🎨",
+            "title": "Багато стилів і форматів",
+            "text": "Від м'якого beauty до яскравого hyperpop, фото та відео в одному боті."
+          }
+        ]
+      },
+      "ctaSection": {
+        "title": "Спробуй зараз і отримай перші 3 Promti ✨ безкоштовно",
+        "text": "Почни з безкоштовного старту, обери стиль і перевір, як швидко бот перетворює фото на преміальний AI-контент.",
+        "button": "Відкрити бот"
+      },
+      "contactsSection": {
+        "badge": "Контакти та публічна інформація",
+        "title": "Зв'язок і юридичні дані",
+        "contactsTitle": "Зв'язок з нами",
+        "contacts": [
+          {
+            "label": "Email",
+            "value": "gammahanna93@gmail.com",
+            "href": "mailto:gammahanna93@gmail.com"
+          },
+          {
+            "label": "Telegram підтримка",
+            "value": "@promteamai",
+            "href": "https://t.me/promteamai?direct"
+          },
+          {
+            "label": "Локація",
+            "value": "Україна, Харківська область, м. Харків",
+            "href": ""
+          }
+        ],
+        "legalTitle": "Юридична інформація",
+        "legalInfo": [
+          "Продавець (Виконавець послуг): ФОП Островерх Ганна Євгенівна",
+          "Статус: зареєстровано",
+          "Реєстраційний номер: 2010350000000480320",
+          "Дата реєстрації: 10.01.2024",
+          "Ця інформація є публічною офертою відповідно до законодавства України.",
+          "Послуга є цифровою та надається в електронному вигляді."
+        ]
+      },
+      "legalNav": {
+        "privacy": "Політика конфіденційності",
+        "refund": "Політика повернення коштів",
+        "terms": "Умови користування"
+      },
+      "legalSections": [
+        {
+          "id": "privacy",
+          "title": "Політика конфіденційності",
+          "intro": "Ми обробляємо тільки ті дані, які потрібні для надання цифрових AI-послуг у Telegram, підтримки оплати та зв'язку з користувачем.",
+          "items": [
+            "Можуть оброблятися Telegram ID, ім'я користувача, технічні дані запитів, історія транзакцій і завантажені матеріали для генерації.",
+            "Завантажені зображення використовуються для створення результату в боті та можуть тимчасово зберігатися для технічної обробки, без публічного розповсюдження без згоди користувача.",
+            "Ми вживаємо розумних технічних заходів для захисту даних, але користувач також має самостійно берегти доступ до свого Telegram-акаунта.",
+            "Для запитів щодо персональних даних або видалення звертайся за контактами, зазначеними на цій сторінці."
+          ]
+        },
+        {
+          "id": "refund",
+          "title": "Політика повернення коштів",
+          "intro": "Promti ✨ є внутрішньою цифровою валютою сервісу та нараховуються автоматично після успішної оплати.",
+          "items": [
+            "Повернення може бути розглянуте у випадку технічної помилки, дубльованої оплати або ненарахування балансу після підтвердженого платежу.",
+            "Якщо Promti були використані на генерацію і послуга фактично надана, повернення зазвичай не здійснюється, крім випадків, передбачених законодавством України.",
+            "Для розгляду звернення користувач має надати контакт, дату платежу та підтвердження оплати через email або Telegram підтримки.",
+            "Кожне звернення розглядається індивідуально в розумний строк з урахуванням характеру цифрової послуги."
+          ]
+        },
+        {
+          "id": "terms",
+          "title": "Умови користування",
+          "intro": "Користуючись ботом, ти погоджуєшся з правилами використання сервісу цифрових AI-послуг і внутрішньої валюти Promti ✨.",
+          "items": [
+            "Користувач самостійно відповідає за законність контенту, який завантажує для генерації, та за права на використання таких матеріалів.",
+            "Сервіс може оновлювати функції, стилі генерації, вартість у Promti та технічні умови без окремого персонального повідомлення, якщо інше не передбачено законом.",
+            "Заборонено використовувати сервіс для незаконного, шахрайського, образливого чи такого, що порушує права третіх осіб, контенту.",
+            "У разі виявлення зловживань доступ до сервісу може бути обмежено або припинено без компенсації за невикористані бонусні нарахування."
+          ]
+        }
+      ],
+      "footer": {
+        "brand": "PROMTI AI",
+        "text": "Сервіс цифрових AI-послуг у Telegram",
+        "copy": "© 2026 PROMTI AI"
+      }
+    },
+    "en": {
+      "brand": {
+        "name": "PROMTI AI",
+        "tagline": "AI photoshoot in Telegram"
+      },
+      "navigation": {
+        "examples": "Examples",
+        "how": "How it works",
+        "promti": "Promti ✨",
+        "contacts": "Contacts",
+        "headerCta": "Open bot",
+        "mobileCta": "Open bot"
+      },
+      "hero": {
+        "badge": "AI photo and video content right inside the bot",
+        "title": "AI photoshoots and content in Telegram ✨",
+        "titleAccent": "content",
+        "subtitle": "Upload a photo, choose a style, and get a polished result in seconds",
+        "primaryCta": "Try for free",
+        "secondaryCta": "View examples",
+        "trust": "3 Promti ✨ free when you start",
+        "mockupPromptTitle": "Shoot style",
+        "mockupPromptText": "Beauty, fashion, fantasy, or your own custom prompt",
+        "mockupResultTitle": "Generated results",
+        "floatTopTitle": "Promti balance",
+        "floatTopText": "Photos and videos are paid for inside the bot",
+        "floatBottomTitle": "Results in seconds",
+        "floatBottomText": "Ready for Stories, Reels, and posts"
+      },
+      "examplesSection": {
+        "badge": "Premium AI photoshoot styles",
+        "title": "What you get",
+        "subtitle": "Create aesthetic content for your profile, brand, or campaigns without a studio or heavy editing."
+      },
+      "examples": [
+        {
+          "label": "Fashion",
+          "title": "Fashion",
+          "text": "Glossy visuals, studio lighting, and ready-to-post frames",
+          "gradient": "linear-gradient(160deg, #c9d8ff 0%, #ffe3f2 100%)",
+          "image": ""
+        },
+        {
+          "label": "Beauty",
+          "title": "Beauty",
+          "text": "Soft skin, delicate glow, and a premium visual feel",
+          "gradient": "linear-gradient(160deg, #d8c9ff 0%, #ffd4ea 100%)",
+          "image": ""
+        },
+        {
+          "label": "Fantasy",
+          "title": "Fantasy",
+          "text": "Atmospheric looks, new identities, and a wow effect",
+          "gradient": "linear-gradient(160deg, #b7d9ff 0%, #efccff 100%)",
+          "image": ""
+        },
+        {
+          "label": "Hyperpop",
+          "title": "Hyperpop",
+          "text": "Bold digital aesthetics for social media and video content",
+          "gradient": "linear-gradient(160deg, #c4e0ff 0%, #ffb6dd 100%)",
+          "image": ""
+        }
+      ],
+      "howSection": {
+        "badge": "Simple, fast, and frictionless",
+        "title": "How it works",
+        "steps": [
+          {
+            "icon": "📸",
+            "title": "Upload your photo",
+            "text": "Send your photo directly in Telegram and start without any extra services."
+          },
+          {
+            "icon": "✨",
+            "title": "Choose a style or prompt",
+            "text": "Use ready-made styles or enter your own prompt for a more tailored result."
+          },
+          {
+            "icon": "💬",
+            "title": "Get the result in the bot",
+            "text": "Your photo or video comes back inside the bot, ready to publish or reuse."
+          }
+        ]
+      },
+      "promtiSection": {
+        "badge": "The core product of the service",
+        "title": "Promti ✨ — the bot’s internal currency",
+        "lead": "You buy Promti ✨, spend them on content generation, and use them only for what you actually want to create: photos, short videos, or more advanced AI results.",
+        "usage": [
+          {
+            "icon": "🖼",
+            "title": "Photos",
+            "text": "Fast AI photoshoots for portraits, beauty looks, and fashion content.",
+            "value": "1 Promti ✨"
+          },
+          {
+            "icon": "🎬",
+            "title": "Seedance videos",
+            "text": "Dynamic short videos for content, mood shots, and Stories.",
+            "value": "5 Promti ✨"
+          },
+          {
+            "icon": "🎥",
+            "title": "Kling videos",
+            "text": "More expressive video generation for premium AI content inside the bot.",
+            "value": "8 Promti ✨"
+          }
+        ]
+      },
+      "pricingSection": {
+        "badge": "Flexible packs for different content needs",
+        "title": "Promti ✨ packs",
+        "packages": [
+          {
+            "name": "10 Promti ✨",
+            "price": "99 UAH",
+            "badge": "",
+            "accent": "default",
+            "items": [
+              "Online payment",
+              "Promti are used inside the bot",
+              "Balance is credited automatically"
+            ]
+          },
+          {
+            "name": "30 Promti ✨",
+            "price": "249 UAH",
+            "badge": "Popular",
+            "accent": "featured",
+            "items": [
+              "Convenient for regular photo generation",
+              "Great for testing multiple styles",
+              "Balance is credited automatically"
+            ]
+          },
+          {
+            "name": "60 Promti ✨",
+            "price": "449 UAH",
+            "badge": "",
+            "accent": "default",
+            "items": [
+              "For active content creation",
+              "Comfortable reserve for photos and videos",
+              "Spend Promti only on chosen generations"
+            ]
+          },
+          {
+            "name": "150 Promti ✨",
+            "price": "999 UAH",
+            "badge": "Best value",
+            "accent": "best",
+            "items": [
+              "Maximum value for frequent use",
+              "Great for creators and brands",
+              "Balance is credited automatically after payment"
+            ]
+          }
+        ]
+      },
+      "benefitsSection": {
+        "badge": "Why it works for everyday content",
+        "title": "Why it’s convenient",
+        "items": [
+          {
+            "icon": "💄",
+            "title": "No photographer",
+            "text": "Create new looks on your own without booking a team or organizing a shoot."
+          },
+          {
+            "icon": "🏙",
+            "title": "No studio",
+            "text": "Get an expensive-looking result without renting a location, decor, or lights."
+          },
+          {
+            "icon": "💬",
+            "title": "All inside Telegram",
+            "text": "Everything happens in a familiar interface without jumping between services."
+          },
+          {
+            "icon": "⚡",
+            "title": "Fast results",
+            "text": "Get finished photos and videos quickly when you need content today."
+          },
+          {
+            "icon": "📲",
+            "title": "Ready for social media",
+            "text": "Use visuals easily for Stories, Reels, posts, and ads."
+          },
+          {
+            "icon": "🎨",
+            "title": "Many styles and formats",
+            "text": "From soft beauty to bright hyperpop, with both photos and videos in one bot."
+          }
+        ]
+      },
+      "ctaSection": {
+        "title": "Try it now and get your first 3 Promti ✨ for free",
+        "text": "Start free, choose a style, and see how fast the bot turns a photo into premium AI content.",
+        "button": "Open bot"
+      },
+      "contactsSection": {
+        "badge": "Contacts and public information",
+        "title": "Contact and legal details",
+        "contactsTitle": "Contact us",
+        "contacts": [
+          {
+            "label": "Email",
+            "value": "gammahanna93@gmail.com",
+            "href": "mailto:gammahanna93@gmail.com"
+          },
+          {
+            "label": "Telegram support",
+            "value": "@promteamai",
+            "href": "https://t.me/promteamai?direct"
+          },
+          {
+            "label": "Location",
+            "value": "Kharkiv, Kharkiv region, Ukraine",
+            "href": ""
+          }
+        ],
+        "legalTitle": "Legal information",
+        "legalInfo": [
+          "Seller (Service provider): Sole proprietor Hanna Ostroverkh",
+          "Status: registered",
+          "Registration number: 2010350000000480320",
+          "Registration date: 10.01.2024",
+          "This information is a public offer under the laws of Ukraine.",
+          "The service is digital and provided electronically."
+        ]
+      },
+      "legalNav": {
+        "privacy": "Privacy Policy",
+        "refund": "Refund Policy",
+        "terms": "Terms of Use"
+      },
+      "legalSections": [
+        {
+          "id": "privacy",
+          "title": "Privacy Policy",
+          "intro": "We process only the data needed to provide digital AI services in Telegram, support payments, and communicate with users.",
+          "items": [
+            "We may process Telegram ID, username, technical request data, transaction history, and uploaded materials used for generation.",
+            "Uploaded images are used to create results in the bot and may be temporarily stored for technical processing without public distribution unless the user agrees.",
+            "We take reasonable technical measures to protect data, but users should also keep access to their Telegram account secure.",
+            "For personal data or deletion requests, please contact us using the details on this page."
+          ]
+        },
+        {
+          "id": "refund",
+          "title": "Refund Policy",
+          "intro": "Promti ✨ are the service’s internal digital currency and are credited automatically after successful payment.",
+          "items": [
+            "Refunds may be reviewed in case of technical issues, duplicate payments, or missing balance after a confirmed payment.",
+            "If Promti were already spent on generation and the service was provided, refunds are generally not available except where required by Ukrainian law.",
+            "To review a request, the user should provide contact details, payment date, and proof of payment via email or Telegram support.",
+            "Each request is reviewed individually within a reasonable time, taking into account the nature of digital services."
+          ]
+        },
+        {
+          "id": "terms",
+          "title": "Terms of Use",
+          "intro": "By using the bot, you agree to the rules of using digital AI services and the internal Promti ✨ currency.",
+          "items": [
+            "Users are solely responsible for the legality of the content they upload for generation and for having the rights to use such materials.",
+            "The service may update features, generation styles, Promti pricing, and technical terms without separate personal notice unless otherwise required by law.",
+            "It is prohibited to use the service for illegal, fraudulent, abusive, or rights-infringing content.",
+            "In case of abuse, access to the service may be restricted or terminated without compensation for unused bonus credits."
+          ]
+        }
+      ],
+      "footer": {
+        "brand": "PROMTI AI",
+        "text": "Digital AI services in Telegram",
+        "copy": "© 2026 PROMTI AI"
+      }
+    }
+  },
+  "botLink": "https://t.me/Promtiai_bot",
+  "theme": {
+    "supportsEnglishLater": true
+  }
+}

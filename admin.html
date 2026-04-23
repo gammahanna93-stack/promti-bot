@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PROMTI AI Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <style>
+    :root {
+      --bg: #f6f7ff;
+      --text: #20233f;
+      --muted: #69748f;
+      --line: rgba(122, 134, 190, 0.16);
+      --surface: rgba(255,255,255,0.9);
+      --shadow: 0 18px 45px rgba(95, 103, 170, 0.14);
+      --gradient: linear-gradient(135deg, #7a6dff 0%, #8f80ff 30%, #ff72c8 100%);
+      --radius: 24px;
+      --font: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(115,199,255,0.16), transparent 22%),
+        radial-gradient(circle at top right, rgba(255,108,207,0.14), transparent 20%),
+        linear-gradient(180deg, #fcfcff 0%, #f6f7ff 100%);
+    }
+    .container { width: min(calc(100% - 32px), 1240px); margin: 0 auto; }
+    .page { padding: 24px 0 48px; }
+    .shell, .panel, .item-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .shell { padding: 24px; }
+    .panel { padding: 22px; }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 800;
+      background: var(--gradient);
+      box-shadow: 0 14px 30px rgba(122,109,255,0.28);
+    }
+    h1, h2, h3 { margin: 0; letter-spacing: -0.03em; }
+    p { margin: 0; color: var(--muted); }
+    .muted { color: var(--muted); }
+    .grid { display: grid; gap: 18px; }
+    .editor-grid { grid-template-columns: 1fr; }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+    .button {
+      min-height: 48px;
+      border-radius: 999px;
+      border: 0;
+      padding: 0 18px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .button:hover { transform: translateY(-1px); }
+    .button-primary {
+      background: var(--gradient);
+      color: #fff;
+      box-shadow: 0 14px 30px rgba(122,109,255,0.24);
+    }
+    .button-secondary {
+      background: rgba(255,255,255,0.82);
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+    .button-danger {
+      background: #fff1f6;
+      color: #c44678;
+      border: 1px solid rgba(196,70,120,0.18);
+    }
+    .button-small {
+      min-height: 40px;
+      padding: 0 14px;
+      font-size: 0.9rem;
+    }
+    .login-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px 0;
+    }
+    .login-card {
+      width: min(100%, 460px);
+      padding: 28px;
+    }
+    .form-grid {
+      display: grid;
+      gap: 14px;
+      margin-top: 20px;
+    }
+    label {
+      display: grid;
+      gap: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    input, textarea, select {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      font: inherit;
+      color: var(--text);
+      background: rgba(255,255,255,0.95);
+    }
+    textarea {
+      min-height: 92px;
+      resize: vertical;
+    }
+    .status {
+      padding: 12px 14px;
+      border-radius: 16px;
+      font-size: 0.95rem;
+      display: none;
+    }
+    .status.show { display: block; }
+    .status.success { background: #eefcf5; color: #1f8d60; }
+    .status.error { background: #fff1f4; color: #c44678; }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .field-grid {
+      display: grid;
+      gap: 14px;
+    }
+    .split { display: grid; gap: 14px; }
+    .item-list { display: grid; gap: 14px; }
+    .item-card {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+    .item-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .inline-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(122,109,255,0.08);
+      color: #5d57cf;
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+    .editor-shell { display: none; }
+    .editor-shell.active { display: block; }
+    .login-view.hidden { display: none; }
+    .sticky-bar {
+      position: sticky;
+      top: 16px;
+      z-index: 10;
+      margin-bottom: 18px;
+    }
+    .top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 18px;
+    }
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .locale-tabs {
+      display: inline-flex;
+      gap: 8px;
+      padding: 6px;
+      border-radius: 999px;
+      background: rgba(122,109,255,0.08);
+    }
+    .locale-tab {
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .locale-tab.active {
+      background: #fff;
+      color: var(--text);
+      box-shadow: var(--shadow);
+    }
+    @media (min-width: 900px) {
+      .editor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="container">
+      <div id="loginView" class="login-view">
+        <div class="login-wrap">
+          <div class="shell login-card">
+            <div class="brand">
+              <div class="brand-mark">✨</div>
+              <div>
+                <h1>PROMTI AI Admin</h1>
+                <p>Вхід в адмін-панель для редагування лендингу без коду</p>
+              </div>
+            </div>
+            <div id="loginStatus" class="status"></div>
+            <form id="loginForm" class="form-grid">
+              <label>
+                Логін
+                <input name="login" autocomplete="username" required>
+              </label>
+              <label>
+                Пароль
+                <input name="password" type="password" autocomplete="current-password" required>
+              </label>
+              <button class="button button-primary" type="submit">Увійти</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div id="editorView" class="editor-shell">
+        <div class="sticky-bar">
+          <div class="shell top-actions">
+            <div class="meta-row">
+              <div class="brand">
+                <div class="brand-mark">✨</div>
+                <div>
+                  <h2>PROMTI AI Admin</h2>
+                  <p>Редагування лендингу збережеться у файл на сервері</p>
+                </div>
+              </div>
+            </div>
+            <div class="actions">
+              <div class="locale-tabs">
+                <button class="locale-tab active" type="button" data-locale-tab="uk">UA</button>
+                <button class="locale-tab" type="button" data-locale-tab="en">EN</button>
+              </div>
+              <a class="button button-secondary" href="/" target="_blank" rel="noopener noreferrer">Відкрити сайт</a>
+              <button id="saveTopButton" class="button button-primary" type="button">Зберегти зміни</button>
+              <button id="logoutButton" class="button button-secondary" type="button">Вийти</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="saveStatus" class="status"></div>
+
+        <div class="grid editor-grid">
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Бренд і навігація</h3>
+                <p>Основні назви та кнопки у шапці.</p>
+              </div>
+              <span class="inline-note">UA зараз, EN пізніше</span>
+            </div>
+            <div class="field-grid">
+              <label>Назва бренду<input data-path="brand.name"></label>
+              <label>Підпис бренду<input data-path="brand.tagline"></label>
+              <label>Навігація: Приклади<input data-path="navigation.examples"></label>
+              <label>Навігація: Як це працює<input data-path="navigation.how"></label>
+              <label>Навігація: Promti<input data-path="navigation.promti"></label>
+              <label>Навігація: Контакти<input data-path="navigation.contacts"></label>
+              <label>Кнопка в хедері<input data-path="navigation.headerCta"></label>
+              <label>Мобільна sticky CTA<input data-path="navigation.mobileCta"></label>
+              <label>Посилання на бота<input data-root-path="botLink"></label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Hero блок</h3>
+                <p>Перший екран і головна конверсія.</p>
+              </div>
+            </div>
+            <div class="field-grid">
+              <label>Badge<input data-path="hero.badge"></label>
+              <label>Заголовок<textarea data-path="hero.title"></textarea></label>
+              <label>Акцентне слово в заголовку<input data-path="hero.titleAccent"></label>
+              <label>Підзаголовок<textarea data-path="hero.subtitle"></textarea></label>
+              <label>Primary CTA<input data-path="hero.primaryCta"></label>
+              <label>Secondary CTA<input data-path="hero.secondaryCta"></label>
+              <label>Лінія довіри<input data-path="hero.trust"></label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Секційні заголовки</h3>
+                <p>Основні тексти блоків нижче по сторінці.</p>
+              </div>
+            </div>
+            <div class="field-grid">
+              <label>Приклади: badge<input data-path="examplesSection.badge"></label>
+              <label>Приклади: title<input data-path="examplesSection.title"></label>
+              <label>Приклади: subtitle<textarea data-path="examplesSection.subtitle"></textarea></label>
+              <label>Як це працює: badge<input data-path="howSection.badge"></label>
+              <label>Як це працює: title<input data-path="howSection.title"></label>
+              <label>Promti: badge<input data-path="promtiSection.badge"></label>
+              <label>Promti: title<input data-path="promtiSection.title"></label>
+              <label>Promti: пояснення<textarea data-path="promtiSection.lead"></textarea></label>
+              <label>Пакети: badge<input data-path="pricingSection.badge"></label>
+              <label>Пакети: title<input data-path="pricingSection.title"></label>
+              <label>Переваги: badge<input data-path="benefitsSection.badge"></label>
+              <label>Переваги: title<input data-path="benefitsSection.title"></label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>CTA, контакти і футер</h3>
+                <p>Фінальні блоки сторінки.</p>
+              </div>
+            </div>
+            <div class="field-grid">
+              <label>CTA заголовок<textarea data-path="ctaSection.title"></textarea></label>
+              <label>CTA текст<textarea data-path="ctaSection.text"></textarea></label>
+              <label>CTA кнопка<input data-path="ctaSection.button"></label>
+              <label>Контакти: badge<input data-path="contactsSection.badge"></label>
+              <label>Контакти: title<input data-path="contactsSection.title"></label>
+              <label>Ліва колонка заголовок<input data-path="contactsSection.contactsTitle"></label>
+              <label>Права колонка заголовок<input data-path="contactsSection.legalTitle"></label>
+              <label>Footer бренд<input data-path="footer.brand"></label>
+              <label>Footer текст<input data-path="footer.text"></label>
+              <label>Footer copyright<input data-path="footer.copy"></label>
+            </div>
+          </section>
+        </div>
+
+        <div class="grid" style="margin-top:18px">
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Приклади</h3>
+                <p>Додавай картки прикладів. Можна вставити URL картинки або просто завантажити файл прямо тут.</p>
+              </div>
+              <button class="button button-secondary button-small" type="button" data-add="examples">Додати приклад</button>
+            </div>
+            <div id="examplesList" class="item-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Кроки "Як це працює"</h3>
+                <p>Кожен крок має іконку, заголовок і текст.</p>
+              </div>
+              <button class="button button-secondary button-small" type="button" data-add="howSection.steps">Додати крок</button>
+            </div>
+            <div id="stepsList" class="item-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Витрати Promti</h3>
+                <p>Блок із тим, скільки коштує фото та відео у внутрішній валюті.</p>
+              </div>
+              <button class="button button-secondary button-small" type="button" data-add="promtiSection.usage">Додати картку</button>
+            </div>
+            <div id="usageList" class="item-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Пакети Promti</h3>
+                <p>Пакети з ціною, бейджем і списком переваг.</p>
+              </div>
+              <button class="button button-secondary button-small" type="button" data-add="pricingSection.packages">Додати пакет</button>
+            </div>
+            <div id="packagesList" class="item-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Переваги</h3>
+                <p>Карточки блоку "Чому це зручно".</p>
+              </div>
+              <button class="button button-secondary button-small" type="button" data-add="benefitsSection.items">Додати перевагу</button>
+            </div>
+            <div id="benefitsList" class="item-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Контакти</h3>
+                <p>Контактні рядки та посилання.</p>
+              </div>
+              <button class="button button-secondary button-small" type="button" data-add="contactsSection.contacts">Додати контакт</button>
+            </div>
+            <div id="contactsList" class="item-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Юридична інформація справа</h3>
+                <p>Короткі рядки в правій колонці.</p>
+              </div>
+              <button class="button button-secondary button-small" type="button" data-add="contactsSection.legalInfo">Додати рядок</button>
+            </div>
+            <div id="legalInfoList" class="item-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Юридичні кнопки</h3>
+                <p>Тексти для трьох кнопок навігації по legal-блоках.</p>
+              </div>
+            </div>
+            <div class="field-grid">
+              <label>Кнопка 1<input data-path="legalNav.privacy"></label>
+              <label>Кнопка 2<input data-path="legalNav.refund"></label>
+              <label>Кнопка 3<input data-path="legalNav.terms"></label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>Юридичні блоки</h3>
+                <p>Секції політики конфіденційності, повернення коштів і умов користування.</p>
+              </div>
+              <button class="button button-secondary button-small" type="button" data-add="legalSections">Додати блок</button>
+            </div>
+            <div id="legalSectionsList" class="item-list"></div>
+          </section>
+        </div>
+
+        <div class="actions" style="margin-top:18px; justify-content:flex-end">
+          <button id="saveBottomButton" class="button button-primary" type="button">Зберегти зміни</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <template id="itemCardTemplate">
+    <div class="item-card">
+      <div class="item-card-header">
+        <strong></strong>
+        <button class="button button-danger button-small" type="button">Видалити</button>
+      </div>
+      <div class="field-grid item-fields"></div>
+    </div>
+  </template>
+
+  <script>
+    const loginView = document.getElementById("loginView");
+    const editorView = document.getElementById("editorView");
+    const loginForm = document.getElementById("loginForm");
+    const loginStatus = document.getElementById("loginStatus");
+    const saveStatus = document.getElementById("saveStatus");
+    const itemCardTemplate = document.getElementById("itemCardTemplate");
+    const saveButtons = [document.getElementById("saveTopButton"), document.getElementById("saveBottomButton")];
+    const logoutButton = document.getElementById("logoutButton");
+
+    let state = null;
+    let currentLocaleKey = "uk";
+
+    const arrayEditors = {
+      examples: {
+        containerId: "examplesList",
+        title: "Приклад",
+        fields: [
+          { key: "label", label: "Мітка" },
+          { key: "title", label: "Заголовок" },
+          { key: "text", label: "Опис", type: "textarea" },
+          { key: "image", label: "URL картинки", type: "image-upload" },
+          { key: "gradient", label: "CSS градієнт" }
+        ],
+        create: () => ({ label: "Новий стиль", title: "Новий стиль", text: "Короткий опис прикладу.", image: "", gradient: "linear-gradient(160deg, #d9dcff 0%, #ffd4ec 100%)" })
+      },
+      "howSection.steps": {
+        containerId: "stepsList",
+        title: "Крок",
+        fields: [
+          { key: "icon", label: "Іконка" },
+          { key: "title", label: "Заголовок" },
+          { key: "text", label: "Текст", type: "textarea" }
+        ],
+        create: () => ({ icon: "✨", title: "Новий крок", text: "Опиши крок." })
+      },
+      "promtiSection.usage": {
+        containerId: "usageList",
+        title: "Картка",
+        fields: [
+          { key: "icon", label: "Іконка" },
+          { key: "title", label: "Заголовок" },
+          { key: "text", label: "Текст", type: "textarea" },
+          { key: "value", label: "Значення" }
+        ],
+        create: () => ({ icon: "✨", title: "Нова послуга", text: "Опиши, на що витрачаються Promti.", value: "1 Promti ✨" })
+      },
+      "pricingSection.packages": {
+        containerId: "packagesList",
+        title: "Пакет",
+        fields: [
+          { key: "name", label: "Назва" },
+          { key: "price", label: "Ціна" },
+          { key: "badge", label: "Бейдж" },
+          { key: "accent", label: "Стиль картки", type: "select", options: ["default", "featured", "best"] },
+          { key: "items", label: "Пункти списку", type: "textarea-list" }
+        ],
+        create: () => ({ name: "Новий пакет", price: "0 грн", badge: "", accent: "default", items: ["Перший пункт", "Другий пункт"] })
+      },
+      "benefitsSection.items": {
+        containerId: "benefitsList",
+        title: "Перевага",
+        fields: [
+          { key: "icon", label: "Іконка" },
+          { key: "title", label: "Заголовок" },
+          { key: "text", label: "Текст", type: "textarea" }
+        ],
+        create: () => ({ icon: "✨", title: "Нова перевага", text: "Опиши перевагу." })
+      },
+      "contactsSection.contacts": {
+        containerId: "contactsList",
+        title: "Контакт",
+        fields: [
+          { key: "label", label: "Назва" },
+          { key: "value", label: "Текст" },
+          { key: "href", label: "Посилання" }
+        ],
+        create: () => ({ label: "Новий контакт", value: "Контактні дані", href: "" })
+      },
+      "contactsSection.legalInfo": {
+        containerId: "legalInfoList",
+        title: "Рядок",
+        fields: [
+          { key: "__value", label: "Текст", type: "textarea" }
+        ],
+        create: () => "Новий юридичний рядок"
+      },
+      legalSections: {
+        containerId: "legalSectionsList",
+        title: "Legal блок",
+        fields: [
+          { key: "id", label: "ID якоря" },
+          { key: "title", label: "Заголовок" },
+          { key: "intro", label: "Вступ", type: "textarea" },
+          { key: "items", label: "Пункти списку", type: "textarea-list" }
+        ],
+        create: () => ({ id: "new-section", title: "Новий legal блок", intro: "Короткий вступ.", items: ["Перший пункт"] })
+      }
+    };
+
+    function getLocale() {
+      if (!state.locales[currentLocaleKey]) {
+        state.locales[currentLocaleKey] = JSON.parse(JSON.stringify(state.locales.uk || {}));
+      }
+      return state.locales[currentLocaleKey];
+    }
+
+    function getByPath(target, path) {
+      return path.split(".").reduce((acc, part) => acc?.[part], target);
+    }
+
+    function setByPath(target, path, value) {
+      const parts = path.split(".");
+      const last = parts.pop();
+      const parent = parts.reduce((acc, part) => {
+        if (!acc[part] || typeof acc[part] !== "object") acc[part] = {};
+        return acc[part];
+      }, target);
+      parent[last] = value;
+    }
+
+    function setStatus(node, text, type) {
+      node.textContent = text;
+      node.className = `status show ${type}`;
+    }
+
+    function clearStatus(node) {
+      node.textContent = "";
+      node.className = "status";
+    }
+
+    function fillSimpleFields() {
+      document.querySelectorAll("[data-path]").forEach((input) => {
+        input.value = getByPath(getLocale(), input.dataset.path) ?? "";
+      });
+      document.querySelectorAll("[data-root-path]").forEach((input) => {
+        input.value = getByPath(state, input.dataset.rootPath) ?? "";
+      });
+    }
+
+    function bindSimpleFields() {
+      document.querySelectorAll("[data-path]").forEach((input) => {
+        input.addEventListener("input", () => {
+          setByPath(getLocale(), input.dataset.path, input.value);
+        });
+      });
+      document.querySelectorAll("[data-root-path]").forEach((input) => {
+        input.addEventListener("input", () => {
+          setByPath(state, input.dataset.rootPath, input.value);
+        });
+      });
+    }
+
+    function updateLocaleTabs() {
+      document.querySelectorAll("[data-locale-tab]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.localeTab === currentLocaleKey);
+      });
+    }
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("read_failed"));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadExampleImage(file) {
+      const dataUrl = await fileToDataUrl(file);
+      const response = await fetch("/api/admin/upload-image", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          dataUrl
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("upload_failed");
+      }
+
+      const payload = await response.json();
+      return payload.imageUrl;
+    }
+
+    function createField(field, item, path, index) {
+      const label = document.createElement("label");
+      label.textContent = field.label;
+
+      if (field.type === "image-upload") {
+        const wrapper = document.createElement("div");
+        wrapper.className = "field-grid";
+
+        const imageInput = document.createElement("input");
+        imageInput.value = item[field.key] ?? "";
+        imageInput.placeholder = "URL картинки або шлях після завантаження";
+        imageInput.addEventListener("input", () => {
+          const list = getByPath(getLocale(), path);
+          list[index][field.key] = imageInput.value;
+        });
+
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = "image/*";
+
+        const uploadButton = document.createElement("button");
+        uploadButton.type = "button";
+        uploadButton.className = "button button-secondary button-small";
+        uploadButton.textContent = "Завантажити файл";
+
+        const hint = document.createElement("div");
+        hint.className = "muted";
+        hint.style.fontSize = "0.88rem";
+        hint.textContent = item[field.key] ? `Поточна картинка: ${item[field.key]}` : "Можна вставити URL або завантажити файл.";
+
+        uploadButton.addEventListener("click", async () => {
+          const file = fileInput.files?.[0];
+          if (!file) {
+            setStatus(saveStatus, "Спочатку вибери файл картинки.", "error");
+            return;
+          }
+
+          try {
+            clearStatus(saveStatus);
+            uploadButton.disabled = true;
+            uploadButton.textContent = "Завантаження...";
+            const imageUrl = await uploadExampleImage(file);
+            const list = getByPath(getLocale(), path);
+            list[index][field.key] = imageUrl;
+            imageInput.value = imageUrl;
+            hint.textContent = `Завантажено: ${imageUrl}`;
+            setStatus(saveStatus, "Картинку завантажено. Не забудь натиснути «Зберегти зміни».", "success");
+          } catch (error) {
+            setStatus(saveStatus, "Не вдалося завантажити картинку. Перевір формат або розмір файла.", "error");
+          } finally {
+            uploadButton.disabled = false;
+            uploadButton.textContent = "Завантажити файл";
+          }
+        });
+
+        wrapper.appendChild(imageInput);
+        wrapper.appendChild(fileInput);
+        wrapper.appendChild(uploadButton);
+        wrapper.appendChild(hint);
+        label.appendChild(wrapper);
+        return label;
+      }
+
+      let input;
+      if (field.type === "textarea" || field.type === "textarea-list") {
+        input = document.createElement("textarea");
+      } else if (field.type === "select") {
+        input = document.createElement("select");
+        field.options.forEach((optionValue) => {
+          const option = document.createElement("option");
+          option.value = optionValue;
+          option.textContent = optionValue;
+          input.appendChild(option);
+        });
+      } else {
+        input = document.createElement("input");
+      }
+
+      const currentValue = field.key === "__value" ? item : item[field.key];
+      if (field.type === "textarea-list") {
+        input.value = Array.isArray(currentValue) ? currentValue.join("\n") : "";
+      } else {
+        input.value = currentValue ?? "";
+      }
+
+      input.addEventListener("input", () => {
+        const list = getByPath(getLocale(), path);
+        if (field.key === "__value") {
+          list[index] = input.value;
+          return;
+        }
+        if (field.type === "textarea-list") {
+          list[index][field.key] = input.value.split("\n").map((line) => line.trim()).filter(Boolean);
+          return;
+        }
+        list[index][field.key] = input.value;
+      });
+
+      label.appendChild(input);
+      return label;
+    }
+
+    function renderArrayEditor(path) {
+      const schema = arrayEditors[path];
+      const container = document.getElementById(schema.containerId);
+      const items = getByPath(getLocale(), path);
+      container.innerHTML = "";
+
+      items.forEach((item, index) => {
+        const card = itemCardTemplate.content.firstElementChild.cloneNode(true);
+        card.querySelector("strong").textContent = `${schema.title} ${index + 1}`;
+        const fieldsWrap = card.querySelector(".item-fields");
+        schema.fields.forEach((field) => fieldsWrap.appendChild(createField(field, item, path, index)));
+        card.querySelector(".button-danger").addEventListener("click", () => {
+          items.splice(index, 1);
+          renderAllArrayEditors();
+        });
+        container.appendChild(card);
+      });
+    }
+
+    function renderAllArrayEditors() {
+      Object.keys(arrayEditors).forEach(renderArrayEditor);
+    }
+
+    function bindAddButtons() {
+      document.querySelectorAll("[data-add]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const path = button.dataset.add;
+          const schema = arrayEditors[path];
+          const list = getByPath(getLocale(), path);
+          list.push(schema.create());
+          renderAllArrayEditors();
+        });
+      });
+    }
+
+    async function loadEditor() {
+      const response = await fetch("/api/admin/content", { credentials: "same-origin" });
+      if (!response.ok) throw new Error("unauthorized");
+      state = await response.json();
+      if (!state.locales.en) {
+        state.locales.en = JSON.parse(JSON.stringify(state.locales.uk || {}));
+      }
+      fillSimpleFields();
+      renderAllArrayEditors();
+      updateLocaleTabs();
+      loginView.classList.add("hidden");
+      editorView.classList.add("active");
+    }
+
+    async function saveContent() {
+      clearStatus(saveStatus);
+      const response = await fetch("/api/admin/content", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(state)
+      });
+      if (!response.ok) {
+        setStatus(saveStatus, "Не вдалося зберегти зміни.", "error");
+        return;
+      }
+      setStatus(saveStatus, "Зміни збережено. Онови сайт, щоб побачити результат.", "success");
+    }
+
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearStatus(loginStatus);
+      const formData = new FormData(loginForm);
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          login: formData.get("login"),
+          password: formData.get("password")
+        })
+      });
+      if (!response.ok) {
+        setStatus(loginStatus, "Невірний логін або пароль.", "error");
+        return;
+      }
+      loginForm.reset();
+      await loadEditor();
+    });
+
+    logoutButton.addEventListener("click", async () => {
+      await fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" });
+      editorView.classList.remove("active");
+      loginView.classList.remove("hidden");
+      state = null;
+    });
+
+    saveButtons.forEach((button) => button.addEventListener("click", saveContent));
+    document.querySelectorAll("[data-locale-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        currentLocaleKey = button.dataset.localeTab === "en" ? "en" : "uk";
+        fillSimpleFields();
+        renderAllArrayEditors();
+        updateLocaleTabs();
+      });
+    });
+    bindSimpleFields();
+    bindAddButtons();
+
+    loadEditor().catch(() => {
+      loginView.classList.remove("hidden");
+      editorView.classList.remove("active");
+    });
+  </script>
+</body>
+</html>

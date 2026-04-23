@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PROMTI AI | AI фотосесія та контент у Telegram</title>
+  <meta name="description" content="AI фотосесія та генерація контенту прямо в Telegram. Купуй Promti ✨, створюй фото й відео, отримуй результат за лічені секунди.">
+  <meta name="theme-color" content="#f8f5ff">
+  <style>
+    :root {
+      --bg: #f7f8ff;
+      --text: #1a1d38;
+      --muted: #64708b;
+      --line: rgba(119, 132, 182, 0.16);
+      --surface: rgba(255, 255, 255, 0.84);
+      --shadow: 0 24px 60px rgba(98, 96, 164, 0.14);
+      --shadow-soft: 0 12px 30px rgba(88, 100, 164, 0.10);
+      --gradient-main: linear-gradient(135deg, #7a6dff 0%, #8f80ff 24%, #ff72c8 68%, #ff9fb7 100%);
+      --gradient-soft: linear-gradient(135deg, rgba(122, 109, 255, 0.10), rgba(115, 199, 255, 0.12) 45%, rgba(255, 108, 207, 0.12));
+      --header-height: 78px;
+      --content-width: 1180px;
+      --radius: 26px;
+      --font: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.55;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(115, 199, 255, 0.15), transparent 22%),
+        radial-gradient(circle at 100% 20%, rgba(255, 108, 207, 0.12), transparent 20%),
+        linear-gradient(180deg, #fbfbff 0%, #f7f8ff 100%);
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+    .container { width: min(calc(100% - 32px), var(--content-width)); margin: 0 auto; }
+    .section { padding: 78px 0; position: relative; }
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      backdrop-filter: blur(16px);
+      background: rgba(251, 251, 255, 0.72);
+      border-bottom: 1px solid rgba(122, 134, 190, 0.12);
+    }
+    .header-inner {
+      min-height: var(--header-height);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: var(--gradient-main);
+      color: #fff;
+      font-weight: 800;
+      box-shadow: 0 14px 30px rgba(122, 109, 255, 0.28);
+    }
+    .brand-title { font-weight: 800; letter-spacing: -0.03em; }
+    .brand-caption { color: var(--muted); font-size: 0.82rem; }
+    .desktop-nav { display: none; gap: 24px; color: #47506d; }
+    .header-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .lang-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.7);
+      font-size: 0.82rem;
+      color: var(--muted);
+      box-shadow: var(--shadow-soft);
+    }
+    .lang-switch strong { color: var(--text); }
+    .nav-toggle {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.84);
+      box-shadow: var(--shadow-soft);
+      display: inline-grid;
+      place-items: center;
+      cursor: pointer;
+    }
+    .nav-toggle span,
+    .nav-toggle span::before,
+    .nav-toggle span::after {
+      width: 18px;
+      height: 2px;
+      border-radius: 999px;
+      background: currentColor;
+      display: block;
+      position: relative;
+      transition: transform 0.25s ease, opacity 0.25s ease;
+    }
+    .nav-toggle span::before,
+    .nav-toggle span::after {
+      content: "";
+      position: absolute;
+      left: 0;
+    }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle[aria-expanded="true"] span { transform: rotate(45deg); }
+    .nav-toggle[aria-expanded="true"] span::before { top: 0; transform: rotate(90deg); }
+    .nav-toggle[aria-expanded="true"] span::after { opacity: 0; }
+    .mobile-nav {
+      display: grid;
+      gap: 10px;
+      padding-bottom: 16px;
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-height 0.3s ease, opacity 0.3s ease;
+    }
+    .mobile-nav.open { max-height: 320px; opacity: 1; }
+    .mobile-nav a {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.75);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+      font-weight: 600;
+      color: #48506d;
+    }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 54px;
+      padding: 0 22px;
+      border-radius: 999px;
+      font-size: 0.98rem;
+      font-weight: 700;
+      border: 0;
+      cursor: pointer;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .button:hover { transform: translateY(-2px); }
+    .button-primary {
+      color: #fff;
+      background: var(--gradient-main);
+      box-shadow: 0 14px 30px rgba(120, 105, 255, 0.24);
+      position: relative;
+      overflow: hidden;
+    }
+    .button-primary::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      background: linear-gradient(120deg, transparent 35%, rgba(255,255,255,0.42), transparent 66%);
+      transform: translateX(-120%);
+      animation: shimmer 5s ease-in-out infinite;
+    }
+    .button-secondary {
+      background: rgba(255,255,255,0.84);
+      color: var(--text);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.8);
+      border: 1px solid rgba(125, 138, 194, 0.14);
+      box-shadow: var(--shadow-soft);
+      color: #5e5aa7;
+      font-size: 0.82rem;
+      font-weight: 700;
+      margin-bottom: 18px;
+    }
+    .section-title {
+      font-size: clamp(1.9rem, 4vw, 3rem);
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+      margin: 0 0 14px;
+    }
+    .section-subtitle, .promti-lead {
+      max-width: 700px;
+      color: var(--muted);
+      margin: 0;
+      font-size: 1rem;
+    }
+    .hero { padding: 34px 0 70px; }
+    .hero-grid { display: grid; gap: 34px; align-items: center; }
+    .hero-title {
+      font-size: clamp(2.35rem, 7.5vw, 5rem);
+      line-height: 0.95;
+      letter-spacing: -0.06em;
+      margin: 0 0 18px;
+      max-width: 12ch;
+    }
+    .hero-title .accent {
+      background: linear-gradient(135deg, #2a3261 0%, #645cf4 35%, #ff5cc0 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero-subtitle { color: var(--muted); font-size: 1.02rem; margin: 0; max-width: 580px; }
+    .hero-cta { display: flex; flex-direction: column; gap: 12px; margin-top: 28px; }
+    .hero-trust {
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 18px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.8);
+      border: 1px solid rgba(125, 138, 194, 0.14);
+      color: #5f6789;
+      box-shadow: var(--shadow-soft);
+    }
+    .hero-visual {
+      position: relative;
+      min-height: 430px;
+      padding: 18px;
+      border-radius: 34px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(245,246,255,0.7));
+      border: 1px solid rgba(122,134,190,0.14);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .phone-shell {
+      width: min(100%, 330px);
+      margin: 0 auto;
+      padding: 14px;
+      border-radius: 32px;
+      background: rgba(23,24,42,0.96);
+      box-shadow: 0 25px 55px rgba(38,37,78,0.24);
+      position: relative;
+    }
+    .phone-shell::before {
+      content: "";
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 35%;
+      height: 24px;
+      border-radius: 0 0 16px 16px;
+      background: #17182a;
+    }
+    .phone-screen {
+      border-radius: 24px;
+      padding: 72px 16px 16px;
+      min-height: 398px;
+      background: radial-gradient(circle at top, rgba(140,136,255,0.28), transparent 24%), linear-gradient(180deg, #fbfaff 0%, #f3f5ff 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .telegram-bar {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.82);
+      border: 1px solid rgba(123,137,194,0.14);
+      backdrop-filter: blur(12px);
+    }
+    .telegram-bot { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 0.92rem; }
+    .telegram-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--gradient-main);
+      box-shadow: 0 10px 22px rgba(117,107,255,0.22);
+    }
+    .chat-stack { display: grid; gap: 12px; }
+    .chat-bubble, .result-card, .card {
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.86);
+      border: 1px solid rgba(122,134,190,0.12);
+      box-shadow: var(--shadow-soft);
+    }
+    .chat-bubble, .result-card { padding: 14px; }
+    .bubble-chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .bubble-chip {
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(115,199,255,0.12);
+      color: #44517d;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .result-grid, .examples-grid, .steps-grid, .usage-grid, .pricing-grid, .benefits-grid, .contact-grid, .legal-links, .legal-grid {
+      display: grid;
+      gap: 18px;
+    }
+    .result-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 10px; gap: 10px; }
+    .result-thumb {
+      aspect-ratio: 0.82;
+      border-radius: 18px;
+      overflow: hidden;
+      position: relative;
+      background: linear-gradient(160deg, rgba(115,199,255,0.18), rgba(255,111,200,0.22)), linear-gradient(180deg, #efeefe, #ffffff);
+    }
+    .result-thumb span {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.82);
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: #3c4774;
+    }
+    .floating-card {
+      position: absolute;
+      border-radius: 22px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.68);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.48);
+      box-shadow: var(--shadow-soft);
+      animation: float 11s ease-in-out infinite;
+    }
+    .floating-top { top: 26px; right: 12px; }
+    .floating-bottom { bottom: 24px; left: 10px; animation-delay: -5s; }
+    .example-card {
+      min-height: 295px;
+      padding: 18px;
+      display: flex;
+      align-items: flex-end;
+      overflow: hidden;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      background-size: cover;
+      background-position: center;
+      position: relative;
+    }
+    .example-card:hover, .card:hover { transform: translateY(-6px); box-shadow: var(--shadow); }
+    .example-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(18,21,48,0.38));
+    }
+    .example-card .content {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 14px;
+      color: #fff;
+    }
+    .example-meta strong { display: block; font-size: 1.15rem; letter-spacing: -0.03em; }
+    .example-meta span { font-size: 0.92rem; color: rgba(255,255,255,0.84); }
+    .tag {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.24);
+      font-size: 0.82rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .step-card, .usage-card, .pricing-card, .benefit-card, .contact-card, .legal-panel { padding: 22px; }
+    .icon-badge {
+      width: 54px;
+      height: 54px;
+      border-radius: 18px;
+      display: inline-grid;
+      place-items: center;
+      margin-bottom: 16px;
+      background: var(--gradient-soft);
+      color: #4c54b4;
+      font-size: 1.35rem;
+    }
+    .step-number {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      display: inline-grid;
+      place-items: center;
+      background: rgba(109,99,255,0.1);
+      color: #5a55cb;
+      font-size: 0.82rem;
+      font-weight: 800;
+      margin-bottom: 14px;
+    }
+    .step-card h3, .usage-card h3, .pricing-card h3, .benefit-card h3, .contact-card h3, .legal-panel h3 {
+      margin: 0 0 8px;
+      font-size: 1.14rem;
+      letter-spacing: -0.02em;
+    }
+    .step-card p, .usage-card p, .pricing-card p, .benefit-card p, .contact-card p, .legal-panel p, .legal-panel li {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .usage-value {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      margin-top: 16px;
+      border-radius: 999px;
+      background: rgba(109,99,255,0.1);
+      color: #584fd0;
+      font-weight: 800;
+      font-size: 0.9rem;
+    }
+    .pricing-card.featured {
+      background: linear-gradient(180deg, rgba(108,99,255,0.12), rgba(255,108,207,0.08)), #ffffff;
+      border-color: rgba(118,107,255,0.24);
+    }
+    .pricing-card.best {
+      background: linear-gradient(180deg, rgba(255,123,196,0.14), rgba(115,199,255,0.08)), #ffffff;
+      border-color: rgba(255,108,207,0.22);
+    }
+    .pricing-badge {
+      display: inline-flex;
+      align-self: flex-start;
+      padding: 7px 11px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 800;
+      color: #fff;
+      background: linear-gradient(135deg, #6d63ff, #ff6ccf);
+      margin-bottom: 12px;
+    }
+    .pricing-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .pricing-amount { font-size: 2rem; line-height: 1; letter-spacing: -0.05em; margin: 0; }
+    .pricing-price { font-weight: 800; color: #413f90; }
+    .pricing-list, .contact-list, .legal-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }
+    .pricing-list li, .contact-list li, .legal-list li {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      color: #58627f;
+      font-size: 0.94rem;
+    }
+    .pricing-list li::before, .contact-list li::before, .legal-list li::before {
+      content: "•";
+      color: #7d69ff;
+      font-weight: 900;
+      line-height: 1.1;
+    }
+    .cta-panel {
+      position: relative;
+      overflow: hidden;
+      border-radius: 34px;
+      padding: 34px 24px;
+      background: var(--gradient-main);
+      box-shadow: 0 30px 70px rgba(122,109,255,0.28);
+      color: #fff;
+    }
+    .cta-panel h2 { margin: 0 0 12px; font-size: clamp(1.9rem, 5vw, 3.3rem); line-height: 1.05; letter-spacing: -0.05em; max-width: 12ch; }
+    .cta-panel p { margin: 0 0 22px; color: rgba(255,255,255,0.86); max-width: 620px; }
+    .legal-links .button { width: 100%; justify-content: flex-start; }
+    .legal-panel { scroll-margin-top: calc(var(--header-height) + 22px); }
+    .legal-panel ul { padding-left: 18px; margin: 12px 0 0; color: var(--muted); display: grid; gap: 8px; }
+    .footer { padding: 34px 0 110px; color: #69738f; }
+    .footer-inner { display: flex; flex-direction: column; gap: 8px; padding-top: 18px; border-top: 1px solid rgba(122,134,190,0.12); }
+    .mobile-sticky-cta {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      z-index: 25;
+      border-radius: 999px;
+      box-shadow: 0 20px 40px rgba(116,103,255,0.28);
+    }
+    .mobile-sticky-cta .button { width: 100%; min-height: 58px; }
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s ease; }
+    .reveal.is-visible { opacity: 1; transform: translateY(0); }
+    .delay-1 { transition-delay: 0.08s; }
+    .delay-2 { transition-delay: 0.16s; }
+    .delay-3 { transition-delay: 0.24s; }
+    .loading {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      padding: 24px;
+      text-align: center;
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-120%); }
+      35%, 100% { transform: translateX(140%); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translate3d(0, 0, 0); }
+      50% { transform: translate3d(0, -12px, 0); }
+    }
+    @media (min-width: 720px) {
+      .container { width: min(calc(100% - 48px), var(--content-width)); }
+      .hero-cta { flex-direction: row; flex-wrap: wrap; }
+      .steps-grid, .usage-grid, .benefits-grid, .legal-links, .contact-grid, .legal-grid, .pricing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (min-width: 980px) {
+      .desktop-nav { display: flex; }
+      .nav-toggle, .mobile-nav, .mobile-sticky-cta { display: none; }
+      .hero-grid { grid-template-columns: minmax(0, 1.04fr) minmax(480px, 0.96fr); gap: 42px; }
+      .examples-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .steps-grid, .usage-grid, .benefits-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .pricing-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .contact-grid, .legal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .footer { padding-bottom: 42px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
+      .reveal { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="loading">Завантаження сторінки…</div>
+  <script>
+    const app = document.getElementById("app");
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function renderList(items) {
+      return (items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+    }
+
+    function renderContact(contact) {
+      const label = escapeHtml(contact.label);
+      const value = escapeHtml(contact.value);
+      if (contact.href) {
+        return `<li><span>${label}:</span> <a href="${escapeHtml(contact.href)}" target="${contact.href.startsWith("http") ? "_blank" : ""}" rel="noopener noreferrer">${value}</a></li>`;
+      }
+      return `<li><span>${label}:</span> <span>${value}</span></li>`;
+    }
+
+    function normalizeLocale(value) {
+      return value === "en" ? "en" : "uk";
+    }
+
+    function detectLocale(payload) {
+      const queryLocale = normalizeLocale(new URLSearchParams(window.location.search).get("lang"));
+      if (new URLSearchParams(window.location.search).has("lang")) return queryLocale;
+      const stored = normalizeLocale(localStorage.getItem("promti_locale"));
+      if (stored && payload.locales[stored]) return stored;
+      const browserLocale = String(navigator.language || "").toLowerCase().startsWith("en") ? "en" : "uk";
+      return payload.locales[browserLocale] ? browserLocale : "uk";
+    }
+
+    function setLocale(localeKey) {
+      const params = new URLSearchParams(window.location.search);
+      params.set("lang", localeKey);
+      const nextUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
+      history.replaceState({}, "", nextUrl);
+      localStorage.setItem("promti_locale", localeKey);
+    }
+
+    function renderPage(payload) {
+      const localeKey = detectLocale(payload);
+      const locale = payload.locales[localeKey] || payload.locales.uk;
+      const botLink = payload.botLink;
+      const heroTitle = escapeHtml(locale.hero.title).replace(
+        escapeHtml(locale.hero.titleAccent),
+        `<span class="accent">${escapeHtml(locale.hero.titleAccent)}</span>`
+      );
+      document.documentElement.lang = localeKey;
+
+      app.className = "page-shell";
+      app.innerHTML = `
+        <header class="site-header">
+          <div class="container">
+            <div class="header-inner">
+              <a class="brand" href="#top" aria-label="${escapeHtml(locale.brand.name)}">
+                <span class="brand-mark">✨</span>
+                <span>
+                  <div class="brand-title">${escapeHtml(locale.brand.name)}</div>
+                  <div class="brand-caption">${escapeHtml(locale.brand.tagline)}</div>
+                </span>
+              </a>
+              <nav class="desktop-nav" aria-label="Основна навігація">
+                <a href="#examples">${escapeHtml(locale.navigation.examples)}</a>
+                <a href="#how-it-works">${escapeHtml(locale.navigation.how)}</a>
+                <a href="#promti">${escapeHtml(locale.navigation.promti)}</a>
+                <a href="#contacts">${escapeHtml(locale.navigation.contacts)}</a>
+              </nav>
+              <div class="header-actions">
+                <div class="lang-switch">
+                  <a href="?lang=uk" data-locale-switch="uk" style="${localeKey === "uk" ? "font-weight:800;color:var(--text)" : ""}">UA</a>
+                  <span>|</span>
+                  <a href="?lang=en" data-locale-switch="en" style="${localeKey === "en" ? "font-weight:800;color:var(--text)" : "opacity:.7"}">EN</a>
+                </div>
+                <a class="button button-primary" href="${escapeHtml(botLink)}" target="_blank" rel="noopener noreferrer">${escapeHtml(locale.navigation.headerCta)}</a>
+                <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="Меню"><span></span></button>
+              </div>
+            </div>
+            <nav id="mobile-nav" class="mobile-nav" aria-label="Мобільна навігація">
+              <a href="#examples" data-nav-link>${escapeHtml(locale.navigation.examples)}</a>
+              <a href="#how-it-works" data-nav-link>${escapeHtml(locale.navigation.how)}</a>
+              <a href="#promti" data-nav-link>${escapeHtml(locale.navigation.promti)}</a>
+              <a href="#contacts" data-nav-link>${escapeHtml(locale.navigation.contacts)}</a>
+            </nav>
+          </div>
+        </header>
+
+        <main id="top">
+          <section class="hero section">
+            <div class="container hero-grid">
+              <div class="reveal">
+                <div class="eyebrow">${escapeHtml(locale.hero.badge)}</div>
+                <h1 class="hero-title">${heroTitle}</h1>
+                <p class="hero-subtitle">${escapeHtml(locale.hero.subtitle)}</p>
+                <div class="hero-cta">
+                  <a class="button button-primary" href="${escapeHtml(botLink)}" target="_blank" rel="noopener noreferrer">${escapeHtml(locale.hero.primaryCta)}</a>
+                  <a class="button button-secondary" href="#examples">${escapeHtml(locale.hero.secondaryCta)}</a>
+                </div>
+                <div class="hero-trust"><span>✨</span><span>${escapeHtml(locale.hero.trust)}</span></div>
+              </div>
+
+              <div class="hero-visual reveal delay-1">
+                <div class="floating-card floating-top"><strong>${escapeHtml(locale.hero.floatTopTitle)}</strong><span>${escapeHtml(locale.hero.floatTopText)}</span></div>
+                <div class="floating-card floating-bottom"><strong>${escapeHtml(locale.hero.floatBottomTitle)}</strong><span>${escapeHtml(locale.hero.floatBottomText)}</span></div>
+                <div class="phone-shell">
+                  <div class="phone-screen">
+                    <div class="telegram-bar">
+                      <div class="telegram-bot"><div class="telegram-avatar">AI</div><div>${escapeHtml(locale.brand.name)} Bot</div></div>
+                      <div>✨</div>
+                    </div>
+                    <div class="chat-stack">
+                      <div class="chat-bubble">
+                        <strong>${escapeHtml(locale.hero.mockupPromptTitle)}</strong>
+                        <span>${escapeHtml(locale.hero.mockupPromptText)}</span>
+                        <div class="bubble-chip-row">
+                          ${(locale.examples || []).slice(0, 3).map((item) => `<span class="bubble-chip">${escapeHtml(item.label)}</span>`).join("")}
+                        </div>
+                      </div>
+                      <div class="result-card">
+                        <strong>${escapeHtml(locale.hero.mockupResultTitle)}</strong>
+                        <div class="result-grid">
+                          ${(locale.examples || []).slice(0, 4).map((item) => `<div class="result-thumb"><span>${escapeHtml(item.label)}</span></div>`).join("")}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="examples" class="section">
+            <div class="container">
+              <div class="eyebrow reveal">${escapeHtml(locale.examplesSection.badge)}</div>
+              <h2 class="section-title reveal">${escapeHtml(locale.examplesSection.title)}</h2>
+              <p class="section-subtitle reveal delay-1">${escapeHtml(locale.examplesSection.subtitle)}</p>
+              <div class="examples-grid" style="margin-top:34px">
+                ${(locale.examples || []).map((item, index) => {
+                  const delay = index % 4 ? ` delay-${Math.min(index % 4, 3)}` : "";
+                  const bg = item.image
+                    ? `linear-gradient(180deg, rgba(255,255,255,0.04), rgba(18,21,48,0.36)), url('${escapeHtml(item.image)}')`
+                    : `linear-gradient(180deg, rgba(255,255,255,0.04), rgba(18,21,48,0.36)), ${escapeHtml(item.gradient || "linear-gradient(160deg, #d9dcff, #ffd4ec)")}`;
+                  return `<article class="card example-card reveal${delay}" style="background:${bg}">
+                    <div class="content">
+                      <div class="example-meta"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.text)}</span></div>
+                      <span class="tag">${escapeHtml(item.label)}</span>
+                    </div>
+                  </article>`;
+                }).join("")}
+              </div>
+            </div>
+          </section>
+
+          <section id="how-it-works" class="section">
+            <div class="container">
+              <div class="eyebrow reveal">${escapeHtml(locale.howSection.badge)}</div>
+              <h2 class="section-title reveal">${escapeHtml(locale.howSection.title)}</h2>
+              <div class="steps-grid" style="margin-top:34px">
+                ${(locale.howSection.steps || []).map((step, index) => `<article class="card step-card reveal delay-${Math.min(index, 3)}">
+                  <div class="step-number">${String(index + 1).padStart(2, "0")}</div>
+                  <div class="icon-badge">${escapeHtml(step.icon)}</div>
+                  <h3>${escapeHtml(step.title)}</h3>
+                  <p>${escapeHtml(step.text)}</p>
+                </article>`).join("")}
+              </div>
+            </div>
+          </section>
+
+          <section id="promti" class="section" style="background:radial-gradient(circle at top left, rgba(124,119,255,0.16), transparent 38%), radial-gradient(circle at bottom right, rgba(255,124,213,0.16), transparent 28%), linear-gradient(180deg, #f7f6ff 0%, #fcfdff 100%); border-block:1px solid rgba(122,134,190,0.10);">
+            <div class="container">
+              <div class="eyebrow reveal">${escapeHtml(locale.promtiSection.badge)}</div>
+              <h2 class="section-title reveal">${escapeHtml(locale.promtiSection.title)}</h2>
+              <p class="promti-lead reveal delay-1">${escapeHtml(locale.promtiSection.lead)}</p>
+              <div class="usage-grid" style="margin-top:34px">
+                ${(locale.promtiSection.usage || []).map((item, index) => `<article class="card usage-card reveal delay-${Math.min(index, 3)}">
+                  <div class="icon-badge">${escapeHtml(item.icon)}</div>
+                  <h3>${escapeHtml(item.title)}</h3>
+                  <p>${escapeHtml(item.text)}</p>
+                  <div class="usage-value">${escapeHtml(item.value)}</div>
+                </article>`).join("")}
+              </div>
+            </div>
+          </section>
+
+          <section id="pricing" class="section">
+            <div class="container">
+              <div class="eyebrow reveal">${escapeHtml(locale.pricingSection.badge)}</div>
+              <h2 class="section-title reveal">${escapeHtml(locale.pricingSection.title)}</h2>
+              <div class="pricing-grid" style="margin-top:34px">
+                ${(locale.pricingSection.packages || []).map((pkg, index) => `<article class="card pricing-card ${escapeHtml(pkg.accent || "default")} reveal delay-${Math.min(index, 3)}">
+                  ${pkg.badge ? `<div class="pricing-badge">${escapeHtml(pkg.badge)}</div>` : ""}
+                  <div class="pricing-top">
+                    <h3 class="pricing-amount">${escapeHtml(pkg.name)}</h3>
+                    <div class="pricing-price">${escapeHtml(pkg.price)}</div>
+                  </div>
+                  <ul class="pricing-list">${renderList(pkg.items)}</ul>
+                </article>`).join("")}
+              </div>
+            </div>
+          </section>
+
+          <section id="benefits" class="section">
+            <div class="container">
+              <div class="eyebrow reveal">${escapeHtml(locale.benefitsSection.badge)}</div>
+              <h2 class="section-title reveal">${escapeHtml(locale.benefitsSection.title)}</h2>
+              <div class="benefits-grid" style="margin-top:34px">
+                ${(locale.benefitsSection.items || []).map((item, index) => `<article class="card benefit-card reveal delay-${Math.min(index % 3, 3)}">
+                  <div class="icon-badge">${escapeHtml(item.icon)}</div>
+                  <h3>${escapeHtml(item.title)}</h3>
+                  <p>${escapeHtml(item.text)}</p>
+                </article>`).join("")}
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="container">
+              <div class="cta-panel reveal">
+                <h2>${escapeHtml(locale.ctaSection.title)}</h2>
+                <p>${escapeHtml(locale.ctaSection.text)}</p>
+                <a class="button button-primary" href="${escapeHtml(botLink)}" target="_blank" rel="noopener noreferrer">${escapeHtml(locale.ctaSection.button)}</a>
+              </div>
+            </div>
+          </section>
+
+          <section id="contacts" class="section">
+            <div class="container">
+              <div class="eyebrow reveal">${escapeHtml(locale.contactsSection.badge)}</div>
+              <h2 class="section-title reveal">${escapeHtml(locale.contactsSection.title)}</h2>
+              <div class="contact-grid" style="margin-top:34px">
+                <article class="card contact-card reveal">
+                  <h3>${escapeHtml(locale.contactsSection.contactsTitle)}</h3>
+                  <ul class="contact-list">${(locale.contactsSection.contacts || []).map(renderContact).join("")}</ul>
+                </article>
+                <article class="card contact-card reveal delay-1">
+                  <h3>${escapeHtml(locale.contactsSection.legalTitle)}</h3>
+                  <ul class="legal-list">${renderList(locale.contactsSection.legalInfo)}</ul>
+                </article>
+              </div>
+              <div class="legal-links" style="margin-top:34px">
+                <a class="button button-secondary reveal" href="#privacy">${escapeHtml(locale.legalNav.privacy)}</a>
+                <a class="button button-secondary reveal delay-1" href="#refund">${escapeHtml(locale.legalNav.refund)}</a>
+                <a class="button button-secondary reveal delay-2" href="#terms">${escapeHtml(locale.legalNav.terms)}</a>
+              </div>
+              <div class="legal-grid" style="margin-top:34px">
+                ${(locale.legalSections || []).map((section, index) => `<article id="${escapeHtml(section.id)}" class="card legal-panel reveal delay-${Math.min(index, 3)}">
+                  <h3>${escapeHtml(section.title)}</h3>
+                  <p>${escapeHtml(section.intro)}</p>
+                  <ul>${renderList(section.items)}</ul>
+                </article>`).join("")}
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <footer class="footer">
+          <div class="container">
+            <div class="footer-inner">
+              <strong>${escapeHtml(locale.footer.brand)}</strong>
+              <span>${escapeHtml(locale.footer.text)}</span>
+              <span>${escapeHtml(locale.footer.copy)}</span>
+            </div>
+          </div>
+        </footer>
+
+        <div class="mobile-sticky-cta">
+          <a class="button button-primary" href="${escapeHtml(botLink)}" target="_blank" rel="noopener noreferrer">${escapeHtml(locale.navigation.mobileCta)}</a>
+        </div>
+      `;
+
+      const navToggle = document.querySelector(".nav-toggle");
+      const mobileNav = document.getElementById("mobile-nav");
+      const navLinks = document.querySelectorAll("[data-nav-link]");
+      navToggle?.addEventListener("click", () => {
+        const expanded = navToggle.getAttribute("aria-expanded") === "true";
+        navToggle.setAttribute("aria-expanded", String(!expanded));
+        mobileNav.classList.toggle("open", !expanded);
+      });
+      navLinks.forEach((link) => link.addEventListener("click", () => {
+        mobileNav.classList.remove("open");
+        navToggle?.setAttribute("aria-expanded", "false");
+      }));
+      document.querySelectorAll("[data-locale-switch]").forEach((link) => {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          const nextLocale = normalizeLocale(link.dataset.localeSwitch);
+          setLocale(nextLocale);
+          renderPage(payload);
+        });
+      });
+
+      const revealItems = document.querySelectorAll(".reveal");
+      if ("IntersectionObserver" in window) {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("is-visible");
+              observer.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.18, rootMargin: "0px 0px -40px 0px" });
+        revealItems.forEach((item) => observer.observe(item));
+      } else {
+        revealItems.forEach((item) => item.classList.add("is-visible"));
+      }
+    }
+
+    fetch("/api/landing-content")
+      .then((response) => {
+        if (!response.ok) throw new Error("load_failed");
+        return response.json();
+      })
+      .then(renderPage)
+      .catch(() => {
+        app.innerHTML = `<div><strong>Не вдалося завантажити сайт.</strong><br>Спробуй оновити сторінку трохи пізніше.</div>`;
+      });
+  </script>
+</body>
+</html>

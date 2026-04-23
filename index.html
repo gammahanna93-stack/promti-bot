@@ -346,32 +346,52 @@
     .floating-top { top: 26px; right: 12px; }
     .floating-bottom { bottom: 24px; left: 10px; animation-delay: -5s; }
     .example-card {
-      min-height: 295px;
+      min-height: 380px;
+      aspect-ratio: 0.72;
       padding: 18px;
       display: flex;
       align-items: flex-end;
       overflow: hidden;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
-      background-size: cover;
-      background-position: center;
       position: relative;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(18,21,48,0.36)),
+        var(--example-fallback, linear-gradient(160deg, #d9dcff, #ffd4ec));
+    }
+    .example-image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center top;
+      transform: scale(1);
+      transition: transform 0.45s ease;
     }
     .example-card:hover, .card:hover { transform: translateY(-6px); box-shadow: var(--shadow); }
+    .example-card:hover .example-image { transform: scale(1.04); }
     .example-card::after {
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(18,21,48,0.38));
+      background: linear-gradient(180deg, rgba(16,18,39,0.02) 0%, rgba(16,18,39,0.16) 42%, rgba(16,18,39,0.62) 100%);
     }
     .example-card .content {
       position: relative;
       z-index: 1;
       width: 100%;
+      display: grid;
+      gap: 14px;
+      color: #fff;
+    }
+    .example-card .content-row {
       display: flex;
       align-items: flex-end;
       justify-content: space-between;
       gap: 14px;
-      color: #fff;
+    }
+    .example-card .content-row .example-meta {
+      flex: 1;
     }
     .example-meta strong { display: block; font-size: 1.15rem; letter-spacing: -0.03em; }
     .example-meta span { font-size: 0.92rem; color: rgba(255,255,255,0.84); }
@@ -534,7 +554,7 @@
       .desktop-nav { display: flex; }
       .nav-toggle, .mobile-nav, .mobile-sticky-cta { display: none; }
       .hero-grid { grid-template-columns: minmax(0, 1.04fr) minmax(480px, 0.96fr); gap: 42px; }
-      .examples-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .examples-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; }
       .steps-grid, .usage-grid, .benefits-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .pricing-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .contact-grid, .legal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -694,13 +714,17 @@
               <div class="examples-grid" style="margin-top:34px">
                 ${(locale.examples || []).map((item, index) => {
                   const delay = index % 4 ? ` delay-${Math.min(index % 4, 3)}` : "";
-                  const bg = item.image
-                    ? `linear-gradient(180deg, rgba(255,255,255,0.04), rgba(18,21,48,0.36)), url('${escapeHtml(item.image)}')`
-                    : `linear-gradient(180deg, rgba(255,255,255,0.04), rgba(18,21,48,0.36)), ${escapeHtml(item.gradient || "linear-gradient(160deg, #d9dcff, #ffd4ec)")}`;
-                  return `<article class="card example-card reveal${delay}" style="background:${bg}">
+                  const fallback = escapeHtml(item.gradient || "linear-gradient(160deg, #d9dcff, #ffd4ec)");
+                  const imageMarkup = item.image
+                    ? `<img class="example-image" src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}">`
+                    : "";
+                  return `<article class="card example-card reveal${delay}" style="--example-fallback:${fallback}">
+                    ${imageMarkup}
                     <div class="content">
-                      <div class="example-meta"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.text)}</span></div>
-                      <span class="tag">${escapeHtml(item.label)}</span>
+                      <div class="content-row">
+                        <div class="example-meta"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.text)}</span></div>
+                        <span class="tag">${escapeHtml(item.label)}</span>
+                      </div>
                     </div>
                   </article>`;
                 }).join("")}

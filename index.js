@@ -71,6 +71,7 @@ const GEN_LOG_PATH      = path.join(DATA_DIR, "generation_logs.jsonl");
 const PROMPTS_PATH      = path.join(DATA_DIR, "prompts.json");
 const CONTENT_PATH      = path.join(DATA_DIR, "content.json");
 const SETTINGS_PATH     = path.join(DATA_DIR, "settings.json");
+const DYNAMIC_PROMPTS_PATH = path.join(DATA_DIR, "dynamic-prompts.json");
 const LANDING_CONTENT_PATH = path.join(DATA_DIR, "landing-content.json");
 const LANDING_CONTENT_DEFAULT_PATH = path.join(__dirname, "landing-content.default.json");
 const LANDING_UPLOADS_DIR = path.join(DATA_DIR, "landing-uploads");
@@ -87,6 +88,7 @@ for (const [src, dst] of [
   [path.join(__dirname, "prompts.json"),  PROMPTS_PATH],
   [path.join(__dirname, "content.json"),  CONTENT_PATH],
   [path.join(__dirname, "settings.json"), SETTINGS_PATH],
+  [path.join(__dirname, "dynamic-prompts.json"), DYNAMIC_PROMPTS_PATH],
   [LANDING_CONTENT_DEFAULT_PATH, LANDING_CONTENT_PATH],
 ]) {
   if (fs.existsSync(src)) {
@@ -867,6 +869,87 @@ function deleteStyle(key) {
   saveContent();
 }
 
+function readDynamicPromptsConfig() {
+  const repoPath = path.join(__dirname, "dynamic-prompts.json");
+  const primaryPath = fs.existsSync(repoPath)
+    ? repoPath
+    : DYNAMIC_PROMPTS_PATH;
+  if (!fs.existsSync(primaryPath)) return { templates: [] };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(primaryPath, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : { templates: [] };
+  } catch (error) {
+    console.error("DYNAMIC PROMPTS READ ERROR:", error.message);
+    return { templates: [] };
+  }
+}
+
+function convertDynamicPromptTemplate(template = {}, existingStyle = null) {
+  const key = normalizePromptKey(template.id || template.key || "");
+  if (!key) return null;
+
+  let selectors = [];
+  if (Array.isArray(template.selectors) && template.selectors.length) {
+    selectors = normalizeStyleSelectors(template.selectors);
+  } else {
+    const selectorKey = normalizePromptKey(template.selectorKey || "selector");
+    const rawOptions = template.options && typeof template.options === "object" && !Array.isArray(template.options)
+      ? template.options
+      : {};
+    const options = {};
+    for (const [optionKey, optionValue] of Object.entries(rawOptions)) {
+      const variablesSource = optionValue?.variables && typeof optionValue.variables === "object"
+        ? optionValue.variables
+        : Object.fromEntries(Object.entries(optionValue || {}).filter(([innerKey]) => innerKey !== "label"));
+      options[normalizePromptKey(optionKey)] = {
+        key: normalizePromptKey(optionKey),
+        label: optionValue?.label || optionKey,
+        variables: variablesSource,
+        clicks: optionValue?.clicks || 0,
+        generations: optionValue?.generations || 0,
+        purchases: optionValue?.purchases || 0,
+      };
+    }
+    selectors = normalizeStyleSelectors([{
+      key: selectorKey,
+      label: template.selectorLabel || selectorKey,
+      type: template.selectorType === "inline" ? "inline" : "inline",
+      options,
+    }]);
+  }
+
+  return normalizeStyleItem({
+    key,
+    type: "dynamic",
+    title: template.title || key,
+    category: template.category || existingStyle?.category || "dynamic",
+    template: template.template || "",
+    selectors,
+    previewPhoto: existingStyle?.previewPhoto || template.previewPhoto || null,
+    examplePhotos: existingStyle?.examplePhotos || template.examplePhotos || [],
+    isTrending: typeof template.isTrending === "boolean" ? template.isTrending : Boolean(existingStyle?.isTrending),
+    createdAt: existingStyle?.createdAt || Date.now(),
+    clicks: Number(existingStyle?.clicks || 0),
+    generations: Number(existingStyle?.generations || 0),
+    purchases: Number(existingStyle?.purchases || 0),
+  }, key);
+}
+
+function importDynamicPromptTemplates() {
+  const config = readDynamicPromptsConfig();
+  const templates = Array.isArray(config.templates) ? config.templates : [];
+  let imported = 0;
+  for (const template of templates) {
+    if (!template || template.enabled === false) continue;
+    const existingStyle = getStyle(normalizePromptKey(template.id || template.key || ""));
+    const converted = convertDynamicPromptTemplate(template, existingStyle);
+    if (!converted) continue;
+    setStyle(converted);
+    imported += 1;
+  }
+  return imported;
+}
+
 function incrementStyleMetric(styleKey, metric, amount = 1) {
   const style = getStyle(styleKey);
   if (!style) return false;
@@ -1408,6 +1491,11 @@ function saveWizardStyle(ctx) {
   return style;
 }
 
+const importedDynamicStylesOnBoot = importDynamicPromptTemplates();
+if (importedDynamicStylesOnBoot > 0) {
+  console.log(`Imported dynamic styles: ${importedDynamicStylesOnBoot}`);
+}
+
 async function replyLongText(ctx, text, extra = undefined) {
   const limit = 3800;
   if (!text || text.length <= limit) return ctx.reply(text, extra);
@@ -1883,6 +1971,13 @@ bot.command("stylewizard", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   startStyleWizard(ctx);
   return promptStyleWizardStep(ctx);
+});
+
+bot.command("importdynamic", async (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+  const imported = importDynamicPromptTemplates();
+  return ctx.reply(`✅ Імпортовано dynamic styles: ${imported}`, adminMenu());
 });
 
 bot.command("addprompt", async (ctx) => {

@@ -1,0 +1,147 @@
+{
+  "templates": [
+    {
+      "id": "zodiac_goddess",
+      "title": "Zodiac Goddess",
+      "enabled": true,
+      "type": "dynamic",
+      "selectorLabel": "Обери знак зодіаку",
+      "selectorType": "dropdown",
+      "template": "A divine goddess portrait of a woman embodying [ZODIAC], photographed as a real couture fashion photoshoot with authentic textures and physical realism.\n\nDRESS STRUCTURE:\nFloor-length A-line gown with high turtleneck collar, entirely covered in dense micro-glitter fabric with visible textile grain and stitching.\nLarge oval and teardrop gemstone cabochons physically sewn onto the entire dress surface in [ZODIAC_COLORS].\n\nGLOVES:\nLong elegant gloves in [GLOVE_COLOR], reaching above the elbow.\n\nHEADPIECE:\nMassive sculptural crown in the shape of [ZODIAC_SYMBOL], built from layered crystals and [METAL] metal structure.\n\nFACE:\nNatural lips in [LIP_COLOR].\n\nPOSE:\nHolding [TOTEM_OBJECT].\n\nBACKGROUND:\nDeep saturated blue sky gradient fading to [BACKGROUND_COLOR].",
+      "options": {
+        "aries": {
+          "label": "Aries / Овен",
+          "ZODIAC": "Aries",
+          "ZODIAC_COLORS": "crimson, fiery orange, radiant gold",
+          "ZODIAC_SYMBOL": "ram horns sunburst crown",
+          "TOTEM_OBJECT": "a flaming celestial ram relic",
+          "LIP_COLOR": "bold scarlet",
+          "METAL": "gold",
+          "GLOVE_COLOR": "metallic gold",
+          "BACKGROUND_COLOR": "warm ember orange"
+        },
+        "taurus": {
+          "label": "Taurus / Телець",
+          "ZODIAC": "Taurus",
+          "ZODIAC_COLORS": "emerald, moss green, muted gold",
+          "ZODIAC_SYMBOL": "sculptural bull horn crown",
+          "TOTEM_OBJECT": "an emerald bull totem",
+          "LIP_COLOR": "rose nude",
+          "METAL": "gold",
+          "GLOVE_COLOR": "ivory",
+          "BACKGROUND_COLOR": "soft olive mist"
+        },
+        "gemini": {
+          "label": "Gemini / Близнюки",
+          "ZODIAC": "Gemini",
+          "ZODIAC_COLORS": "silver, champagne, pale lavender",
+          "ZODIAC_SYMBOL": "twin mirrored crystal crown",
+          "TOTEM_OBJECT": "a dual celestial mirror totem",
+          "LIP_COLOR": "soft mauve",
+          "METAL": "silver",
+          "GLOVE_COLOR": "silver",
+          "BACKGROUND_COLOR": "pale violet haze"
+        },
+        "cancer": {
+          "label": "Cancer / Рак",
+          "ZODIAC": "Cancer",
+          "ZODIAC_COLORS": "moon white, pearl, soft blue",
+          "ZODIAC_SYMBOL": "crescent crab-inspired moon crown",
+          "TOTEM_OBJECT": "a moonlit shell relic",
+          "LIP_COLOR": "dusty rose",
+          "METAL": "silver",
+          "GLOVE_COLOR": "ivory",
+          "BACKGROUND_COLOR": "moonlit blue"
+        },
+        "leo": {
+          "label": "Leo / Лев",
+          "ZODIAC": "Leo",
+          "ZODIAC_COLORS": "sun gold, amber, royal orange",
+          "ZODIAC_SYMBOL": "lion mane sun crown",
+          "TOTEM_OBJECT": "a radiant lion solar relic",
+          "LIP_COLOR": "burnt coral",
+          "METAL": "gold",
+          "GLOVE_COLOR": "gold",
+          "BACKGROUND_COLOR": "golden sunset"
+        },
+        "virgo": {
+          "label": "Virgo / Діва",
+          "ZODIAC": "Virgo",
+          "ZODIAC_COLORS": "sage, cream, pale gold",
+          "ZODIAC_SYMBOL": "wheat and star crown",
+          "TOTEM_OBJECT": "a sacred wheat crystal charm",
+          "LIP_COLOR": "soft beige rose",
+          "METAL": "gold",
+          "GLOVE_COLOR": "ivory",
+          "BACKGROUND_COLOR": "cream sage sky"
+        },
+        "libra": {
+          "label": "Libra / Терези",
+          "ZODIAC": "Libra",
+          "ZODIAC_COLORS": "blush pink, rose gold, ivory",
+          "ZODIAC_SYMBOL": "balanced scale crystal crown",
+          "TOTEM_OBJECT": "a jeweled balance talisman",
+          "LIP_COLOR": "pink nude",
+          "METAL": "rose gold",
+          "GLOVE_COLOR": "ivory",
+          "BACKGROUND_COLOR": "soft blush horizon"
+        },
+        "scorpio": {
+          "label": "Scorpio / Скорпіон",
+          "ZODIAC": "Scorpio",
+          "ZODIAC_COLORS": "deep burgundy, black, silver",
+          "ZODIAC_SYMBOL": "scorpion crystal crown",
+          "TOTEM_OBJECT": "a scorpion-shaped crystal relic",
+          "LIP_COLOR": "deep wine red",
+          "METAL": "silver",
+          "GLOVE_COLOR": "black",
+          "BACKGROUND_COLOR": "midnight plum"
+        },
+        "sagittarius": {
+          "label": "Sagittarius / Стрілець",
+          "ZODIAC": "Sagittarius",
+          "ZODIAC_COLORS": "royal purple, sapphire, gold",
+          "ZODIAC_SYMBOL": "arrow and constellation crown",
+          "TOTEM_OBJECT": "a celestial arrow relic",
+          "LIP_COLOR": "berry rose",
+          "METAL": "gold",
+          "GLOVE_COLOR": "metallic gold",
+          "BACKGROUND_COLOR": "deep indigo"
+        },
+        "capricorn": {
+          "label": "Capricorn / Козоріг",
+          "ZODIAC": "Capricorn",
+          "ZODIAC_COLORS": "charcoal, icy silver, forest green",
+          "ZODIAC_SYMBOL": "sea-goat crystal crown",
+          "TOTEM_OBJECT": "a mountain-stone sea-goat relic",
+          "LIP_COLOR": "cool nude",
+          "METAL": "silver",
+          "GLOVE_COLOR": "black",
+          "BACKGROUND_COLOR": "stormy steel blue"
+        },
+        "aquarius": {
+          "label": "Aquarius / Водолій",
+          "ZODIAC": "Aquarius",
+          "ZODIAC_COLORS": "electric blue, turquoise, silver",
+          "ZODIAC_SYMBOL": "water-wave crystal crown",
+          "TOTEM_OBJECT": "a luminous water vessel relic",
+          "LIP_COLOR": "cool pink nude",
+          "METAL": "silver",
+          "GLOVE_COLOR": "silver",
+          "BACKGROUND_COLOR": "electric aqua"
+        },
+        "pisces": {
+          "label": "Pisces / Риби",
+          "ZODIAC": "Pisces",
+          "ZODIAC_COLORS": "seafoam, pearl, lilac",
+          "ZODIAC_SYMBOL": "twin fish celestial crown",
+          "TOTEM_OBJECT": "a pearl fish talisman",
+          "LIP_COLOR": "soft pink gloss",
+          "METAL": "silver",
+          "GLOVE_COLOR": "ivory",
+          "BACKGROUND_COLOR": "misty ocean lavender"
+        }
+      }
+    }
+  ]
+}

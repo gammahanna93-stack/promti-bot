@@ -53,7 +53,7 @@ const WAYFORPAY = {
 
 const REFERRAL_PROMTI_BONUS = 5;
 const START_PROMTI_BONUS = 3;
-const MAX_PROMPT_EXAMPLE_PHOTOS = 12;
+const MAX_PROMPT_EXAMPLE_PHOTOS = 10;
 
 const PROMTI_PRICES = {
   photo:    1,
@@ -371,6 +371,7 @@ const DEFAULT_CONTENT = {
   ideaText:     "💡 Ідеї для промтів:\n\n🖼 Фото:\n• \"portrait in Renaissance style\"\n• \"cyberpunk neon portrait\"\n\n🎬 Відео:\n• \"hair gently flowing in wind\"\n• \"eyes slowly opening, cinematic\"",
   support_link: "https://t.me/promteamai?direct",
   pricesText:   "💰 PROMTI AI — Ціни\n\n💎 Валюта: Promti ✨\n1 Promti ✨ = від 6.7 до 9.9 грн\n\n📦 Пакети:\n10 Promti ✨ — 99 грн (9.9 грн/✨)\n30 Promti ✨ — 249 грн (8.3 грн/✨)\n60 Promti ✨ — 449 грн (7.5 грн/✨)\n150 Promti ✨ — 999 грн (6.7 грн/✨) 🔥\n\n💰 Ціни послуг:\n🖼 Фото — 1 Promti ✨\n🎬 Seedance відео — 5 Promti ✨\n🎥 Kling відео — 8 Promti ✨\n\n🎁 3 Promti ✨ безкоштовно при реєстрації!\n👫 +5 Promti ✨ за кожного друга який оплатить",
+  styleLibrary: {},
   promptLibrary: {},
   promptCategories: {},
 };
@@ -382,8 +383,13 @@ let payments = loadJson(PAYMENTS_PATH, []);
 
 prompts = { ...DEFAULT_PROMPTS, ...prompts };
 content = { ...DEFAULT_CONTENT, ...content };
+if (!content.styleLibrary || typeof content.styleLibrary !== "object" || Array.isArray(content.styleLibrary)) content.styleLibrary = {};
 if (!content.promptLibrary || typeof content.promptLibrary !== "object" || Array.isArray(content.promptLibrary)) content.promptLibrary = {};
 if (!content.promptCategories || typeof content.promptCategories !== "object" || Array.isArray(content.promptCategories)) content.promptCategories = {};
+if (Object.keys(content.styleLibrary).length === 0 && Object.keys(content.promptLibrary).length > 0) {
+  content.styleLibrary = content.promptLibrary;
+}
+content.promptLibrary = content.styleLibrary;
 if (typeof content.welcomeText === "string") {
   content.welcomeText = content.welcomeText
     .replaceAll("1 фото безкоштовно", "3 Promti ✨ безкоштовно")
@@ -613,8 +619,17 @@ function resetState(ctx) {
   ctx.session.awaitingPromptEditKey = null;
   ctx.session.awaitingTextEditKey   = null;
   ctx.session.awaitingPromptPreviewKey = null;
+  ctx.session.awaitingPromptExamplesKey = null;
   ctx.session.currentPromptKey      = null;
   ctx.session.sourcePromptKey       = null;
+  ctx.session.currentStyleKey       = null;
+  ctx.session.currentStyleType      = null;
+  ctx.session.currentDynamicSelections = {};
+  ctx.session.sourceStyleKey        = null;
+  ctx.session.sourceStyleType       = null;
+  ctx.session.sourceDynamicSelections = {};
+  ctx.session.pendingDynamicStyle   = null;
+  ctx.session.styleWizard           = null;
 }
 
 function getUser(id) {
@@ -630,8 +645,13 @@ function getUser(id) {
       dailyAiDate: null, dailyAiCount: 0,
       lastPaymentRequest: null, pendingOrderReference: null, lastPaidAt: null,
       sourcePromptKey: null,
+      sourceStyleKey: null,
+      sourceDynamicSelections: {},
       lastGeneratedPromptKey: null,
+      lastGeneratedStyleKey: null,
       pendingPurchasePromptKey: null,
+      pendingPurchaseStyleKey: null,
+      pendingPurchaseDynamicSelections: null,
       lastPurchaseAttributedOrderReference: null,
       createdAt: new Date().toISOString(),
     };
@@ -687,6 +707,54 @@ function normalizePromptKey(key = "") {
   return String(key).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+function normalizeSelectorVariables(variables = {}) {
+  if (!variables || typeof variables !== "object" || Array.isArray(variables)) return {};
+  const normalized = {};
+  for (const [key, value] of Object.entries(variables)) {
+    const normalizedKey = String(key || "").trim().toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!normalizedKey) continue;
+    normalized[normalizedKey] = String(value ?? "").trim();
+  }
+  return normalized;
+}
+
+function normalizeSelectorOption(option = {}, fallbackKey = "") {
+  return {
+    key: normalizePromptKey(option.key || fallbackKey),
+    label: String(option.label || fallbackKey || "Option").trim(),
+    variables: normalizeSelectorVariables(option.variables),
+    clicks: Number(option.clicks || 0),
+    generations: Number(option.generations || 0),
+    purchases: Number(option.purchases || 0),
+  };
+}
+
+function normalizeStyleSelectors(selectors = []) {
+  if (!Array.isArray(selectors)) return [];
+  return selectors
+    .map((selector, selectorIndex) => {
+      if (!selector || typeof selector !== "object") return null;
+      const key = normalizePromptKey(selector.key || `selector_${selectorIndex + 1}`);
+      if (!key) return null;
+      const rawOptions = selector.options && typeof selector.options === "object" && !Array.isArray(selector.options)
+        ? selector.options
+        : {};
+      const normalizedOptions = {};
+      for (const [optionKey, optionValue] of Object.entries(rawOptions)) {
+        const normalizedOption = normalizeSelectorOption(optionValue, optionKey);
+        if (!normalizedOption.key) continue;
+        normalizedOptions[normalizedOption.key] = normalizedOption;
+      }
+      return {
+        key,
+        label: String(selector.label || key).trim(),
+        type: selector.type === "inline" ? "inline" : "inline",
+        options: normalizedOptions,
+      };
+    })
+    .filter(Boolean);
+}
+
 function normalizePromptExamplePhotos(value) {
   const source = Array.isArray(value) ? value : (value ? [value] : []);
   return source
@@ -695,13 +763,18 @@ function normalizePromptExamplePhotos(value) {
     .slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
 }
 
-function normalizePromptLibraryItem(item = {}, key = "") {
+function normalizeStyleItem(item = {}, key = "") {
+  const type = item.type === "dynamic" ? "dynamic" : "static";
   const examplePhotos = normalizePromptExamplePhotos(item.examplePhotos);
   const previewPhoto = item.previewPhoto || examplePhotos[0] || null;
+  const selectors = normalizeStyleSelectors(item.selectors);
   return {
     key: item.key || key,
+    type,
     title: item.title || key,
-    prompt: item.prompt || "",
+    prompt: type === "static" ? String(item.prompt || item.template || "").trim() : "",
+    template: type === "dynamic" ? String(item.template || item.prompt || "").trim() : "",
+    selectors,
     category: item.category || "other",
     previewPhoto,
     examplePhotos,
@@ -713,31 +786,52 @@ function normalizePromptLibraryItem(item = {}, key = "") {
   };
 }
 
-function ensurePromptLibrary() {
-  if (!content.promptLibrary || typeof content.promptLibrary !== "object" || Array.isArray(content.promptLibrary)) {
-    content.promptLibrary = {};
+function normalizePromptLibraryItem(item = {}, key = "") {
+  return normalizeStyleItem(item, key);
+}
+
+function ensureStyleLibrary() {
+  const rawLegacy = content.promptLibrary && typeof content.promptLibrary === "object" && !Array.isArray(content.promptLibrary)
+    ? content.promptLibrary
+    : {};
+  if (!content.styleLibrary || typeof content.styleLibrary !== "object" || Array.isArray(content.styleLibrary)) {
+    content.styleLibrary = {};
   }
+
+  const merged = { ...rawLegacy, ...content.styleLibrary };
   let changed = false;
-  for (const [key, item] of Object.entries(content.promptLibrary)) {
-    const normalized = normalizePromptLibraryItem(item, key);
+  const normalizedLibrary = {};
+  for (const [key, item] of Object.entries(merged)) {
+    const normalized = normalizeStyleItem(item, key);
     if (JSON.stringify(normalized) !== JSON.stringify(item)) {
-      content.promptLibrary[key] = normalized;
       changed = true;
     }
+    normalizedLibrary[normalized.key] = normalized;
   }
+
+  content.styleLibrary = normalizedLibrary;
+  content.promptLibrary = content.styleLibrary;
   if (changed) saveContent();
-  return content.promptLibrary;
+  return content.styleLibrary;
+}
+
+function ensurePromptLibrary() {
+  return ensureStyleLibrary();
+}
+
+function getStyle(key) {
+  const styleLibrary = ensureStyleLibrary();
+  if (!key || !styleLibrary[key]) return null;
+  return normalizeStyleItem(styleLibrary[key], key);
 }
 
 function getPromptStyle(key) {
-  const promptLibrary = ensurePromptLibrary();
-  if (!key || !promptLibrary[key]) return null;
-  return normalizePromptLibraryItem(promptLibrary[key], key);
+  return getStyle(key);
 }
 
-function getSortedPromptStyles() {
-  return Object.values(ensurePromptLibrary())
-    .map(item => normalizePromptLibraryItem(item, item.key))
+function getSortedStyles() {
+  return Object.values(ensureStyleLibrary())
+    .map(item => normalizeStyleItem(item, item.key))
     .sort((a, b) =>
       Number(b.isTrending) - Number(a.isTrending) ||
       Number(b.clicks || 0) - Number(a.clicks || 0) ||
@@ -745,20 +839,53 @@ function getSortedPromptStyles() {
     );
 }
 
+function getSortedPromptStyles() {
+  return getSortedStyles();
+}
+
 function getPromptCategoryStats() {
   const stats = {};
-  for (const style of getSortedPromptStyles()) {
+  for (const style of getSortedStyles()) {
     stats[style.category] = (stats[style.category] || 0) + 1;
   }
   return stats;
 }
 
-function incrementPromptMetric(promptKey, metric, amount = 1) {
-  const style = getPromptStyle(promptKey);
+function setStyle(style) {
+  const normalized = normalizeStyleItem(style, style?.key);
+  ensureStyleLibrary();
+  content.styleLibrary[normalized.key] = normalized;
+  content.promptLibrary = content.styleLibrary;
+  saveContent();
+  return normalized;
+}
+
+function deleteStyle(key) {
+  ensureStyleLibrary();
+  delete content.styleLibrary[key];
+  content.promptLibrary = content.styleLibrary;
+  saveContent();
+}
+
+function incrementStyleMetric(styleKey, metric, amount = 1) {
+  const style = getStyle(styleKey);
   if (!style) return false;
   style[metric] = Number(style[metric] || 0) + amount;
-  content.promptLibrary[promptKey] = style;
-  saveContent();
+  setStyle(style);
+  return true;
+}
+
+function incrementPromptMetric(promptKey, metric, amount = 1) {
+  return incrementStyleMetric(promptKey, metric, amount);
+}
+
+function incrementDynamicOptionMetric(styleKey, selectorKey, optionKey, metric, amount = 1) {
+  const style = getStyle(styleKey);
+  if (!style || style.type !== "dynamic") return false;
+  const selector = style.selectors.find(item => item.key === selectorKey);
+  if (!selector || !selector.options[optionKey]) return false;
+  selector.options[optionKey][metric] = Number(selector.options[optionKey][metric] || 0) + amount;
+  setStyle(style);
   return true;
 }
 
@@ -779,8 +906,58 @@ async function resolveBotUsername(ctx) {
   }
 }
 
+function buildDynamicPrompt(style, selectedOptions = {}) {
+  if (!style || style.type !== "dynamic") return style?.prompt || "";
+  const variables = {};
+  for (const selector of style.selectors) {
+    const selectedKey = selectedOptions?.[selector.key];
+    const selectedOption = selectedKey ? selector.options?.[selectedKey] : null;
+    if (!selectedOption) continue;
+    Object.assign(variables, normalizeSelectorVariables(selectedOption.variables));
+  }
+
+  return String(style.template || "")
+    .replace(/\[([A-Z0-9_]+)\]/g, (full, placeholder) => {
+      const key = String(placeholder || "").trim().toUpperCase();
+      return Object.prototype.hasOwnProperty.call(variables, key) ? variables[key] : full;
+    })
+    .trim();
+}
+
+function getStyleDeepLink(username, key, selections = {}) {
+  const style = getStyle(key);
+  if (!style) return `https://t.me/${username}?start=prompt_${key}`;
+  const prefix = style.type === "dynamic" ? "template_" : "prompt_";
+  const params = Object.entries(selections || {})
+    .filter(([, value]) => value)
+    .map(([selectorKey, optionKey]) => `${normalizePromptKey(selectorKey)}=${normalizePromptKey(optionKey)}`)
+    .join("__");
+  return `https://t.me/${username}?start=${prefix}${key}${params ? `__${params}` : ""}`;
+}
+
 function getPromptDeepLink(username, key) {
-  return `https://t.me/${username}?start=prompt_${key}`;
+  return getStyleDeepLink(username, key);
+}
+
+function parseStyleStartPayload(payload = "") {
+  const raw = String(payload || "").trim();
+  if (!raw) return null;
+  const prefix = raw.startsWith("template_") ? "template_" : (raw.startsWith("prompt_") ? "prompt_" : null);
+  if (!prefix) return null;
+  const body = raw.slice(prefix.length);
+  const parts = body.split("__").filter(Boolean);
+  const key = normalizePromptKey(parts.shift() || "");
+  const selections = {};
+  for (const part of parts) {
+    const [selectorKey, optionKey] = part.split("=");
+    if (!selectorKey || !optionKey) continue;
+    selections[normalizePromptKey(selectorKey)] = normalizePromptKey(optionKey);
+  }
+  return {
+    type: prefix === "template_" ? "dynamic" : "static",
+    key,
+    selections,
+  };
 }
 
 function getPromptBalanceText(userId) {
@@ -793,50 +970,153 @@ function clearPromptAttribution(ctx) {
   ensureSession(ctx);
   ctx.session.currentPromptKey = null;
   ctx.session.sourcePromptKey = null;
+  ctx.session.currentStyleKey = null;
+  ctx.session.currentStyleType = null;
+  ctx.session.currentDynamicSelections = {};
+  ctx.session.sourceStyleKey = null;
+  ctx.session.sourceStyleType = null;
+  ctx.session.sourceDynamicSelections = {};
+}
+
+function applyStaticStyleToSession(ctx, style, selections = {}) {
+  if (!style) return null;
+  const user = getUser(ctx.from.id);
+  const finalPrompt = style.type === "dynamic"
+    ? buildDynamicPrompt(style, selections)
+    : style.prompt;
+
+  ctx.session.mode = "photo";
+  ctx.session.photoMode = "edit";
+  ctx.session.customType = "custom_photo";
+  ctx.session.awaitingCustomPrompt = false;
+  ctx.session.customPrompt = finalPrompt;
+  ctx.session.awaitingAiPrompt = null;
+  ctx.session.awaitingCustomAmount = false;
+  ctx.session.awaitingPromptEditKey = null;
+  ctx.session.awaitingTextEditKey = null;
+  ctx.session.awaitingPromptPreviewKey = null;
+  ctx.session.currentPromptKey = style.key;
+  ctx.session.sourcePromptKey = style.key;
+  ctx.session.currentStyleKey = style.key;
+  ctx.session.currentStyleType = style.type;
+  ctx.session.currentDynamicSelections = { ...(selections || {}) };
+  ctx.session.sourceStyleKey = style.key;
+  ctx.session.sourceStyleType = style.type;
+  ctx.session.sourceDynamicSelections = { ...(selections || {}) };
+  ctx.session.style = null;
+  ctx.session.videoInputMode = null;
+  ctx.session.pendingDynamicStyle = null;
+
+  user.sourcePromptKey = style.key;
+  user.sourceStyleKey = style.key;
+  user.sourceDynamicSelections = { ...(selections || {}) };
+  saveUsers();
+  return style;
 }
 
 function applyPromptStyleToSession(ctx, promptKey) {
   const style = getPromptStyle(promptKey);
   if (!style) return null;
   ensureSession(ctx);
-  const user = getUser(ctx.from.id);
-
-  ctx.session.mode = "photo";
-  ctx.session.photoMode = "edit";
-  ctx.session.customType = "custom_photo";
-  ctx.session.awaitingCustomPrompt = false;
-  ctx.session.customPrompt = style.prompt;
-  ctx.session.awaitingAiPrompt = null;
-  ctx.session.awaitingCustomAmount = false;
-  ctx.session.awaitingPromptEditKey = null;
-  ctx.session.awaitingTextEditKey = null;
-  ctx.session.currentPromptKey = style.key;
-  ctx.session.sourcePromptKey = style.key;
-  ctx.session.style = null;
-  ctx.session.videoInputMode = null;
-
-  user.sourcePromptKey = style.key;
-  saveUsers();
-  return style;
+  if (style.type === "dynamic") return null;
+  return applyStaticStyleToSession(ctx, style);
 }
 
-function markPromptGeneration(user, promptKey) {
+function startDynamicStyleFlow(ctx, style, initialSelections = {}) {
+  ensureSession(ctx);
+  ctx.session.pendingDynamicStyle = {
+    styleKey: style.key,
+    currentSelectorIndex: 0,
+    selections: { ...(initialSelections || {}) },
+  };
+  ctx.session.currentStyleKey = style.key;
+  ctx.session.currentStyleType = style.type;
+  ctx.session.currentDynamicSelections = { ...(initialSelections || {}) };
+  return continueDynamicStyleFlow(ctx, style.key);
+}
+
+async function continueDynamicStyleFlow(ctx, styleKey) {
+  const style = getStyle(styleKey);
+  if (!style || style.type !== "dynamic") return ctx.reply("❌ Стиль не знайдено.");
+  ensureSession(ctx);
+  if (!ctx.session.pendingDynamicStyle || ctx.session.pendingDynamicStyle.styleKey !== styleKey) {
+    ctx.session.pendingDynamicStyle = {
+      styleKey,
+      currentSelectorIndex: 0,
+      selections: {},
+    };
+  }
+
+  const pending = ctx.session.pendingDynamicStyle;
+  const remainingSelector = style.selectors.find(selector => !pending.selections?.[selector.key]);
+  if (!remainingSelector) {
+    return finalizeDynamicStylePrompt(ctx, styleKey);
+  }
+
+  const rows = Object.values(remainingSelector.options).map(option => [
+    Markup.button.callback(option.label, `stylelib_select_${style.key}__${remainingSelector.key}__${option.key}`)
+  ]);
+
+  const text =
+    `🎛 <b>${escapeHtml(style.title)}</b>\n\n` +
+    `${escapeHtml(remainingSelector.label)}\n` +
+    `Кроків залишилось: <b>${style.selectors.filter(selector => !pending.selections?.[selector.key]).length}</b>`;
+
+  return ctx.reply(text, {
+    parse_mode: "HTML",
+    reply_markup: Markup.inlineKeyboard(rows).reply_markup,
+  });
+}
+
+async function finalizeDynamicStylePrompt(ctx, styleKey) {
+  const style = getStyle(styleKey);
+  if (!style || style.type !== "dynamic") return ctx.reply("❌ Стиль не знайдено.");
+  ensureSession(ctx);
+  const selections = { ...(ctx.session.pendingDynamicStyle?.selections || {}) };
+  const finalPrompt = buildDynamicPrompt(style, selections);
+  if (!finalPrompt) return ctx.reply("❌ Не вдалося зібрати промт.");
+
+  applyStaticStyleToSession(ctx, style, selections);
+  ctx.session.customPrompt = finalPrompt;
+  ctx.session.pendingDynamicStyle = null;
+
+  return sendPromptReadyMessage(ctx, style, { withPreview: true });
+}
+
+function markPromptGeneration(user, promptKey, selections = null) {
   if (!promptKey) return;
-  if (!getPromptStyle(promptKey)) return;
-  incrementPromptMetric(promptKey, "generations");
+  const style = getStyle(promptKey);
+  if (!style) return;
+  incrementStyleMetric(promptKey, "generations");
+  if (style.type === "dynamic" && selections) {
+    for (const [selectorKey, optionKey] of Object.entries(selections)) {
+      incrementDynamicOptionMetric(promptKey, selectorKey, optionKey, "generations");
+    }
+  }
   user.lastGeneratedPromptKey = promptKey;
+  user.lastGeneratedStyleKey = promptKey;
   user.pendingPurchasePromptKey = promptKey;
+  user.pendingPurchaseStyleKey = promptKey;
+  user.pendingPurchaseDynamicSelections = selections ? { ...selections } : null;
   saveUsers();
 }
 
 function markPromptPurchase(user, orderReference) {
-  const promptKey = user.pendingPurchasePromptKey;
+  const promptKey = user.pendingPurchaseStyleKey || user.pendingPurchasePromptKey;
   if (!promptKey) return false;
   if (user.lastPurchaseAttributedOrderReference === orderReference) return false;
-  if (!getPromptStyle(promptKey)) return false;
-  incrementPromptMetric(promptKey, "purchases");
+  const style = getStyle(promptKey);
+  if (!style) return false;
+  incrementStyleMetric(promptKey, "purchases");
+  if (style.type === "dynamic" && user.pendingPurchaseDynamicSelections) {
+    for (const [selectorKey, optionKey] of Object.entries(user.pendingPurchaseDynamicSelections)) {
+      incrementDynamicOptionMetric(promptKey, selectorKey, optionKey, "purchases");
+    }
+  }
   user.lastPurchaseAttributedOrderReference = orderReference;
   user.pendingPurchasePromptKey = null;
+  user.pendingPurchaseStyleKey = null;
+  user.pendingPurchaseDynamicSelections = null;
   saveUsers();
   return true;
 }
@@ -844,22 +1124,25 @@ function markPromptPurchase(user, orderReference) {
 function buildPromptStyleCardText(style, options = {}) {
   const { admin = false, userId = null, botUsername = "Promtiai_bot" } = options;
   const trendMark = style.isTrending ? "🔥 Тренд\n" : "";
-  const deepLink = getPromptDeepLink(botUsername, style.key);
+  const styleTypeLabel = style.type === "dynamic" ? "dynamic" : "static";
+  const deepLink = getStyleDeepLink(botUsername, style.key);
   const examplesCount = Array.isArray(style.examplePhotos) ? style.examplePhotos.length : 0;
   if (admin) {
     return (
       `🎨 <b>${escapeHtml(style.title)}</b>\n` +
       `${trendMark}` +
       `Ключ: <code>${escapeHtml(style.key)}</code>\n` +
+      `Тип: <b>${styleTypeLabel}</b>\n` +
       `Категорія: <b>${escapeHtml(style.category)}</b>\n\n` +
       `Examples: <b>${examplesCount}/${MAX_PROMPT_EXAMPLE_PHOTOS}</b>\n` +
       `Clicks: <b>${style.clicks}</b>\n` +
       `Generations: <b>${style.generations}</b>\n` +
       `Purchases: <b>${style.purchases}</b>\n` +
+      (style.type === "dynamic" ? `Selectors: <b>${style.selectors.length}</b>\n\n` : "\n") +
       `Gen conversion: <b>${formatConversion(style.generations, style.clicks)}</b>\n` +
       `Purchase conversion: <b>${formatConversion(style.purchases, style.clicks)}</b>\n\n` +
       `Deep-link:\n<code>${escapeHtml(deepLink)}</code>\n\n` +
-      `Промт:\n<code>${escapeHtml(style.prompt)}</code>`
+      `${style.type === "dynamic" ? "Template" : "Промт"}:\n<code>${escapeHtml(style.type === "dynamic" ? style.template : style.prompt)}</code>`
     );
   }
 
@@ -867,8 +1150,10 @@ function buildPromptStyleCardText(style, options = {}) {
   return (
     `🎨 <b>${escapeHtml(style.title)}</b>\n` +
     `${trendMark}` +
+    `Тип: <b>${styleTypeLabel}</b>\n` +
     `Категорія: <b>${escapeHtml(style.category)}</b>\n\n` +
     (examplesCount ? `Приклади: <b>${examplesCount}</b>\n` : "") +
+    (style.type === "dynamic" ? `Параметрів: <b>${style.selectors.length}</b>\n` : "") +
     `Надішли своє фото — бот зробить таке ж.\n` +
     `Баланс: <b>${escapeHtml(balanceText)}</b>`
   );
@@ -898,14 +1183,14 @@ function buildPromptLibraryKeyboard(page = 0, admin = false) {
 function buildPromptStyleKeyboard(style, admin = false) {
   if (!admin) {
     return Markup.inlineKeyboard([
-      [Markup.button.callback("✅ Обрати стиль", `promptlib_apply_${style.key}`)],
+      [Markup.button.callback(style.type === "dynamic" ? "🎛 Обрати параметри" : "✅ Обрати стиль", `promptlib_apply_${style.key}`)],
       [Markup.button.callback("📚 До списку стилів", "promptlib_page_0")],
     ]);
   }
   return Markup.inlineKeyboard([
     [Markup.button.callback(style.isTrending ? "🔕 Зняти тренд" : "🔥 Зробити трендом", `admin_promptlib_trend_${style.key}_${style.isTrending ? "off" : "on"}`)],
     [Markup.button.callback("🖼 Preview фото", `admin_promptlib_preview_${style.key}`)],
-    [Markup.button.callback("🖼 Examples x12", `admin_promptlib_examples_${style.key}`)],
+    [Markup.button.callback("🖼 Examples x10", `admin_promptlib_examples_${style.key}`)],
     [Markup.button.callback("🗑 Видалити", `admin_promptlib_delete_${style.key}`)],
     [Markup.button.callback("📚 До бібліотеки", "admin_promptlib_page_0")],
   ]);
@@ -1010,6 +1295,117 @@ async function sendPromptReadyMessage(ctx, style, options = {}) {
     return ctx.reply("Надішли своє фото 📸", photoMenu());
   }
   return ctx.reply(text, photoMenu());
+}
+
+function getStyleWizardDraft(ctx) {
+  ensureSession(ctx);
+  return ctx.session.styleWizard || null;
+}
+
+function startStyleWizard(ctx) {
+  ensureSession(ctx);
+  ctx.session.styleWizard = {
+    mode: "create",
+    step: "type",
+    style: {
+      key: "",
+      type: "static",
+      title: "",
+      category: "",
+      prompt: "",
+      template: "",
+      selectors: [],
+      previewPhoto: null,
+      examplePhotos: [],
+      isTrending: false,
+    },
+    currentSelector: null,
+    currentOption: null,
+  };
+}
+
+async function promptStyleWizardStep(ctx) {
+  const wizard = getStyleWizardDraft(ctx);
+  if (!wizard) return ctx.reply("❌ Wizard не активний.", adminMenu());
+
+  switch (wizard.step) {
+    case "type":
+      return ctx.reply("Оберіть тип стилю:", Markup.inlineKeyboard([
+        [Markup.button.callback("Static", "stylewizard_type_static")],
+        [Markup.button.callback("Dynamic", "stylewizard_type_dynamic")],
+      ]));
+    case "key":
+      return ctx.reply("Введи key стилю латиницею. Приклад: zodiac_goddess");
+    case "category":
+      return ctx.reply("Введи category стилю. Приклад: zodiac");
+    case "title":
+      return ctx.reply("Введи title стилю для користувача.");
+    case "prompt":
+      return ctx.reply("Надішли готовий prompt для static стилю.");
+    case "template":
+      return ctx.reply("Надішли template для dynamic стилю з [PLACEHOLDER].");
+    case "selector_key":
+      return ctx.reply(`Введи key selector-а №${wizard.style.selectors.length + 1}. Приклад: zodiac`);
+    case "selector_label":
+      return ctx.reply("Введи label selector-а. Приклад: Обери знак зодіаку");
+    case "option_key":
+      return ctx.reply("Введи key option. Приклад: pisces");
+    case "option_label":
+      return ctx.reply("Введи label option. Приклад: Риби");
+    case "option_variables":
+      return ctx.reply("Надішли variables у JSON. Приклад:\n{\"ZODIAC\":\"Pisces\",\"ZODIAC_COLORS\":\"seafoam, pearl, lilac\"}");
+    case "selector_continue":
+      return ctx.reply("Що робимо далі з selector-ами?", Markup.inlineKeyboard([
+        [Markup.button.callback("Ще option", "stylewizard_continue_option")],
+        [Markup.button.callback("Новий selector", "stylewizard_continue_selector")],
+        [Markup.button.callback("Далі до фото", "stylewizard_continue_media")],
+      ]));
+    case "preview":
+      return ctx.reply("Надішли preview photo або натисни skip.", Markup.inlineKeyboard([
+        [Markup.button.callback("Skip preview", "stylewizard_skip_preview")],
+      ]));
+    case "examples":
+      return ctx.reply(`Надішли до ${MAX_PROMPT_EXAMPLE_PHOTOS} example photos.\nКоли завершиш — натисни done або skip.`, Markup.inlineKeyboard([
+        [Markup.button.callback("Done examples", "stylewizard_done_examples")],
+        [Markup.button.callback("Skip examples", "stylewizard_skip_examples")],
+      ]));
+    case "confirm": {
+      const style = normalizeStyleItem(wizard.style, wizard.style.key);
+      const summary =
+        `✅ Перевір стиль перед збереженням\n\n` +
+        `Key: ${style.key}\n` +
+        `Type: ${style.type}\n` +
+        `Category: ${style.category}\n` +
+        `Title: ${style.title}\n` +
+        `Selectors: ${style.selectors.length}\n` +
+        `Preview: ${style.previewPhoto ? "yes" : "no"}\n` +
+        `Examples: ${style.examplePhotos.length}/${MAX_PROMPT_EXAMPLE_PHOTOS}`;
+      return ctx.reply(summary, Markup.inlineKeyboard([
+        [Markup.button.callback("Зберегти стиль", "stylewizard_save")],
+        [Markup.button.callback("Скасувати", "stylewizard_cancel")],
+      ]));
+    }
+    default:
+      return ctx.reply("❌ Невідомий крок wizard.", adminMenu());
+  }
+}
+
+function appendWizardSelectorOption(ctx, optionPayload) {
+  const wizard = getStyleWizardDraft(ctx);
+  if (!wizard || !wizard.currentSelector) return false;
+  const selector = wizard.style.selectors[wizard.style.selectors.length - 1];
+  if (!selector) return false;
+  selector.options[optionPayload.key] = normalizeSelectorOption(optionPayload, optionPayload.key);
+  wizard.currentOption = null;
+  return true;
+}
+
+function saveWizardStyle(ctx) {
+  const wizard = getStyleWizardDraft(ctx);
+  if (!wizard) return null;
+  const style = setStyle(wizard.style);
+  ctx.session.styleWizard = null;
+  return style;
 }
 
 async function replyLongText(ctx, text, extra = undefined) {
@@ -1403,13 +1799,28 @@ bot.start(async (ctx) => {
     const refId = Number(payload.replace("ref_", ""));
     if (refId && refId !== ctx.from.id) await handleReferral(ctx, refId);
   }
-  if (payload.startsWith("prompt_")) {
-    const promptKey = normalizePromptKey(payload.replace("prompt_", ""));
-    const style = getPromptStyle(promptKey);
+  const stylePayload = parseStyleStartPayload(payload);
+  if (stylePayload) {
+    const style = getStyle(stylePayload.key);
     if (style) {
-      incrementPromptMetric(style.key, "clicks");
-      applyPromptStyleToSession(ctx, style.key);
+      incrementStyleMetric(style.key, "clicks");
+      if (style.type === "dynamic") {
+        const complete = style.selectors.every(selector => stylePayload.selections?.[selector.key] && selector.options?.[stylePayload.selections[selector.key]]);
+        if (complete) {
+          for (const [selectorKey, optionKey] of Object.entries(stylePayload.selections)) {
+            incrementDynamicOptionMetric(style.key, selectorKey, optionKey, "clicks");
+          }
+          ctx.session.pendingDynamicStyle = {
+            styleKey: style.key,
+            selections: { ...stylePayload.selections },
+          };
+          return finalizeDynamicStylePrompt(ctx, style.key);
+        }
+        return startDynamicStyleFlow(ctx, style, stylePayload.selections);
+      }
+      applyStaticStyleToSession(ctx, style);
       user.sourcePromptKey = style.key;
+      user.sourceStyleKey = style.key;
       saveUsers();
       return sendPromptReadyMessage(ctx, style, { withPreview: true });
     }
@@ -1465,6 +1876,13 @@ bot.command("ref", (ctx) => {
   const botUsername = ctx.botInfo?.username || "Promtiai_bot";
   const link = `https://t.me/${botUsername}?start=ref_${ctx.from.id}`;
   return ctx.reply(`🔗 Реферальне посилання:\n${link}\n\n🎁 За кожного друга який оплатить: +${REFERRAL_PROMTI_BONUS} Promti ✨\nЗапрошено: ${users[ctx.from.id]?.referralCount || 0}`);
+});
+
+bot.command("stylewizard", async (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+  startStyleWizard(ctx);
+  return promptStyleWizardStep(ctx);
 });
 
 bot.command("addprompt", async (ctx) => {
@@ -2527,7 +2945,9 @@ bot.action(/^admin_promptlib_page_(\d+)$/, async (ctx) => {
 bot.action(/^promptlib_open_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
-    return sendPromptStyleCard(ctx, normalizePromptKey(ctx.match[1]), false);
+    const key = normalizePromptKey(ctx.match[1]);
+    incrementStyleMetric(key, "clicks");
+    return sendPromptStyleCard(ctx, key, false);
   } catch (e) { console.error("PROMPTLIB OPEN:", e.message); }
 });
 
@@ -2541,12 +2961,133 @@ bot.action(/^admin_promptlib_open_(.+)$/, async (ctx) => {
 
 bot.action(/^promptlib_apply_(.+)$/, async (ctx) => {
   try {
-    await ctx.answerCbQuery("Стиль завантажено ✅");
+    await ctx.answerCbQuery("Style loaded");
     touchUser(ctx);
-    const style = applyPromptStyleToSession(ctx, normalizePromptKey(ctx.match[1]));
-    if (!style) return ctx.reply("❌ Стиль не знайдено.");
+    const style = getStyle(normalizePromptKey(ctx.match[1]));
+    if (!style) return ctx.reply("Style not found.");
+    incrementStyleMetric(style.key, "clicks");
+    if (style.type === "dynamic") {
+      return startDynamicStyleFlow(ctx, style);
+    }
+    applyStaticStyleToSession(ctx, style);
     return sendPromptReadyMessage(ctx, style, { withPreview: false });
   } catch (e) { console.error("PROMPTLIB APPLY:", e.message); }
+});
+
+bot.action(/^stylelib_select_(.+)__([a-z0-9_-]+)__([a-z0-9_-]+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const styleKey = normalizePromptKey(ctx.match[1]);
+    const selectorKey = normalizePromptKey(ctx.match[2]);
+    const optionKey = normalizePromptKey(ctx.match[3]);
+    const style = getStyle(styleKey);
+    if (!style || style.type !== "dynamic") return ctx.reply("Style not found.");
+    const selector = style.selectors.find(item => item.key === selectorKey);
+    if (!selector || !selector.options[optionKey]) return ctx.reply("Option not found.");
+    ensureSession(ctx);
+    if (!ctx.session.pendingDynamicStyle || ctx.session.pendingDynamicStyle.styleKey !== styleKey) {
+      ctx.session.pendingDynamicStyle = { styleKey, selections: {} };
+    }
+    ctx.session.pendingDynamicStyle.selections = {
+      ...(ctx.session.pendingDynamicStyle.selections || {}),
+      [selectorKey]: optionKey,
+    };
+    incrementDynamicOptionMetric(styleKey, selectorKey, optionKey, "clicks");
+    return continueDynamicStyleFlow(ctx, styleKey);
+  } catch (e) { console.error("STYLELIB SELECT:", e.message); }
+});
+
+bot.action(/^stylewizard_type_(static|dynamic)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!isAdmin(ctx.from.id)) return;
+    ensureSession(ctx);
+    if (!ctx.session.styleWizard) startStyleWizard(ctx);
+    ctx.session.styleWizard.style.type = ctx.match[1];
+    ctx.session.styleWizard.step = "key";
+    return promptStyleWizardStep(ctx);
+  } catch (e) { console.error("STYLEWIZARD TYPE:", e.message); }
+});
+
+bot.action("stylewizard_continue_option", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
+    ctx.session.styleWizard.step = "option_key";
+    return promptStyleWizardStep(ctx);
+  } catch (e) { console.error("STYLEWIZARD OPTION:", e.message); }
+});
+
+bot.action("stylewizard_continue_selector", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
+    ctx.session.styleWizard.currentSelector = null;
+    ctx.session.styleWizard.currentOption = null;
+    ctx.session.styleWizard.step = "selector_key";
+    return promptStyleWizardStep(ctx);
+  } catch (e) { console.error("STYLEWIZARD SELECTOR:", e.message); }
+});
+
+bot.action("stylewizard_continue_media", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
+    ctx.session.styleWizard.step = "preview";
+    return promptStyleWizardStep(ctx);
+  } catch (e) { console.error("STYLEWIZARD MEDIA:", e.message); }
+});
+
+bot.action("stylewizard_skip_preview", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
+    ctx.session.styleWizard.style.previewPhoto = null;
+    ctx.session.styleWizard.step = "examples";
+    return promptStyleWizardStep(ctx);
+  } catch (e) { console.error("STYLEWIZARD SKIP PREVIEW:", e.message); }
+});
+
+bot.action("stylewizard_done_examples", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
+    ctx.session.styleWizard.step = "confirm";
+    return promptStyleWizardStep(ctx);
+  } catch (e) { console.error("STYLEWIZARD DONE EXAMPLES:", e.message); }
+});
+
+bot.action("stylewizard_skip_examples", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
+    ctx.session.styleWizard.style.examplePhotos = [];
+    ctx.session.styleWizard.step = "confirm";
+    return promptStyleWizardStep(ctx);
+  } catch (e) { console.error("STYLEWIZARD SKIP EXAMPLES:", e.message); }
+});
+
+bot.action("stylewizard_save", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!isAdmin(ctx.from.id)) return;
+    const style = saveWizardStyle(ctx);
+    if (!style) return ctx.reply("❌ Не вдалося зберегти стиль.", adminMenu());
+    const botUsername = await resolveBotUsername(ctx);
+    return ctx.reply(
+      `✅ Стиль збережено\n\nKEY: ${style.key}\nType: ${style.type}\nDeep-link: ${getStyleDeepLink(botUsername, style.key)}`,
+      adminMenu()
+    );
+  } catch (e) { console.error("STYLEWIZARD SAVE:", e.message); }
+});
+
+bot.action("stylewizard_cancel", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!isAdmin(ctx.from.id)) return;
+    ctx.session.styleWizard = null;
+    return ctx.reply("Wizard скасовано.", adminMenu());
+  } catch (e) { console.error("STYLEWIZARD CANCEL:", e.message); }
 });
 
 bot.action(/^admin_promptlib_trend_(.+)_(on|off)$/, async (ctx) => {
@@ -2578,7 +3119,7 @@ bot.action(/^admin_promptlib_preview_(.+)$/, async (ctx) => {
 
 bot.action(/^admin_promptlib_examples_(.+)$/, async (ctx) => {
   try {
-    await ctx.answerCbQuery("Send up to 12 photos");
+    await ctx.answerCbQuery("Send up to 10 photos");
     if (!isAdmin(ctx.from.id)) return;
     const key = normalizePromptKey(ctx.match[1]);
     const style = getPromptStyle(key);
@@ -2656,6 +3197,76 @@ bot.on("text", async (ctx, next) => {
     // ✅ Перевіряємо також рядки що починаються з "N Promti" — це пакети, їх ловлять regex bot.hears
     const isPackButton = /^\d+\s+Promti/i.test(text);
     if (ALL_BUTTONS.includes(text) || text.startsWith("/") || isPackButton) return next();
+
+    if (isAdmin(ctx.from.id) && ctx.session.styleWizard) {
+      const wizard = ctx.session.styleWizard;
+      if (wizard.step === "key") {
+        const key = normalizePromptKey(text);
+        if (!key) return ctx.reply("❌ Некоректний key. Використовуй a-z, 0-9, _ та -");
+        if (getStyle(key)) return ctx.reply(`❌ Стиль "${key}" вже існує.`);
+        wizard.style.key = key;
+        wizard.step = "category";
+        return promptStyleWizardStep(ctx);
+      }
+      if (wizard.step === "category") {
+        wizard.style.category = text.trim() || "other";
+        wizard.step = "title";
+        return promptStyleWizardStep(ctx);
+      }
+      if (wizard.step === "title") {
+        wizard.style.title = text.trim();
+        wizard.step = wizard.style.type === "dynamic" ? "template" : "prompt";
+        return promptStyleWizardStep(ctx);
+      }
+      if (wizard.step === "prompt") {
+        wizard.style.prompt = text.trim();
+        wizard.step = "preview";
+        return promptStyleWizardStep(ctx);
+      }
+      if (wizard.step === "template") {
+        wizard.style.template = text.trim();
+        wizard.step = "selector_key";
+        return promptStyleWizardStep(ctx);
+      }
+      if (wizard.step === "selector_key") {
+        const selectorKey = normalizePromptKey(text);
+        if (!selectorKey) return ctx.reply("❌ Некоректний selector key.");
+        wizard.currentSelector = { key: selectorKey, label: "", type: "inline", options: {} };
+        wizard.step = "selector_label";
+        return promptStyleWizardStep(ctx);
+      }
+      if (wizard.step === "selector_label") {
+        wizard.currentSelector.label = text.trim();
+        wizard.style.selectors.push(wizard.currentSelector);
+        wizard.step = "option_key";
+        return promptStyleWizardStep(ctx);
+      }
+      if (wizard.step === "option_key") {
+        const optionKey = normalizePromptKey(text);
+        if (!optionKey) return ctx.reply("❌ Некоректний option key.");
+        wizard.currentOption = { key: optionKey, label: "", variables: {} };
+        wizard.step = "option_label";
+        return promptStyleWizardStep(ctx);
+      }
+      if (wizard.step === "option_label") {
+        wizard.currentOption.label = text.trim();
+        wizard.step = "option_variables";
+        return promptStyleWizardStep(ctx);
+      }
+      if (wizard.step === "option_variables") {
+        try {
+          const variables = JSON.parse(text);
+          appendWizardSelectorOption(ctx, {
+            ...wizard.currentOption,
+            variables,
+          });
+          wizard.step = "selector_continue";
+          return promptStyleWizardStep(ctx);
+        } catch {
+          return ctx.reply("❌ Variables мають бути валідним JSON.");
+        }
+      }
+    }
 
     if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptEditKey) {
       const key = ctx.session.awaitingPromptEditKey; prompts[key] = text; savePrompts();
@@ -2801,6 +3412,32 @@ bot.on("photo", async (ctx) => {
   if (user.banned) return ctx.reply("🚫 Ваш акаунт заблокований.");
 
   const photo         = ctx.message.photo[ctx.message.photo.length - 1];
+
+  if (isAdmin(userId) && ctx.session.styleWizard) {
+    const wizard = ctx.session.styleWizard;
+    if (wizard.step === "preview") {
+      wizard.style.previewPhoto = photo.file_id;
+      wizard.step = "examples";
+      return promptStyleWizardStep(ctx);
+    }
+    if (wizard.step === "examples") {
+      wizard.style.examplePhotos = normalizePromptExamplePhotos([
+        ...(wizard.style.examplePhotos || []),
+        photo.file_id,
+      ]);
+      if (wizard.style.examplePhotos.length >= MAX_PROMPT_EXAMPLE_PHOTOS) {
+        wizard.step = "confirm";
+        return promptStyleWizardStep(ctx);
+      }
+      return ctx.reply(
+        `✅ Додано приклад ${wizard.style.examplePhotos.length}/${MAX_PROMPT_EXAMPLE_PHOTOS}. Надішли ще фото або натисни done.`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback("Done examples", "stylewizard_done_examples")],
+          [Markup.button.callback("Skip examples", "stylewizard_skip_examples")],
+        ])
+      );
+    }
+  }
 
   // ✅ Адмін прикріпляє фото до текстового ключа (welcomePhoto/infoPhoto тощо)
   if (isAdmin(userId) && ctx.session.awaitingPhotoForKey) {
@@ -3052,10 +3689,26 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     if (customType === "custom_photo" || customType === "create_photo") {
       if (!ctx.session.customPrompt) { userGenerating.delete(userId); return ctx.reply("Спочатку напиши промт текстом.", photoMenu()); }
       prompt = ctx.session.customPrompt;
-      const selectedPromptKey = ctx.session.currentPromptKey || ctx.session.sourcePromptKey || user.sourcePromptKey;
-      const selectedStyle = getPromptStyle(selectedPromptKey);
-      if (selectedStyle && selectedStyle.prompt === prompt) {
-        promptKeyForStats = selectedStyle.key;
+      const selectedStyleKey =
+        ctx.session.currentStyleKey ||
+        ctx.session.sourceStyleKey ||
+        ctx.session.currentPromptKey ||
+        ctx.session.sourcePromptKey ||
+        user.sourceStyleKey ||
+        user.sourcePromptKey;
+      const selectedStyle = getStyle(selectedStyleKey);
+      const selectedSelections =
+        ctx.session.currentDynamicSelections ||
+        ctx.session.sourceDynamicSelections ||
+        user.sourceDynamicSelections ||
+        {};
+      if (selectedStyle) {
+        const expectedPrompt = selectedStyle.type === "dynamic"
+          ? buildDynamicPrompt(selectedStyle, selectedSelections)
+          : selectedStyle.prompt;
+        if (expectedPrompt === prompt) {
+          promptKeyForStats = selectedStyle.key;
+        }
       }
     } else {
       userGenerating.delete(userId);
@@ -3115,7 +3768,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     if (!url) throw new Error("fal не повернув зображення");
 
     user.generations = (user.generations || 0) + 1;
-    if (promptKeyForStats) markPromptGeneration(user, promptKeyForStats);
+    if (promptKeyForStats) markPromptGeneration(user, promptKeyForStats, ctx.session.currentDynamicSelections || ctx.session.sourceDynamicSelections || user.sourceDynamicSelections || null);
     saveUsersSync();
     userGenerating.delete(userId);
     log("PHOTO_OK", userId, `dur:${Date.now()-startMs}ms`);

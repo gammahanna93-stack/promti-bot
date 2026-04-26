@@ -9,18 +9,17 @@ const crypto   = require("crypto");
 const express  = require("express");
 const axios    = require("axios");
 const { execSync } = require("child_process");
-const iconv    = require("iconv-lite");
 const { Telegraf, Markup } = require("telegraf");
 const LocalSession = require("telegraf-session-local");
 const { fal } = require("@fal-ai/client");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// ─── ПОСТІЙНЕ СХОВ�?ЩЕ (має бути до LocalSession!) ────────────────────────────
+// ─── ПОСТІЙНЕ СХОВИЩЕ (має бути до LocalSession!) ────────────────────────────
 const DATA_DIR = "/app/data";
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// ─── ПЕРС�?СТЕНТНА СЕСІЯ ───────────────────────────────────────────────────────
+// ─── ПЕРСИСТЕНТНА СЕСІЯ ───────────────────────────────────────────────────────
 const localSession = new LocalSession({
   database: path.join(DATA_DIR, "sessions.json"),
   property: "session",
@@ -37,11 +36,11 @@ bot.use(async (ctx, next) => {
     await next();
   } catch (e) {
     console.error("GLOBAL HANDLER ERROR:", e.message);
-    try { await ctx.reply("? ??????? ???????. ??????? ?? ??? ??? /start"); } catch {}
+    try { await ctx.reply("❌ Сталася помилка. Спробуй ще раз або /start"); } catch {}
   }
 });
 
-// ─── КОНСТАНТ�? ────────────────────────────────────────────────────────────────
+// ─── КОНСТАНТИ ────────────────────────────────────────────────────────────────
 const ADMINS = [346101852, 688515215];
 
 const WAYFORPAY = {
@@ -54,7 +53,6 @@ const WAYFORPAY = {
 
 const REFERRAL_PROMTI_BONUS = 5;
 const START_PROMTI_BONUS = 3;
-const MAX_PROMPT_EXAMPLE_PHOTOS = 10;
 
 const PROMTI_PRICES = {
   photo:    1,
@@ -62,7 +60,7 @@ const PROMTI_PRICES = {
   kling:    8,
 };
 
-// ─── ШЛЯХ�? ДО ФАЙЛІВ ─────────────────────────────────────────────────────────
+// ─── ШЛЯХИ ДО ФАЙЛІВ ─────────────────────────────────────────────────────────
 const USERS_PATH        = path.join(DATA_DIR, "users.json");
 const PAYMENTS_PATH     = path.join(DATA_DIR, "payments.json");
 const PAYMENT_LOCK_PATH = path.join(DATA_DIR, "payment.lock.json");
@@ -72,7 +70,6 @@ const GEN_LOG_PATH      = path.join(DATA_DIR, "generation_logs.jsonl");
 const PROMPTS_PATH      = path.join(DATA_DIR, "prompts.json");
 const CONTENT_PATH      = path.join(DATA_DIR, "content.json");
 const SETTINGS_PATH     = path.join(DATA_DIR, "settings.json");
-const DYNAMIC_PROMPTS_PATH = path.join(DATA_DIR, "dynamic-prompts.json");
 const LANDING_CONTENT_PATH = path.join(DATA_DIR, "landing-content.json");
 const LANDING_CONTENT_DEFAULT_PATH = path.join(__dirname, "landing-content.default.json");
 const LANDING_UPLOADS_DIR = path.join(DATA_DIR, "landing-uploads");
@@ -89,7 +86,6 @@ for (const [src, dst] of [
   [path.join(__dirname, "prompts.json"),  PROMPTS_PATH],
   [path.join(__dirname, "content.json"),  CONTENT_PATH],
   [path.join(__dirname, "settings.json"), SETTINGS_PATH],
-  [path.join(__dirname, "dynamic-prompts.json"), DYNAMIC_PROMPTS_PATH],
   [LANDING_CONTENT_DEFAULT_PATH, LANDING_CONTENT_PATH],
 ]) {
   if (fs.existsSync(src)) {
@@ -154,122 +150,15 @@ function invalidateSettingsCache() {
 }
 
 // ─── JSON HELPERS ─────────────────────────────────────────────────────────────
-function looksLikeGarbledText(value) {
-  return typeof value === "string" && [
-    "Рџ",
-    "Рґ",
-    "РЅ",
-    "СЊ",
-    "С–",
-    "СЏ",
-    "вњ",
-    "рџ",
-    "РІС",
-    "Р ",
-    "Р’",
-    "Р“",
-    "Р—",
-  ].some((pattern) => value.includes(pattern));
-}
-
-function repairBrokenText(value) {
-  if (typeof value !== "string" || !looksLikeGarbledText(value)) return value;
-  try {
-    const repaired = iconv.decode(iconv.encode(value, "win1251"), "utf8");
-    return looksLikeGarbledText(repaired) ? value : repaired;
-  } catch {
-    return value;
-  }
-}
-
-function repairCustomGarbledValue(value, stats) {
-  if (typeof value === "string") {
-    if (!looksLikeGarbledText(value)) return value;
-    const repaired = repairBrokenText(value);
-    if (!looksLikeGarbledText(repaired)) {
-      stats.replaced += 1;
-      return repaired;
-    }
-    stats.replaced += 1;
-    return undefined;
-  }
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => repairCustomGarbledValue(item, stats))
-      .filter((item) => item !== undefined);
-  }
-  if (value && typeof value === "object") {
-    const result = {};
-    for (const [key, item] of Object.entries(value)) {
-      const repaired = repairCustomGarbledValue(item, stats);
-      if (repaired !== undefined) result[key] = repaired;
-    }
-    return result;
-  }
-  return value;
-}
-
-function repairGarbledJson(defaultValue, currentValue, stats = { replaced: 0 }) {
-  if (typeof defaultValue === "string") {
-    if (typeof currentValue === "string" && looksLikeGarbledText(currentValue)) {
-      stats.replaced += 1;
-      return defaultValue;
-    }
-    return typeof currentValue === "string" ? currentValue : (currentValue !== undefined ? currentValue : defaultValue);
-  }
-
-  if (Array.isArray(defaultValue)) {
-    const source = Array.isArray(currentValue) ? currentValue : [];
-    const template = defaultValue[0];
-    return source.map((item, index) => {
-      const defaultItem = defaultValue[index] !== undefined ? defaultValue[index] : template;
-      if (defaultItem === undefined) return repairCustomGarbledValue(item, stats);
-      return repairGarbledJson(defaultItem, item, stats);
-    });
-  }
-
-  if (defaultValue && typeof defaultValue === "object") {
-    const source = currentValue && typeof currentValue === "object" && !Array.isArray(currentValue) ? currentValue : {};
-    const result = {};
-
-    for (const key of Object.keys(defaultValue)) {
-      result[key] = repairGarbledJson(defaultValue[key], source[key], stats);
-    }
-
-    for (const key of Object.keys(source)) {
-      if (key in result) continue;
-      const repaired = repairCustomGarbledValue(source[key], stats);
-      if (repaired !== undefined) result[key] = repaired;
-    }
-
-    return result;
-  }
-
-  return currentValue !== undefined ? currentValue : defaultValue;
-}
-
 function loadJson(filePath, fallback) {
   try {
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), "utf8");
       return JSON.parse(JSON.stringify(fallback));
     }
-
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    const stats = { replaced: 0 };
-    const repaired = repairGarbledJson(fallback, parsed, stats);
-
-    if (stats.replaced > 0) {
-      saveJson(filePath, repaired);
-      console.log(`🧹 ${path.basename(filePath)} repaired: ${stats.replaced} strings replaced`);
-    }
-
-    return repaired;
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch (e) {
     console.error(`LOAD JSON ERROR ${filePath}:`, e.message);
-    try {
-      fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), "utf8");
-    } catch {}
     return JSON.parse(JSON.stringify(fallback));
   }
 }
@@ -300,42 +189,6 @@ function deepMerge(defaultValue, incomingValue) {
   return incomingValue !== undefined ? incomingValue : defaultValue;
 }
 
-function looksLikeBrokenLandingText(value) {
-  return looksLikeGarbledText(value);
-}
-
-function repairLandingContent(defaultValue, incomingValue) {
-  if (Array.isArray(defaultValue)) {
-    if (!Array.isArray(incomingValue)) return cloneJson(defaultValue);
-    const template = defaultValue[0];
-    return incomingValue.map((item, index) => {
-      const currentDefault = defaultValue[index] !== undefined ? defaultValue[index] : template;
-      return currentDefault !== undefined ? repairLandingContent(currentDefault, item) : cloneJson(item);
-    });
-  }
-
-  if (defaultValue && typeof defaultValue === "object") {
-    const source = incomingValue && typeof incomingValue === "object" && !Array.isArray(incomingValue) ? incomingValue : {};
-    const result = {};
-
-    for (const key of Object.keys(defaultValue)) {
-      result[key] = repairLandingContent(defaultValue[key], source[key]);
-    }
-
-    for (const key of Object.keys(source)) {
-      if (!(key in result)) result[key] = cloneJson(source[key]);
-    }
-
-    return result;
-  }
-
-  if (looksLikeBrokenLandingText(incomingValue)) {
-    return defaultValue;
-  }
-
-  return incomingValue !== undefined ? incomingValue : defaultValue;
-}
-
 const DEFAULT_LANDING_CONTENT = loadJson(LANDING_CONTENT_DEFAULT_PATH, {
   locales: { uk: {}, en: {} },
   botLink: "https://t.me/Promtiai_bot",
@@ -345,9 +198,8 @@ const DEFAULT_LANDING_CONTENT = loadJson(LANDING_CONTENT_DEFAULT_PATH, {
 function loadLandingContent() {
   const saved = loadJson(LANDING_CONTENT_PATH, DEFAULT_LANDING_CONTENT);
   const merged = deepMerge(DEFAULT_LANDING_CONTENT, saved);
-  const repaired = repairLandingContent(DEFAULT_LANDING_CONTENT, merged);
-  saveJson(LANDING_CONTENT_PATH, repaired);
-  return repaired;
+  saveJson(LANDING_CONTENT_PATH, merged);
+  return merged;
 }
 
 let landingContent = loadLandingContent();
@@ -512,18 +364,15 @@ const DEFAULT_PROMPTS = {
 
 const DEFAULT_CONTENT = {
   welcomeText:  "Привіт ✨\n\nОбери що хочеш зробити:\n🖼 Фото — генерація фото по стилях\n🎬 Відео — анімація фото у відео\n\n🎁 3 Promti ✨ безкоштовно при старті",
-  infoText:     "PROMTI AI Bot\n\n🖼 Фото:\n10/99грн В· 20/179грн В· 30/249грн В· 50/399грн\n\n🎬 Seedance:\n3/199грн В· 5/349грн В· 10/599грн\n\n🎥 Kling:\n3/299грн В· 5/499грн В· 10/899грн",
+  infoText:     "PROMTI AI Bot\n\n🖼 Фото:\n10/99грн · 20/179грн · 30/249грн · 50/399грн\n\n🎬 Seedance:\n3/199грн · 5/349грн · 10/599грн\n\n🎥 Kling:\n3/299грн · 5/499грн · 10/899грн",
   helpText:     "Допомога:\n\n🖼 Фото:\n1. Натисни 🖼 Фото\n2. Обери стиль\n3. Надішли фото\n\n🎬 Відео:\n1. Натисни 🎬 Відео\n2. Обери модель\n3. Надішли фото для анімації",
   supportText:  "Напиши в підтримку: https://t.me/promteamai?direct",
   ideaText:     "💡 Ідеї для промтів:\n\n🖼 Фото:\n• \"portrait in Renaissance style\"\n• \"cyberpunk neon portrait\"\n\n🎬 Відео:\n• \"hair gently flowing in wind\"\n• \"eyes slowly opening, cinematic\"",
   support_link: "https://t.me/promteamai?direct",
   pricesText:   "💰 PROMTI AI — Ціни\n\n💎 Валюта: Promti ✨\n1 Promti ✨ = від 6.7 до 9.9 грн\n\n📦 Пакети:\n10 Promti ✨ — 99 грн (9.9 грн/✨)\n30 Promti ✨ — 249 грн (8.3 грн/✨)\n60 Promti ✨ — 449 грн (7.5 грн/✨)\n150 Promti ✨ — 999 грн (6.7 грн/✨) 🔥\n\n💰 Ціни послуг:\n🖼 Фото — 1 Promti ✨\n🎬 Seedance відео — 5 Promti ✨\n🎥 Kling відео — 8 Promti ✨\n\n🎁 3 Promti ✨ безкоштовно при реєстрації!\n👫 +5 Promti ✨ за кожного друга який оплатить",
-  styleLibrary: {},
   promptLibrary: {},
   promptCategories: {},
 };
-
-const startupEncodingRepairSummary = runEncodingRepair();
 
 let users    = loadJson(USERS_PATH,    {});
 let prompts  = loadJson(PROMPTS_PATH,  DEFAULT_PROMPTS);
@@ -532,13 +381,8 @@ let payments = loadJson(PAYMENTS_PATH, []);
 
 prompts = { ...DEFAULT_PROMPTS, ...prompts };
 content = { ...DEFAULT_CONTENT, ...content };
-if (!content.styleLibrary || typeof content.styleLibrary !== "object" || Array.isArray(content.styleLibrary)) content.styleLibrary = {};
 if (!content.promptLibrary || typeof content.promptLibrary !== "object" || Array.isArray(content.promptLibrary)) content.promptLibrary = {};
 if (!content.promptCategories || typeof content.promptCategories !== "object" || Array.isArray(content.promptCategories)) content.promptCategories = {};
-if (Object.keys(content.styleLibrary).length === 0 && Object.keys(content.promptLibrary).length > 0) {
-  content.styleLibrary = content.promptLibrary;
-}
-content.promptLibrary = content.styleLibrary;
 if (typeof content.welcomeText === "string") {
   content.welcomeText = content.welcomeText
     .replaceAll("1 фото безкоштовно", "3 Promti ✨ безкоштовно")
@@ -550,7 +394,7 @@ if (typeof content.pricesText === "string") {
 saveJson(PROMPTS_PATH, prompts);
 saveJson(CONTENT_PATH, content);
 
-// ─── ПАКЕТ�? ──────────────────────────────────────────────────────────────────
+// ─── ПАКЕТИ ──────────────────────────────────────────────────────────────────
 const DEFAULT_PACKAGES = {
   promti_pack10:  { key: "promti_pack10",  type: "promti", title: "10 Promti ✨",  promti: 10,  amount: 99,  priceText: "99 грн"  },
   promti_pack30:  { key: "promti_pack30",  type: "promti", title: "30 Promti ✨",  promti: 30,  amount: 249, priceText: "249 грн" },
@@ -582,7 +426,7 @@ let dynamicPackages = loadPackages();
 function getPackages()         { return dynamicPackages; }
 function saveDynamicPackages() { saveJson(PACKAGES_PATH, dynamicPackages); }
 
-// ─── АТОМАРН�?Й LOCK ОПЛАТ ─────────────────────────────────────────────────────
+// ─── АТОМАРНИЙ LOCK ОПЛАТ ─────────────────────────────────────────────────────
 let creditedSet = new Set(loadJson(PAYMENT_LOCK_PATH, []));
 function markAsCredited(ref) { creditedSet.add(ref); saveJson(PAYMENT_LOCK_PATH, [...creditedSet]); }
 function isCredited(ref)     { return creditedSet.has(ref); }
@@ -624,7 +468,7 @@ function processQueue() {
     if (job.notifiedPosition !== idx + 1) {
       job.notifiedPosition = idx + 1;
       if (job.ctx) {
-        job.ctx.reply(`? ?? ? ?????: #${idx + 1}\n????? ???????????? ????...\n?????????? 45 ??? ? 1 ?? ?`).catch(() => {});
+        job.ctx.reply(`⏳ Ти в черзі: #${idx + 1}\nЗараз обробляється фото...\nОрієнтовно 45 сек — 1 хв ⌛`).catch(() => {});
       }
     }
   });
@@ -633,7 +477,7 @@ function processQueue() {
     if (job.notifiedPosition !== idx + 1) {
       job.notifiedPosition = idx + 1;
       if (job.ctx) {
-        job.ctx.reply(`? ?? ? ?????: #${idx + 1}\n????? ??????????? ?????...\n?????????? 1-8 ?? ?`).catch(() => {});
+        job.ctx.reply(`⏳ Ти в черзі: #${idx + 1}\nЗараз генерується відео...\nОрієнтовно 1-8 хв ⌛`).catch(() => {});
       }
     }
   });
@@ -695,7 +539,7 @@ function touchRateLimit(userId, type) {
   map[userId] = Date.now();
 }
 
-// ─── ДЕННІ ЛІМІТ�? ─────────────────────────────────────────────────────────────
+// ─── ДЕННІ ЛІМІТИ ─────────────────────────────────────────────────────────────
 function getTodayDate() { return new Date().toISOString().slice(0, 10); }
 
 function checkDailyVideoLimit(user, model) {
@@ -732,7 +576,7 @@ function incrementDailyVideo(user, model) {
   else user.dailySeedanceCount = (user.dailySeedanceCount || 0) + 1;
 }
 
-// ─── ПОМ�?ЛК�? ? АДМІН�? ────────────────────────────────────────────────────────
+// ─── ПОМИЛКИ → АДМІНИ ────────────────────────────────────────────────────────
 const adminErrorLog = {};
 const ADMIN_ERROR_DEBOUNCE_MS = 60000;
 
@@ -745,9 +589,7 @@ async function notifyAdminsError(message) {
   }
   adminErrorLog[key] = now;
   for (const adminId of ADMINS) {
-    try { await bot.telegram.sendMessage(adminId, `?? ???????:
-
-${message}`); }
+    try { await bot.telegram.sendMessage(adminId, `⚠️ ПОМИЛКА:\n\n${message}`); }
     catch (e) { console.error("NOTIFY ADMIN ERROR:", e.message); }
   }
 }
@@ -770,17 +612,8 @@ function resetState(ctx) {
   ctx.session.awaitingPromptEditKey = null;
   ctx.session.awaitingTextEditKey   = null;
   ctx.session.awaitingPromptPreviewKey = null;
-  ctx.session.awaitingPromptExamplesKey = null;
   ctx.session.currentPromptKey      = null;
   ctx.session.sourcePromptKey       = null;
-  ctx.session.currentStyleKey       = null;
-  ctx.session.currentStyleType      = null;
-  ctx.session.currentDynamicSelections = {};
-  ctx.session.sourceStyleKey        = null;
-  ctx.session.sourceStyleType       = null;
-  ctx.session.sourceDynamicSelections = {};
-  ctx.session.pendingDynamicStyle   = null;
-  ctx.session.styleWizard           = null;
 }
 
 function getUser(id) {
@@ -796,13 +629,8 @@ function getUser(id) {
       dailyAiDate: null, dailyAiCount: 0,
       lastPaymentRequest: null, pendingOrderReference: null, lastPaidAt: null,
       sourcePromptKey: null,
-      sourceStyleKey: null,
-      sourceDynamicSelections: {},
       lastGeneratedPromptKey: null,
-      lastGeneratedStyleKey: null,
       pendingPurchasePromptKey: null,
-      pendingPurchaseStyleKey: null,
-      pendingPurchaseDynamicSelections: null,
       lastPurchaseAttributedOrderReference: null,
       createdAt: new Date().toISOString(),
     };
@@ -843,58 +671,6 @@ function savePrompts()  { saveJson(PROMPTS_PATH,  prompts);  }
 function saveContent()  { saveJson(CONTENT_PATH,  content);  }
 function savePayments() { saveJson(PAYMENTS_PATH, payments); }
 
-function loadRepoJson(relativePath, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(__dirname, relativePath), "utf8"));
-  } catch {
-    return cloneJson(fallback);
-  }
-}
-
-function getEncodingRepairTargets() {
-  return [
-    { filePath: CONTENT_PATH, label: "content.json", defaultValue: loadRepoJson("content.json", DEFAULT_CONTENT) },
-    { filePath: SETTINGS_PATH, label: "settings.json", defaultValue: cloneJson(DEFAULT_SETTINGS) },
-    { filePath: PROMPTS_PATH, label: "prompts.json", defaultValue: loadRepoJson("prompts.json", DEFAULT_PROMPTS) },
-    { filePath: DYNAMIC_PROMPTS_PATH, label: "dynamic-prompts.json", defaultValue: loadRepoJson("dynamic-prompts.json", { templates: [] }) },
-    { filePath: LANDING_CONTENT_PATH, label: "landing-content.json", defaultValue: loadRepoJson("landing-content.default.json", DEFAULT_LANDING_CONTENT) },
-  ];
-}
-
-function runEncodingRepair(options = {}) {
-  const { forceDefaults = false } = options;
-  const summary = [];
-
-  for (const target of getEncodingRepairTargets()) {
-    const { filePath, label, defaultValue } = target;
-
-    try {
-      const currentValue = fs.existsSync(filePath)
-        ? JSON.parse(fs.readFileSync(filePath, "utf8"))
-        : cloneJson(defaultValue);
-      const stats = { replaced: 0 };
-      const nextValue = forceDefaults
-        ? cloneJson(defaultValue)
-        : repairGarbledJson(defaultValue, currentValue, stats);
-      const changed = forceDefaults || JSON.stringify(nextValue) !== JSON.stringify(currentValue);
-
-      if (changed) saveJson(filePath, nextValue);
-
-      if (changed || stats.replaced > 0) {
-        console.log(`🧹 ${label}: ${forceDefaults ? "reset to clean defaults" : `${stats.replaced} garbled strings replaced`}`);
-      }
-
-      summary.push({ file: label, replaced: stats.replaced, changed, reset: forceDefaults });
-    } catch (error) {
-      saveJson(filePath, defaultValue);
-      console.log(`🧹 ${label}: overwritten with clean defaults after parse error (${error.message})`);
-      summary.push({ file: label, replaced: 0, changed: true, reset: true, error: error.message });
-    }
-  }
-
-  return summary;
-}
-
 function getUserVideoTotal(user) { return (user.seedanceGenerations || 0) + (user.klingGenerations || 0); }
 
 const PROMPT_LIBRARY_PAGE_SIZE = 6;
@@ -910,77 +686,13 @@ function normalizePromptKey(key = "") {
   return String(key).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
-function normalizeSelectorVariables(variables = {}) {
-  if (!variables || typeof variables !== "object" || Array.isArray(variables)) return {};
-  const normalized = {};
-  for (const [key, value] of Object.entries(variables)) {
-    const normalizedKey = String(key || "").trim().toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
-    if (!normalizedKey) continue;
-    normalized[normalizedKey] = String(value ?? "").trim();
-  }
-  return normalized;
-}
-
-function normalizeSelectorOption(option = {}, fallbackKey = "") {
-  return {
-    key: normalizePromptKey(option.key || fallbackKey),
-    label: String(option.label || fallbackKey || "Option").trim(),
-    variables: normalizeSelectorVariables(option.variables),
-    clicks: Number(option.clicks || 0),
-    generations: Number(option.generations || 0),
-    purchases: Number(option.purchases || 0),
-  };
-}
-
-function normalizeStyleSelectors(selectors = []) {
-  if (!Array.isArray(selectors)) return [];
-  return selectors
-    .map((selector, selectorIndex) => {
-      if (!selector || typeof selector !== "object") return null;
-      const key = normalizePromptKey(selector.key || `selector_${selectorIndex + 1}`);
-      if (!key) return null;
-      const rawOptions = selector.options && typeof selector.options === "object" && !Array.isArray(selector.options)
-        ? selector.options
-        : {};
-      const normalizedOptions = {};
-      for (const [optionKey, optionValue] of Object.entries(rawOptions)) {
-        const normalizedOption = normalizeSelectorOption(optionValue, optionKey);
-        if (!normalizedOption.key) continue;
-        normalizedOptions[normalizedOption.key] = normalizedOption;
-      }
-      return {
-        key,
-        label: String(selector.label || key).trim(),
-        type: selector.type === "inline" ? "inline" : "inline",
-        options: normalizedOptions,
-      };
-    })
-    .filter(Boolean);
-}
-
-function normalizePromptExamplePhotos(value) {
-  const source = Array.isArray(value) ? value : (value ? [value] : []);
-  return source
-    .map(item => String(item || "").trim())
-    .filter(Boolean)
-    .slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
-}
-
-function normalizeStyleItem(item = {}, key = "") {
-  const type = item.type === "dynamic" ? "dynamic" : "static";
-  const examplePhotos = normalizePromptExamplePhotos(item.examplePhotos);
-  const previewPhoto = item.previewPhoto || examplePhotos[0] || null;
-  const selectors = normalizeStyleSelectors(item.selectors);
+function normalizePromptLibraryItem(item = {}, key = "") {
   return {
     key: item.key || key,
-    type,
     title: item.title || key,
-    prompt: type === "static" ? String(item.prompt || item.template || "").trim() : "",
-    template: type === "dynamic" ? String(item.template || item.prompt || "").trim() : "",
-    selectors,
+    prompt: item.prompt || "",
     category: item.category || "other",
-    previewPhoto,
-    examplePhotos,
+    previewPhoto: item.previewPhoto || null,
     isTrending: Boolean(item.isTrending),
     createdAt: Number(item.createdAt || Date.now()),
     clicks: Number(item.clicks || 0),
@@ -989,52 +701,31 @@ function normalizeStyleItem(item = {}, key = "") {
   };
 }
 
-function normalizePromptLibraryItem(item = {}, key = "") {
-  return normalizeStyleItem(item, key);
-}
-
-function ensureStyleLibrary() {
-  const rawLegacy = content.promptLibrary && typeof content.promptLibrary === "object" && !Array.isArray(content.promptLibrary)
-    ? content.promptLibrary
-    : {};
-  if (!content.styleLibrary || typeof content.styleLibrary !== "object" || Array.isArray(content.styleLibrary)) {
-    content.styleLibrary = {};
+function ensurePromptLibrary() {
+  if (!content.promptLibrary || typeof content.promptLibrary !== "object" || Array.isArray(content.promptLibrary)) {
+    content.promptLibrary = {};
   }
-
-  const merged = { ...rawLegacy, ...content.styleLibrary };
   let changed = false;
-  const normalizedLibrary = {};
-  for (const [key, item] of Object.entries(merged)) {
-    const normalized = normalizeStyleItem(item, key);
+  for (const [key, item] of Object.entries(content.promptLibrary)) {
+    const normalized = normalizePromptLibraryItem(item, key);
     if (JSON.stringify(normalized) !== JSON.stringify(item)) {
+      content.promptLibrary[key] = normalized;
       changed = true;
     }
-    normalizedLibrary[normalized.key] = normalized;
   }
-
-  content.styleLibrary = normalizedLibrary;
-  content.promptLibrary = content.styleLibrary;
   if (changed) saveContent();
-  return content.styleLibrary;
-}
-
-function ensurePromptLibrary() {
-  return ensureStyleLibrary();
-}
-
-function getStyle(key) {
-  const styleLibrary = ensureStyleLibrary();
-  if (!key || !styleLibrary[key]) return null;
-  return normalizeStyleItem(styleLibrary[key], key);
+  return content.promptLibrary;
 }
 
 function getPromptStyle(key) {
-  return getStyle(key);
+  const promptLibrary = ensurePromptLibrary();
+  if (!key || !promptLibrary[key]) return null;
+  return normalizePromptLibraryItem(promptLibrary[key], key);
 }
 
-function getSortedStyles() {
-  return Object.values(ensureStyleLibrary())
-    .map(item => normalizeStyleItem(item, item.key))
+function getSortedPromptStyles() {
+  return Object.values(ensurePromptLibrary())
+    .map(item => normalizePromptLibraryItem(item, item.key))
     .sort((a, b) =>
       Number(b.isTrending) - Number(a.isTrending) ||
       Number(b.clicks || 0) - Number(a.clicks || 0) ||
@@ -1042,134 +733,20 @@ function getSortedStyles() {
     );
 }
 
-function getSortedPromptStyles() {
-  return getSortedStyles();
-}
-
 function getPromptCategoryStats() {
   const stats = {};
-  for (const style of getSortedStyles()) {
+  for (const style of getSortedPromptStyles()) {
     stats[style.category] = (stats[style.category] || 0) + 1;
   }
   return stats;
 }
 
-function setStyle(style) {
-  const normalized = normalizeStyleItem(style, style?.key);
-  ensureStyleLibrary();
-  content.styleLibrary[normalized.key] = normalized;
-  content.promptLibrary = content.styleLibrary;
-  saveContent();
-  return normalized;
-}
-
-function deleteStyle(key) {
-  ensureStyleLibrary();
-  delete content.styleLibrary[key];
-  content.promptLibrary = content.styleLibrary;
-  saveContent();
-}
-
-function readDynamicPromptsConfig() {
-  const repoPath = path.join(__dirname, "dynamic-prompts.json");
-  const primaryPath = fs.existsSync(repoPath)
-    ? repoPath
-    : DYNAMIC_PROMPTS_PATH;
-  if (!fs.existsSync(primaryPath)) return { templates: [] };
-  try {
-    const parsed = JSON.parse(fs.readFileSync(primaryPath, "utf8"));
-    return parsed && typeof parsed === "object" ? parsed : { templates: [] };
-  } catch (error) {
-    console.error("DYNAMIC PROMPTS READ ERROR:", error.message);
-    return { templates: [] };
-  }
-}
-
-function convertDynamicPromptTemplate(template = {}, existingStyle = null) {
-  const key = normalizePromptKey(template.id || template.key || "");
-  if (!key) return null;
-
-  let selectors = [];
-  if (Array.isArray(template.selectors) && template.selectors.length) {
-    selectors = normalizeStyleSelectors(template.selectors);
-  } else {
-    const selectorKey = normalizePromptKey(template.selectorKey || "selector");
-    const rawOptions = template.options && typeof template.options === "object" && !Array.isArray(template.options)
-      ? template.options
-      : {};
-    const options = {};
-    for (const [optionKey, optionValue] of Object.entries(rawOptions)) {
-      const variablesSource = optionValue?.variables && typeof optionValue.variables === "object"
-        ? optionValue.variables
-        : Object.fromEntries(Object.entries(optionValue || {}).filter(([innerKey]) => innerKey !== "label"));
-      options[normalizePromptKey(optionKey)] = {
-        key: normalizePromptKey(optionKey),
-        label: optionValue?.label || optionKey,
-        variables: variablesSource,
-        clicks: optionValue?.clicks || 0,
-        generations: optionValue?.generations || 0,
-        purchases: optionValue?.purchases || 0,
-      };
-    }
-    selectors = normalizeStyleSelectors([{
-      key: selectorKey,
-      label: template.selectorLabel || selectorKey,
-      type: template.selectorType === "inline" ? "inline" : "inline",
-      options,
-    }]);
-  }
-
-  return normalizeStyleItem({
-    key,
-    type: "dynamic",
-    title: template.title || key,
-    category: template.category || existingStyle?.category || "dynamic",
-    template: template.template || "",
-    selectors,
-    previewPhoto: existingStyle?.previewPhoto || template.previewPhoto || null,
-    examplePhotos: existingStyle?.examplePhotos || template.examplePhotos || [],
-    isTrending: typeof template.isTrending === "boolean" ? template.isTrending : Boolean(existingStyle?.isTrending),
-    createdAt: existingStyle?.createdAt || Date.now(),
-    clicks: Number(existingStyle?.clicks || 0),
-    generations: Number(existingStyle?.generations || 0),
-    purchases: Number(existingStyle?.purchases || 0),
-  }, key);
-}
-
-function importDynamicPromptTemplates() {
-  const config = readDynamicPromptsConfig();
-  const templates = Array.isArray(config.templates) ? config.templates : [];
-  let imported = 0;
-  for (const template of templates) {
-    if (!template || template.enabled === false) continue;
-    const existingStyle = getStyle(normalizePromptKey(template.id || template.key || ""));
-    const converted = convertDynamicPromptTemplate(template, existingStyle);
-    if (!converted) continue;
-    setStyle(converted);
-    imported += 1;
-  }
-  return imported;
-}
-
-function incrementStyleMetric(styleKey, metric, amount = 1) {
-  const style = getStyle(styleKey);
+function incrementPromptMetric(promptKey, metric, amount = 1) {
+  const style = getPromptStyle(promptKey);
   if (!style) return false;
   style[metric] = Number(style[metric] || 0) + amount;
-  setStyle(style);
-  return true;
-}
-
-function incrementPromptMetric(promptKey, metric, amount = 1) {
-  return incrementStyleMetric(promptKey, metric, amount);
-}
-
-function incrementDynamicOptionMetric(styleKey, selectorKey, optionKey, metric, amount = 1) {
-  const style = getStyle(styleKey);
-  if (!style || style.type !== "dynamic") return false;
-  const selector = style.selectors.find(item => item.key === selectorKey);
-  if (!selector || !selector.options[optionKey]) return false;
-  selector.options[optionKey][metric] = Number(selector.options[optionKey][metric] || 0) + amount;
-  setStyle(style);
+  content.promptLibrary[promptKey] = style;
+  saveContent();
   return true;
 }
 
@@ -1190,58 +767,8 @@ async function resolveBotUsername(ctx) {
   }
 }
 
-function buildDynamicPrompt(style, selectedOptions = {}) {
-  if (!style || style.type !== "dynamic") return style?.prompt || "";
-  const variables = {};
-  for (const selector of style.selectors) {
-    const selectedKey = selectedOptions?.[selector.key];
-    const selectedOption = selectedKey ? selector.options?.[selectedKey] : null;
-    if (!selectedOption) continue;
-    Object.assign(variables, normalizeSelectorVariables(selectedOption.variables));
-  }
-
-  return String(style.template || "")
-    .replace(/\[([A-Z0-9_]+)\]/g, (full, placeholder) => {
-      const key = String(placeholder || "").trim().toUpperCase();
-      return Object.prototype.hasOwnProperty.call(variables, key) ? variables[key] : full;
-    })
-    .trim();
-}
-
-function getStyleDeepLink(username, key, selections = {}) {
-  const style = getStyle(key);
-  if (!style) return `https://t.me/${username}?start=prompt_${key}`;
-  const prefix = style.type === "dynamic" ? "template_" : "prompt_";
-  const params = Object.entries(selections || {})
-    .filter(([, value]) => value)
-    .map(([selectorKey, optionKey]) => `${normalizePromptKey(selectorKey)}=${normalizePromptKey(optionKey)}`)
-    .join("__");
-  return `https://t.me/${username}?start=${prefix}${key}${params ? `__${params}` : ""}`;
-}
-
 function getPromptDeepLink(username, key) {
-  return getStyleDeepLink(username, key);
-}
-
-function parseStyleStartPayload(payload = "") {
-  const raw = String(payload || "").trim();
-  if (!raw) return null;
-  const prefix = raw.startsWith("template_") ? "template_" : (raw.startsWith("prompt_") ? "prompt_" : null);
-  if (!prefix) return null;
-  const body = raw.slice(prefix.length);
-  const parts = body.split("__").filter(Boolean);
-  const key = normalizePromptKey(parts.shift() || "");
-  const selections = {};
-  for (const part of parts) {
-    const [selectorKey, optionKey] = part.split("=");
-    if (!selectorKey || !optionKey) continue;
-    selections[normalizePromptKey(selectorKey)] = normalizePromptKey(optionKey);
-  }
-  return {
-    type: prefix === "template_" ? "dynamic" : "static",
-    key,
-    selections,
-  };
+  return `https://t.me/${username}?start=prompt_${key}`;
 }
 
 function getPromptBalanceText(userId) {
@@ -1254,157 +781,50 @@ function clearPromptAttribution(ctx) {
   ensureSession(ctx);
   ctx.session.currentPromptKey = null;
   ctx.session.sourcePromptKey = null;
-  ctx.session.currentStyleKey = null;
-  ctx.session.currentStyleType = null;
-  ctx.session.currentDynamicSelections = {};
-  ctx.session.sourceStyleKey = null;
-  ctx.session.sourceStyleType = null;
-  ctx.session.sourceDynamicSelections = {};
-}
-
-function applyStaticStyleToSession(ctx, style, selections = {}) {
-  if (!style) return null;
-  const user = getUser(ctx.from.id);
-  const finalPrompt = style.type === "dynamic"
-    ? buildDynamicPrompt(style, selections)
-    : style.prompt;
-
-  ctx.session.mode = "photo";
-  ctx.session.photoMode = "edit";
-  ctx.session.customType = "custom_photo";
-  ctx.session.awaitingCustomPrompt = false;
-  ctx.session.customPrompt = finalPrompt;
-  ctx.session.awaitingAiPrompt = null;
-  ctx.session.awaitingCustomAmount = false;
-  ctx.session.awaitingPromptEditKey = null;
-  ctx.session.awaitingTextEditKey = null;
-  ctx.session.awaitingPromptPreviewKey = null;
-  ctx.session.currentPromptKey = style.key;
-  ctx.session.sourcePromptKey = style.key;
-  ctx.session.currentStyleKey = style.key;
-  ctx.session.currentStyleType = style.type;
-  ctx.session.currentDynamicSelections = { ...(selections || {}) };
-  ctx.session.sourceStyleKey = style.key;
-  ctx.session.sourceStyleType = style.type;
-  ctx.session.sourceDynamicSelections = { ...(selections || {}) };
-  ctx.session.style = null;
-  ctx.session.videoInputMode = null;
-  ctx.session.pendingDynamicStyle = null;
-
-  user.sourcePromptKey = style.key;
-  user.sourceStyleKey = style.key;
-  user.sourceDynamicSelections = { ...(selections || {}) };
-  saveUsers();
-  return style;
 }
 
 function applyPromptStyleToSession(ctx, promptKey) {
   const style = getPromptStyle(promptKey);
   if (!style) return null;
   ensureSession(ctx);
-  if (style.type === "dynamic") return null;
-  return applyStaticStyleToSession(ctx, style);
+  const user = getUser(ctx.from.id);
+
+  ctx.session.mode = "photo";
+  ctx.session.photoMode = "edit";
+  ctx.session.customType = "custom_photo";
+  ctx.session.awaitingCustomPrompt = false;
+  ctx.session.customPrompt = style.prompt;
+  ctx.session.awaitingAiPrompt = null;
+  ctx.session.awaitingCustomAmount = false;
+  ctx.session.awaitingPromptEditKey = null;
+  ctx.session.awaitingTextEditKey = null;
+  ctx.session.currentPromptKey = style.key;
+  ctx.session.sourcePromptKey = style.key;
+  ctx.session.style = null;
+  ctx.session.videoInputMode = null;
+
+  user.sourcePromptKey = style.key;
+  saveUsers();
+  return style;
 }
 
-async function startDynamicStyleFlow(ctx, style, initialSelections = {}) {
-  ensureSession(ctx);
-  ctx.session.pendingDynamicStyle = {
-    styleKey: style.key,
-    currentSelectorIndex: 0,
-    selections: { ...(initialSelections || {}) },
-  };
-  ctx.session.currentStyleKey = style.key;
-  ctx.session.currentStyleType = style.type;
-  ctx.session.currentDynamicSelections = { ...(initialSelections || {}) };
-  const previewText =
-    `🎨 <b>${escapeHtml(style.title)}</b>\n\n` +
-    `Спочатку подивись приклади стилю, а потім обери параметри.`;
-  await sendPromptExamplePhotos(ctx, style, previewText);
-  return continueDynamicStyleFlow(ctx, style.key);
-}
-
-async function continueDynamicStyleFlow(ctx, styleKey) {
-  const style = getStyle(styleKey);
-  if (!style || style.type !== "dynamic") return ctx.reply("❌ Стиль не знайдено.");
-  ensureSession(ctx);
-  if (!ctx.session.pendingDynamicStyle || ctx.session.pendingDynamicStyle.styleKey !== styleKey) {
-    ctx.session.pendingDynamicStyle = {
-      styleKey,
-      currentSelectorIndex: 0,
-      selections: {},
-    };
-  }
-
-  const pending = ctx.session.pendingDynamicStyle;
-  const remainingSelector = style.selectors.find(selector => !pending.selections?.[selector.key]);
-  if (!remainingSelector) {
-    return finalizeDynamicStylePrompt(ctx, styleKey);
-  }
-
-  const rows = Object.values(remainingSelector.options).map(option => [
-    Markup.button.callback(option.label, `stylelib_select_${style.key}__${remainingSelector.key}__${option.key}`)
-  ]);
-
-  const text =
-    `🎛 <b>${escapeHtml(style.title)}</b>\n\n` +
-    `${escapeHtml(remainingSelector.label)}\n` +
-    `Кроків залишилось: <b>${style.selectors.filter(selector => !pending.selections?.[selector.key]).length}</b>`;
-
-  return ctx.reply(text, {
-    parse_mode: "HTML",
-    reply_markup: Markup.inlineKeyboard(rows).reply_markup,
-  });
-}
-
-async function finalizeDynamicStylePrompt(ctx, styleKey) {
-  const style = getStyle(styleKey);
-  if (!style || style.type !== "dynamic") return ctx.reply("❌ Стиль не знайдено.");
-  ensureSession(ctx);
-  const selections = { ...(ctx.session.pendingDynamicStyle?.selections || {}) };
-  const finalPrompt = buildDynamicPrompt(style, selections);
-  if (!finalPrompt) return ctx.reply("❌ Не вдалося зібрати промт.");
-
-  applyStaticStyleToSession(ctx, style, selections);
-  ctx.session.customPrompt = finalPrompt;
-  ctx.session.pendingDynamicStyle = null;
-
-  return sendPromptReadyMessage(ctx, style, { withPreview: true });
-}
-
-function markPromptGeneration(user, promptKey, selections = null) {
+function markPromptGeneration(user, promptKey) {
   if (!promptKey) return;
-  const style = getStyle(promptKey);
-  if (!style) return;
-  incrementStyleMetric(promptKey, "generations");
-  if (style.type === "dynamic" && selections) {
-    for (const [selectorKey, optionKey] of Object.entries(selections)) {
-      incrementDynamicOptionMetric(promptKey, selectorKey, optionKey, "generations");
-    }
-  }
+  if (!getPromptStyle(promptKey)) return;
+  incrementPromptMetric(promptKey, "generations");
   user.lastGeneratedPromptKey = promptKey;
-  user.lastGeneratedStyleKey = promptKey;
   user.pendingPurchasePromptKey = promptKey;
-  user.pendingPurchaseStyleKey = promptKey;
-  user.pendingPurchaseDynamicSelections = selections ? { ...selections } : null;
   saveUsers();
 }
 
 function markPromptPurchase(user, orderReference) {
-  const promptKey = user.pendingPurchaseStyleKey || user.pendingPurchasePromptKey;
+  const promptKey = user.pendingPurchasePromptKey;
   if (!promptKey) return false;
   if (user.lastPurchaseAttributedOrderReference === orderReference) return false;
-  const style = getStyle(promptKey);
-  if (!style) return false;
-  incrementStyleMetric(promptKey, "purchases");
-  if (style.type === "dynamic" && user.pendingPurchaseDynamicSelections) {
-    for (const [selectorKey, optionKey] of Object.entries(user.pendingPurchaseDynamicSelections)) {
-      incrementDynamicOptionMetric(promptKey, selectorKey, optionKey, "purchases");
-    }
-  }
+  if (!getPromptStyle(promptKey)) return false;
+  incrementPromptMetric(promptKey, "purchases");
   user.lastPurchaseAttributedOrderReference = orderReference;
   user.pendingPurchasePromptKey = null;
-  user.pendingPurchaseStyleKey = null;
-  user.pendingPurchaseDynamicSelections = null;
   saveUsers();
   return true;
 }
@@ -1412,25 +832,20 @@ function markPromptPurchase(user, orderReference) {
 function buildPromptStyleCardText(style, options = {}) {
   const { admin = false, userId = null, botUsername = "Promtiai_bot" } = options;
   const trendMark = style.isTrending ? "🔥 Тренд\n" : "";
-  const styleTypeLabel = style.type === "dynamic" ? "dynamic" : "static";
-  const deepLink = getStyleDeepLink(botUsername, style.key);
-  const examplesCount = Array.isArray(style.examplePhotos) ? style.examplePhotos.length : 0;
+  const deepLink = getPromptDeepLink(botUsername, style.key);
   if (admin) {
     return (
       `🎨 <b>${escapeHtml(style.title)}</b>\n` +
       `${trendMark}` +
       `Ключ: <code>${escapeHtml(style.key)}</code>\n` +
-      `Тип: <b>${styleTypeLabel}</b>\n` +
       `Категорія: <b>${escapeHtml(style.category)}</b>\n\n` +
-      `Examples: <b>${examplesCount}/${MAX_PROMPT_EXAMPLE_PHOTOS}</b>\n` +
       `Clicks: <b>${style.clicks}</b>\n` +
       `Generations: <b>${style.generations}</b>\n` +
       `Purchases: <b>${style.purchases}</b>\n` +
-      (style.type === "dynamic" ? `Selectors: <b>${style.selectors.length}</b>\n\n` : "\n") +
       `Gen conversion: <b>${formatConversion(style.generations, style.clicks)}</b>\n` +
       `Purchase conversion: <b>${formatConversion(style.purchases, style.clicks)}</b>\n\n` +
       `Deep-link:\n<code>${escapeHtml(deepLink)}</code>\n\n` +
-      `${style.type === "dynamic" ? "Template" : "Промт"}:\n<code>${escapeHtml(style.type === "dynamic" ? style.template : style.prompt)}</code>`
+      `Промт:\n<code>${escapeHtml(style.prompt)}</code>`
     );
   }
 
@@ -1438,10 +853,7 @@ function buildPromptStyleCardText(style, options = {}) {
   return (
     `🎨 <b>${escapeHtml(style.title)}</b>\n` +
     `${trendMark}` +
-    `Тип: <b>${styleTypeLabel}</b>\n` +
     `Категорія: <b>${escapeHtml(style.category)}</b>\n\n` +
-    (examplesCount ? `Приклади: <b>${examplesCount}</b>\n` : "") +
-    (style.type === "dynamic" ? `Параметрів: <b>${style.selectors.length}</b>\n` : "") +
     `Надішли своє фото — бот зробить таке ж.\n` +
     `Баланс: <b>${escapeHtml(balanceText)}</b>`
   );
@@ -1461,9 +873,9 @@ function buildPromptLibraryKeyboard(page = 0, admin = false) {
     )
   ]);
   const nav = [];
-  if (safePage > 0) nav.push(Markup.button.callback("??", `${prefix}_page_${safePage - 1}`));
+  if (safePage > 0) nav.push(Markup.button.callback("⬅️", `${prefix}_page_${safePage - 1}`));
   nav.push(Markup.button.callback(`${safePage + 1}/${totalPages}`, `${prefix}_noop`));
-  if (safePage < totalPages - 1) nav.push(Markup.button.callback("??", `${prefix}_page_${safePage + 1}`));
+  if (safePage < totalPages - 1) nav.push(Markup.button.callback("➡️", `${prefix}_page_${safePage + 1}`));
   if (nav.length) rows.push(nav);
   return Markup.inlineKeyboard(rows);
 }
@@ -1471,63 +883,16 @@ function buildPromptLibraryKeyboard(page = 0, admin = false) {
 function buildPromptStyleKeyboard(style, admin = false) {
   if (!admin) {
     return Markup.inlineKeyboard([
-      [Markup.button.callback(style.type === "dynamic" ? "🎛 Обрати параметри" : "✅ Обрати стиль", `promptlib_apply_${style.key}`)],
+      [Markup.button.callback("✅ Обрати стиль", `promptlib_apply_${style.key}`)],
       [Markup.button.callback("📚 До списку стилів", "promptlib_page_0")],
     ]);
   }
   return Markup.inlineKeyboard([
     [Markup.button.callback(style.isTrending ? "🔕 Зняти тренд" : "🔥 Зробити трендом", `admin_promptlib_trend_${style.key}_${style.isTrending ? "off" : "on"}`)],
     [Markup.button.callback("🖼 Preview фото", `admin_promptlib_preview_${style.key}`)],
-    [Markup.button.callback("🖼 Examples x10", `admin_promptlib_examples_${style.key}`)],
     [Markup.button.callback("🗑 Видалити", `admin_promptlib_delete_${style.key}`)],
     [Markup.button.callback("📚 До бібліотеки", "admin_promptlib_page_0")],
   ]);
-}
-
-function getPromptExamplePhotos(style) {
-  if (!style) return [];
-  const examples = normalizePromptExamplePhotos(style.examplePhotos);
-  if (examples.length) return examples;
-  return style.previewPhoto ? [style.previewPhoto] : [];
-}
-
-async function sendPromptExamplePhotos(ctx, style, caption = null, options = {}) {
-  const photos = getPromptExamplePhotos(style).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
-  if (!photos.length) return false;
-
-  const { fallbackCaption = true } = options;
-  const CAPTION_LIMIT = 1024;
-  let inlineCaption = null;
-  let trailingText = null;
-
-  if (caption) {
-    if (caption.length <= CAPTION_LIMIT) inlineCaption = caption;
-    else trailingText = caption;
-  }
-
-  try {
-    for (let index = 0; index < photos.length; index += 10) {
-      const chunk = photos.slice(index, index + 10);
-      const media = chunk.map((fileId, chunkIndex) => ({
-        type: "photo",
-        media: fileId,
-        ...(inlineCaption && index === 0 && chunkIndex === 0 ? { caption: inlineCaption, parse_mode: "HTML" } : {}),
-      }));
-      await ctx.replyWithMediaGroup(media);
-    }
-  } catch (e) {
-    console.error("sendPromptExamplePhotos ERROR:", e.message);
-    if (fallbackCaption && caption) {
-      await ctx.reply(caption, { parse_mode: "HTML" }).catch(() => {});
-    }
-    return false;
-  }
-
-  if (trailingText) {
-    await ctx.reply(trailingText, { parse_mode: "HTML" }).catch(() => {});
-  }
-
-  return true;
 }
 
 async function sendPromptLibraryPage(ctx, page = 0, admin = false) {
@@ -1577,15 +942,12 @@ async function sendPromptStyleCard(ctx, promptKey, admin = false) {
   const botUsername = await resolveBotUsername(ctx);
   const text = buildPromptStyleCardText(style, { admin, userId: ctx.from?.id, botUsername });
   const markup = buildPromptStyleKeyboard(style, admin);
-  const examples = getPromptExamplePhotos(style);
-  if (examples.length) {
-    const sentExamples = await sendPromptExamplePhotos(ctx, style, text, { fallbackCaption: false });
-    if (sentExamples) {
-      return ctx.reply(admin ? "Фото-приклади надіслано вище." : "Обери дію нижче.", {
-        parse_mode: "HTML",
-        reply_markup: markup.reply_markup,
-      });
-    }
+  if (style.previewPhoto) {
+    return ctx.replyWithPhoto(style.previewPhoto, {
+      caption: text,
+      parse_mode: "HTML",
+      reply_markup: markup.reply_markup,
+    });
   }
   return ctx.reply(text, {
     parse_mode: "HTML",
@@ -1602,127 +964,13 @@ async function sendPromptReadyMessage(ctx, style, options = {}) {
     `Баланс: ${getPromptBalanceText(ctx.from.id)}\n\n` +
     `Надішли своє фото 📸`;
 
-  if (withPreview && getPromptExamplePhotos(style).length) {
-    const sentExamples = await sendPromptExamplePhotos(ctx, style, text, { fallbackCaption: false });
-    if (sentExamples) return ctx.reply("Надішли своє фото 📸", photoMenu());
+  if (withPreview && style.previewPhoto) {
+    return ctx.replyWithPhoto(style.previewPhoto, {
+      caption: text,
+      reply_markup: photoMenu().reply_markup,
+    });
   }
   return ctx.reply(text, photoMenu());
-}
-
-function getStyleWizardDraft(ctx) {
-  ensureSession(ctx);
-  return ctx.session.styleWizard || null;
-}
-
-function startStyleWizard(ctx) {
-  ensureSession(ctx);
-  ctx.session.styleWizard = {
-    mode: "create",
-    step: "type",
-    style: {
-      key: "",
-      type: "static",
-      title: "",
-      category: "",
-      prompt: "",
-      template: "",
-      selectors: [],
-      previewPhoto: null,
-      examplePhotos: [],
-      isTrending: false,
-    },
-    currentSelector: null,
-    currentOption: null,
-  };
-}
-
-async function promptStyleWizardStep(ctx) {
-  const wizard = getStyleWizardDraft(ctx);
-  if (!wizard) return ctx.reply("❌ Wizard не активний.", adminMenu());
-
-  switch (wizard.step) {
-    case "type":
-      return ctx.reply("Оберіть тип стилю:", Markup.inlineKeyboard([
-        [Markup.button.callback("Static", "stylewizard_type_static")],
-        [Markup.button.callback("Dynamic", "stylewizard_type_dynamic")],
-      ]));
-    case "key":
-      return ctx.reply("Введи key стилю латиницею. Приклад: zodiac_goddess");
-    case "category":
-      return ctx.reply("Введи category стилю. Приклад: zodiac");
-    case "title":
-      return ctx.reply("Введи title стилю для користувача.");
-    case "prompt":
-      return ctx.reply("Надішли готовий prompt для static стилю.");
-    case "template":
-      return ctx.reply("Надішли template для dynamic стилю з [PLACEHOLDER].");
-    case "selector_key":
-      return ctx.reply(`Введи key selector-а №${wizard.style.selectors.length + 1}. Приклад: zodiac`);
-    case "selector_label":
-      return ctx.reply("Введи label selector-а. Приклад: Обери знак зодіаку");
-    case "option_key":
-      return ctx.reply("Введи key option. Приклад: pisces");
-    case "option_label":
-      return ctx.reply("Введи label option. Приклад: Риби");
-    case "option_variables":
-      return ctx.reply("Надішли variables у JSON. Приклад:\n{\"ZODIAC\":\"Pisces\",\"ZODIAC_COLORS\":\"seafoam, pearl, lilac\"}");
-    case "selector_continue":
-      return ctx.reply("Що робимо далі з selector-ами?", Markup.inlineKeyboard([
-        [Markup.button.callback("Ще option", "stylewizard_continue_option")],
-        [Markup.button.callback("Новий selector", "stylewizard_continue_selector")],
-        [Markup.button.callback("Далі до фото", "stylewizard_continue_media")],
-      ]));
-    case "preview":
-      return ctx.reply("Надішли preview photo або натисни skip.", Markup.inlineKeyboard([
-        [Markup.button.callback("Skip preview", "stylewizard_skip_preview")],
-      ]));
-    case "examples":
-      return ctx.reply(`Надішли до ${MAX_PROMPT_EXAMPLE_PHOTOS} example photos.\nКоли завершиш — натисни done або skip.`, Markup.inlineKeyboard([
-        [Markup.button.callback("Done examples", "stylewizard_done_examples")],
-        [Markup.button.callback("Skip examples", "stylewizard_skip_examples")],
-      ]));
-    case "confirm": {
-      const style = normalizeStyleItem(wizard.style, wizard.style.key);
-      const summary =
-        `✅ Перевір стиль перед збереженням\n\n` +
-        `Key: ${style.key}\n` +
-        `Type: ${style.type}\n` +
-        `Category: ${style.category}\n` +
-        `Title: ${style.title}\n` +
-        `Selectors: ${style.selectors.length}\n` +
-        `Preview: ${style.previewPhoto ? "yes" : "no"}\n` +
-        `Examples: ${style.examplePhotos.length}/${MAX_PROMPT_EXAMPLE_PHOTOS}`;
-      return ctx.reply(summary, Markup.inlineKeyboard([
-        [Markup.button.callback("Зберегти стиль", "stylewizard_save")],
-        [Markup.button.callback("Скасувати", "stylewizard_cancel")],
-      ]));
-    }
-    default:
-      return ctx.reply("❌ Невідомий крок wizard.", adminMenu());
-  }
-}
-
-function appendWizardSelectorOption(ctx, optionPayload) {
-  const wizard = getStyleWizardDraft(ctx);
-  if (!wizard || !wizard.currentSelector) return false;
-  const selector = wizard.style.selectors[wizard.style.selectors.length - 1];
-  if (!selector) return false;
-  selector.options[optionPayload.key] = normalizeSelectorOption(optionPayload, optionPayload.key);
-  wizard.currentOption = null;
-  return true;
-}
-
-function saveWizardStyle(ctx) {
-  const wizard = getStyleWizardDraft(ctx);
-  if (!wizard) return null;
-  const style = setStyle(wizard.style);
-  ctx.session.styleWizard = null;
-  return style;
-}
-
-const importedDynamicStylesOnBoot = importDynamicPromptTemplates();
-if (importedDynamicStylesOnBoot > 0) {
-  console.log(`Imported dynamic styles: ${importedDynamicStylesOnBoot}`);
 }
 
 async function replyLongText(ctx, text, extra = undefined) {
@@ -1734,45 +982,7 @@ async function replyLongText(ctx, text, extra = undefined) {
   }
 }
 
-const TELEGRAM_CAPTION_LIMIT = 1024;
-
-async function sendPhotoWithSafeCaption({
-  photo,
-  text = "",
-  sendPhoto,
-  sendText,
-  photoOptions = {},
-  textOptions = undefined,
-  logLabel = "sendPhotoWithSafeCaption",
-}) {
-  const hasText = typeof text === "string" && text.length > 0;
-
-  try {
-    if (!photo) {
-      if (hasText) return await sendText(text, textOptions);
-      return null;
-    }
-
-    if (!hasText) {
-      return await sendPhoto(photo, photoOptions);
-    }
-
-    if (text.length <= TELEGRAM_CAPTION_LIMIT) {
-      return await sendPhoto(photo, { ...photoOptions, caption: text });
-    }
-
-    await sendPhoto(photo, photoOptions);
-    return await sendText(text, textOptions);
-  } catch (e) {
-    console.error(`${logLabel} ERROR:`, e.message);
-    if (hasText) {
-      try { return await sendText(text, textOptions); } catch {}
-    }
-    throw e;
-  }
-}
-
-// ─── РЕФЕРАЛЬНА ј?СТЕМА ───────────────────────────────────────────────────────
+// ─── РЕФЕРАЛЬНА СИСТЕМА ───────────────────────────────────────────────────────
 async function handleReferral(ctx, referrerId) {
   const newUserId = ctx.from.id;
   if (referrerId === newUserId) return;
@@ -1796,22 +1006,23 @@ function validatePhoto(photo) {
   return null;
 }
 
-// ─── ОТР�?МАННЯ ЗОБРАЖЕННЯ ─────────────────────────────────────────────────────
+// ─── ОТРИМАННЯ ЗОБРАЖЕННЯ ─────────────────────────────────────────────────────
 // ─── ХЕЛПЕР: надіслати текст з опціональним фото ────────────────────────────
-// Якщо фото є і текст ?1024 символів ? фото з caption
-// Якщо фото є і текст довший ? фото без caption + текст окремим повідомленням
-// Якщо фото немає ? звичайний текст
+// Якщо фото є і текст ≤1024 символів → фото з caption
+// Якщо фото є і текст довший → фото без caption + текст окремим повідомленням
+// Якщо фото немає → звичайний текст
 async function sendWithOptionalPhoto(ctx, text, photoFileId, menu) {
   try {
-    return await sendPhotoWithSafeCaption({
-      photo: photoFileId,
-      text,
-      sendPhoto: (photo, options) => ctx.replyWithPhoto(photo, options),
-      sendText: (message, options) => ctx.reply(message, options),
-      photoOptions: { ...menu },
-      textOptions: menu,
-      logLabel: "sendWithOptionalPhoto",
-    });
+    if (!photoFileId) {
+      return await ctx.reply(text, menu);
+    }
+    const CAPTION_LIMIT = 1024;
+    if (text.length <= CAPTION_LIMIT) {
+      return await ctx.replyWithPhoto(photoFileId, { caption: text, ...menu });
+    }
+    // Текст задовгий → фото без caption + текст окремо
+    await ctx.replyWithPhoto(photoFileId).catch(() => {});
+    return await ctx.reply(text, menu);
   } catch (e) {
     console.error("sendWithOptionalPhoto ERROR:", e.message);
     // Fallback на звичайний текст якщо фото не вдалось надіслати
@@ -1911,7 +1122,7 @@ async function generateAiPrompt(imageBase64, mode) {
     const anthropic = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const systemPrompt = mode === "video"
       ? `You are an expert at writing image-to-video animation prompts for Seedance and Kling AI models.
-Write ONE ultra-short English prompt — MAXIMUM 10 words (?5 seconds to read aloud).
+Write ONE ultra-short English prompt — MAXIMUM 10 words (≈5 seconds to read aloud).
 Focus on natural motion: hair, eyes, lips, wind, camera movement.
 Examples: "hair gently flowing in wind, soft bokeh" / "eyes slowly opening, cinematic close-up"
 Output ONLY the prompt. No punctuation at end. No extra words.`
@@ -2050,13 +1261,13 @@ function updatePaymentStatus(ref, data, status) {
 
 // ─── СЕГМЕНТАЦІЯ ЮЗЕРІВ ───────────────────────────────────────────────────────
 function getUserSegment(u) {
-  if ((u.totalSpent || 0) >= 500)                            return "?? Whale";
-  if ((u.totalSpent || 0) > 0)                               return "?? Paying";
-  if ((u.generations || 0) > 0 || getUserVideoTotal(u) > 0) return "?? Active";
-  return "?? New";
+  if ((u.totalSpent || 0) >= 500)                            return "🐳 Whale";
+  if ((u.totalSpent || 0) > 0)                               return "💳 Paying";
+  if ((u.generations || 0) > 0 || getUserVideoTotal(u) > 0) return "🔥 Active";
+  return "🆕 New";
 }
 
-// ─── СТАТ�?СТ�?КА ───────────────────────────────────────────────────────────────
+// ─── СТАТИСТИКА ───────────────────────────────────────────────────────────────
 function getBotStats() {
   const all = Object.values(users);
   const cfg = loadSettings();
@@ -2074,10 +1285,10 @@ function getBotStats() {
     activeWorkers,
     maxWorkers:       cfg.maxWorkers,
     segments: {
-      new:    all.filter(u => getUserSegment(u) === "?? New").length,
-      active: all.filter(u => getUserSegment(u) === "?? Active").length,
-      paying: all.filter(u => getUserSegment(u) === "?? Paying").length,
-      whales: all.filter(u => getUserSegment(u) === "?? Whale").length,
+      new:    all.filter(u => getUserSegment(u) === "🆕 New").length,
+      active: all.filter(u => getUserSegment(u) === "🔥 Active").length,
+      paying: all.filter(u => getUserSegment(u) === "💳 Paying").length,
+      whales: all.filter(u => getUserSegment(u) === "🐳 Whale").length,
     },
     aiPromptEnabled: cfg.aiPromptEnabled,
     videoEnabled:    cfg.videoEnabled,
@@ -2088,104 +1299,58 @@ function getBotStats() {
 }
 
 // ─── МЕНЮ ─────────────────────────────────────────────────────────────────────
-const BTN = {
-  PHOTO: "?? ????",
-  VIDEO: "?? ?????",
-  TRENDING: "?? ???????? ?????",
-  BUY_PROMTI: "? ?????? Promti ?",
-  BUY_PROMTI_ALT: "? ?????? Promti",
-  BUY_PROMTI_CARD: "?? ?????? Promti",
-  CUSTOM_AMOUNT: "?? ???? ????",
-  BALANCE: "?? ??????",
-  PRICES: "?? ????",
-  IDEAS: "?? ???? ??? ???????",
-  INVITE: "?? ????????? ?????",
-  INFO: "?? ??????????",
-  HELP: "? ????????",
-  SUPPORT: "?? ?????????",
-  EDIT_PHOTO: "?? ?????????? ????",
-  CREATE_PHOTO: "? ???????? ????",
-  AI_PHOTO: "?? AI ????? ??? ????",
-  AI_VIDEO: "?? AI ????? ??? ?????",
-  BACK: "?? ?????",
-  BACK_PHOTO: "?? ????? ?? ????",
-  BACK_VIDEO: "?? ????? ?? ?????",
-  SEEDANCE: "?? Seedance",
-  KLING: "?? Kling",
-  AUTO_ANIM: "? ???? ????????",
-  ANIM_PROMPT: "?? ???????? + ?????",
-  VIDEO_FROM_TEXT: "?? ????? ? ??????",
-  ADMIN_STATUS: "?? ?????? ????",
-  ADMIN_MY_ID: "?? ??? ID",
-  ADMIN_USERS: "?? ???????????",
-  ADMIN_PAYMENTS: "?? ??????? ??????",
-  ADMIN_STYLE_LIB: "?? ?????????? ??????",
-  ADMIN_ANALYTICS: "?? ?????????",
-  ADMIN_PACKAGES: "?? ??????",
-  ADMIN_EDIT_TEXT: "?? ??????? ?????",
-  ADMIN_TEXTS: "?? ??????? ??????",
-  ADMIN_ATTACH_PHOTO: "?? ?????????? ????",
-  ADMIN_SETTINGS: "?? ????????????",
-  PHOTO_WELCOME: "?? welcomePhoto",
-  PHOTO_INFO: "?? infoPhoto",
-  PHOTO_HELP: "?? helpPhoto",
-  PHOTO_PRICES: "?? pricesPhoto",
-  PHOTO_IDEA: "?? ideaPhoto",
-  PHOTO_BROADCAST: "?? broadcastPhoto",
-};
-
 const mainMenu  = () => Markup.keyboard([
-  [BTN.PHOTO, BTN.VIDEO],
-  [BTN.TRENDING],
-  [BTN.BUY_PROMTI],
-  [BTN.BALANCE, BTN.PRICES],
-  [BTN.IDEAS, BTN.INVITE],
-  [BTN.INFO, BTN.HELP],
-  [BTN.SUPPORT]
+  ["🖼 Фото", "🎬 Відео"],
+  ["🎨 Трендові стилі"],
+  ["✨ Купити Promti ✨"],
+  ["📊 Баланс", "💰 Ціни"],
+  ["💡 Ідея для промтів", "👫 Запросити друга"],
+  ["ℹ️ Інформація", "❓ Допомога"],
+  ["🆘 Підтримка"]
 ]).resize();
 const photoMenu = () => Markup.keyboard([
-  [BTN.EDIT_PHOTO, BTN.CREATE_PHOTO],
-  [BTN.AI_PHOTO],
-  [BTN.BALANCE],
-  [BTN.BACK]
+  ["🖼 Редагувати фото", "✨ Створити фото"],
+  ["🤖 AI промт для фото"],
+  ["📊 Баланс"],
+  ["↩️ Назад"]
 ]).resize();
 const videoMenu     = () => Markup.keyboard([
-  [BTN.SEEDANCE, BTN.KLING],
-  [BTN.AI_VIDEO],
-  [BTN.BALANCE],
-  [BTN.BACK]
+  ["🎬 Seedance", "🎥 Kling"],
+  ["🤖 AI промт для відео"],
+  ["📊 Баланс"],
+  ["↩️ Назад"]
 ]).resize();
 const seedanceMenu  = () => Markup.keyboard([
-  [BTN.AUTO_ANIM, BTN.ANIM_PROMPT],
-  [BTN.VIDEO_FROM_TEXT],
-  [BTN.BACK_VIDEO]
+  ["⚡ Авто анімація", "🎬 Анімація + промт"],
+  ["🎥 Відео з тексту"],
+  ["↩️ Назад до відео"]
 ]).resize();
 const klingMenu     = () => Markup.keyboard([
-  [BTN.AUTO_ANIM, BTN.ANIM_PROMPT],
-  [BTN.VIDEO_FROM_TEXT],
-  [BTN.BACK_VIDEO]
+  ["⚡ Авто анімація", "🎬 Анімація + промт"],
+  ["🎥 Відео з тексту"],
+  ["↩️ Назад до відео"]
 ]).resize();
 const adminMenu       = () => Markup.keyboard([
-  [BTN.ADMIN_STATUS, BTN.ADMIN_MY_ID],
-  [BTN.ADMIN_USERS, BTN.ADMIN_PAYMENTS],
-  [BTN.ADMIN_STYLE_LIB, BTN.ADMIN_ANALYTICS],
-  [BTN.ADMIN_PACKAGES, BTN.ADMIN_SETTINGS],
-  [BTN.ADMIN_EDIT_TEXT, BTN.ADMIN_TEXTS],
-  [BTN.ADMIN_ATTACH_PHOTO],
-  [BTN.BACK],
+  ["📊 Статус бота", "👤 Мій ID"],
+  ["👥 Користувачі", "💳 Останні оплати"],
+  ["🎨 Бібліотека стилів", "📈 Аналітика"],
+  ["📦 Пакети", "⚙️ Налаштування"],
+  ["✏️ Змінити текст", "📝 Поточні тексти"],
+  ["🖼 Прикріпити фото"],
+  ["↩️ Назад"],
 ]).resize();
-const adminPromptsMenu = () => Markup.keyboard([["portrait", "beauty"], ["fashion", "art"], ["trend", "seedance"], ["kling"], [BTN.BACK]]).resize();
-const adminTextsMenu   = () => Markup.keyboard([["welcomeText", "infoText"], ["helpText", "supportText"], ["ideaText", "pricesText"], [BTN.BACK]]).resize();
+const adminPromptsMenu = () => Markup.keyboard([["portrait", "beauty"], ["fashion", "art"], ["trend", "seedance"], ["kling"], ["↩️ Назад"]]).resize();
+const adminTextsMenu   = () => Markup.keyboard([["welcomeText", "infoText"], ["helpText", "supportText"], ["ideaText", "pricesText"], ["↩️ Назад"]]).resize();
 const adminPhotosMenu  = () => Markup.keyboard([
-  [BTN.PHOTO_WELCOME, BTN.PHOTO_INFO],
-  [BTN.PHOTO_HELP, BTN.PHOTO_PRICES],
-  [BTN.PHOTO_IDEA, BTN.PHOTO_BROADCAST],
-  [BTN.BACK]
+  ["📷 welcomePhoto", "📷 infoPhoto"],
+  ["📷 helpPhoto", "📷 pricesPhoto"],
+  ["📷 ideaPhoto", "📷 broadcastPhoto"],
+  ["↩️ Назад"]
 ]).resize();
 
 const paymentInlineKeyboard = (payUrl, pack) => Markup.inlineKeyboard([
-  [Markup.button.url(`?? ???????? ${pack.title} ? ${pack.priceText}`, payUrl)],
-  [Markup.button.callback("?? ?????????? ??????", `checkpay_${pack.key}`)],
+  [Markup.button.url(`💳 Оплатити ${pack.title} — ${pack.priceText}`, payUrl)],
+  [Markup.button.callback("🔄 Перевірити оплату", `checkpay_${pack.key}`)],
 ]);
 
 // ─── START ────────────────────────────────────────────────────────────────────
@@ -2199,28 +1364,13 @@ bot.start(async (ctx) => {
     const refId = Number(payload.replace("ref_", ""));
     if (refId && refId !== ctx.from.id) await handleReferral(ctx, refId);
   }
-  const stylePayload = parseStyleStartPayload(payload);
-  if (stylePayload) {
-    const style = getStyle(stylePayload.key);
+  if (payload.startsWith("prompt_")) {
+    const promptKey = normalizePromptKey(payload.replace("prompt_", ""));
+    const style = getPromptStyle(promptKey);
     if (style) {
-      incrementStyleMetric(style.key, "clicks");
-      if (style.type === "dynamic") {
-        const complete = style.selectors.every(selector => stylePayload.selections?.[selector.key] && selector.options?.[stylePayload.selections[selector.key]]);
-        if (complete) {
-          for (const [selectorKey, optionKey] of Object.entries(stylePayload.selections)) {
-            incrementDynamicOptionMetric(style.key, selectorKey, optionKey, "clicks");
-          }
-          ctx.session.pendingDynamicStyle = {
-            styleKey: style.key,
-            selections: { ...stylePayload.selections },
-          };
-          return finalizeDynamicStylePrompt(ctx, style.key);
-        }
-        return startDynamicStyleFlow(ctx, style, stylePayload.selections);
-      }
-      applyStaticStyleToSession(ctx, style);
+      incrementPromptMetric(style.key, "clicks");
+      applyPromptStyleToSession(ctx, style.key);
       user.sourcePromptKey = style.key;
-      user.sourceStyleKey = style.key;
       saveUsers();
       return sendPromptReadyMessage(ctx, style, { withPreview: true });
     }
@@ -2228,7 +1378,7 @@ bot.start(async (ctx) => {
   return sendWithOptionalPhoto(ctx, content.welcomeText, content.welcomePhoto, mainMenu());
 });
 
-// ─── КОМАНД�? ──────────────────────────────────────────────────────────────────
+// ─── КОМАНДИ ──────────────────────────────────────────────────────────────────
 bot.command("help",  (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.helpText, content.helpPhoto, mainMenu()); });
 bot.command("info",  (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.infoText, content.infoPhoto, mainMenu()); });
 bot.command("myid",  (ctx) => { touchUser(ctx); return ctx.reply(`Твій ID: ${ctx.from.id}`); });
@@ -2237,109 +1387,45 @@ bot.command("admin", (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   resetState(ctx);
   return ctx.reply(
-    [
-      "🔧 Адмін панель",
-      "",
-      "Швидкі дії:",
-      "📊 Статус бота — перевірка ключів, черги, API, воркерів, помилок",
-      "👤 Мій ID — дізнатись свій Telegram ID",
-      "👥 Користувачі — останні 15 юзерів",
-      "💳 Останні оплати — останні платежі",
-      "🎨 Бібліотека стилів — усі static і dynamic стилі",
-      "📈 Аналітика — конверсії та виручка",
-      "📦 Пакети — усі тарифні пакети",
-      "⚙️ Налаштування — переглянути поточні ліміти",
-      "✏️ Змінити текст — редагувати тексти бота",
-      "📝 Поточні тексти — побачити поточні тексти",
-      "🖼 Прикріпити фото — фото до welcome/info/help/prices/idea/broadcast",
-      "",
-      "Команди стилів:",
-      "/stylewizard — покроковий майстер нового стилю",
-      "/importdynamic — імпорт dynamic стилів з dynamic-prompts.json",
-      "/addprompt KEY | CATEGORY | TITLE | PROMPT — швидко додати static стиль",
-      "/prompts — список усіх стилів з deep-link",
-      "/delprompt KEY — видалити стиль",
-      "/trendprompt KEY on|off — позначити або зняти тренд",
-      "/setpromptpreview KEY — задати preview photo стилю",
-      "/setpromptexamples KEY — задати example photos стилю (до 10)",
-      "/topprompts clicks|generations|purchases — топ стилів за метрикою",
-      "",
-      "Команди пакетів і цін:",
-      "/packages — переглянути всі пакети",
-      "/setprice KEY PRICE — змінити ціну пакету",
-      "/addpackage KEY promti COUNT PRICE TITLE — додати пакет",
-      "/setlink support_link URL — змінити посилання",
-      "",
-      "Команди юзерів:",
-      "/userinfo ID — повна інформація про юзера",
-      "/addpromti ID AMOUNT — нарахувати Promti юзеру",
-      "/ban ID — заблокувати юзера",
-      "/unban ID — розблокувати юзера",
-      "/delete_user ID — видалити обліковий запис",
-      "",
-      "Команди контенту:",
-      "/broadcast TEXT — розіслати всім користувачам",
-      "/analytics — детальна аналітика",
-      "",
-      "Підказки:",
-      "Для dynamic стилю: оновлюєш шаблони dynamic-prompts.json, потім /importdynamic, далі задаєш preview та examples через бот."
-    ].join("\n"),
+    "👑 Адмін панель\n\n" +
+
+    "📊 КНОПКИ МЕНЮ:\n" +
+    "📊 Статус бота — черга, воркери, ключі API, сегменти юзерів, виручка\n" +
+    "👤 Мій ID — показує твій Telegram ID\n" +
+    "👥 Користувачі — останні 15 юзерів з балансом\n" +
+    "💳 Останні оплати — останні 15 транзакцій\n" +
+    "📈 Аналітика — конверсія, топ пакети, виручка 7 днів\n" +
+    "📦 Пакети — всі пакети з цінами\n" +
+    "✏️ Змінити текст — редагувати тексти бота\n" +
+    "📝 Поточні тексти — переглянути всі тексти\n" +
+    "⚙️ Налаштування — ліміти черги, таймаути, денні ліміти\n" +
+    "🖼 Прикріпити фото — додати/видалити фото до welcomeText, infoText, helpText, pricesText, ideaText або broadcast\n\n" +
+
+    "💰 ЦІНИ ТА ПАКЕТИ:\n" +
+    "/packages — переглянути всі пакети і ціни\n" +
+    "/setprice promti_pack10 120 — змінити ціну пакету\n" +
+    "/addpackage KEY promti 15 1199 15 Promti — додати новий пакет\n" +
+    "/setlink support_link https://t.me/... — змінити посилання\n\n" +
+
+    "👥 КЕРУВАННЯ ЮЗЕРАМИ:\n" +
+    "/userinfo ID — повна інфо про юзера\n" +
+    "/addpromti ID 10 — нарахувати Promti юзеру вручну\n" +
+    "/ban ID — заблокувати юзера\n" +
+    "/unban ID — розблокувати юзера\n" +
+    "/delete_user ID — видалити юзера повністю\n\n" +
+
+    "📢 РОЗСИЛКА:\n" +
+    "/broadcast Текст — надіслати всім юзерам\n" +
+    "/analytics — детальна аналітика",
     adminMenu()
   );
 });
+
 bot.command("ref", (ctx) => {
   touchUser(ctx);
   const botUsername = ctx.botInfo?.username || "Promtiai_bot";
   const link = `https://t.me/${botUsername}?start=ref_${ctx.from.id}`;
   return ctx.reply(`🔗 Реферальне посилання:\n${link}\n\n🎁 За кожного друга який оплатить: +${REFERRAL_PROMTI_BONUS} Promti ✨\nЗапрошено: ${users[ctx.from.id]?.referralCount || 0}`);
-});
-
-bot.command("stylewizard", async (ctx) => {
-  touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
-  startStyleWizard(ctx);
-  return promptStyleWizardStep(ctx);
-});
-
-bot.command("importdynamic", async (ctx) => {
-  touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("?");
-  const imported = importDynamicPromptTemplates();
-  return ctx.reply(`? ??????????? dynamic styles: ${imported}`, adminMenu());
-});
-
-bot.command("repair_encoding", (ctx) => {
-  touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("?");
-
-  const summary = runEncodingRepair();
-  prompts = loadJson(PROMPTS_PATH, DEFAULT_PROMPTS);
-  content = loadJson(CONTENT_PATH, DEFAULT_CONTENT);
-  landingContent = loadLandingContent();
-  invalidateSettingsCache();
-
-  const changed = summary.filter((item) => item.changed || item.replaced > 0);
-  if (!changed.length) return ctx.reply("? ??? ?????: ????????? ? ????????? JSON-?????? ? ?????.", adminMenu());
-
-  const summaryText = changed.map((item) => {
-    const details = item.reset ? "??????? ?? ?????? ????????" : `???????? ${item.replaced} ??????`;
-    return `? ${item.file}: ${details}`;
-  }).join("\n");
-
-  return ctx.reply("?? ?????? ????????? ?????????:\n\n" + summaryText, adminMenu());
-});
-
-bot.command("reset_content_clean", (ctx) => {
-  touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("?");
-
-  const summary = runEncodingRepair({ forceDefaults: true });
-  prompts = loadJson(PROMPTS_PATH, DEFAULT_PROMPTS);
-  content = loadJson(CONTENT_PATH, DEFAULT_CONTENT);
-  landingContent = loadLandingContent();
-  invalidateSettingsCache();
-
-  return ctx.reply("?? ???????? ????? ???????????? ??????? UTF-8 ?????????:\n\n" + summary.map((item) => `? ${item.file}`).join("\n"), adminMenu());
 });
 
 bot.command("addprompt", async (ctx) => {
@@ -2372,7 +1458,6 @@ bot.command("addprompt", async (ctx) => {
     prompt,
     category,
     previewPhoto: null,
-    examplePhotos: [],
     isTrending: false,
     createdAt: Date.now(),
     clicks: 0,
@@ -2481,21 +1566,6 @@ bot.command("setpromptpreview", (ctx) => {
   );
 });
 
-bot.command("setpromptexamples", (ctx) => {
-  touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
-
-  const key = normalizePromptKey(ctx.message.text.replace(/^\/setpromptexamples(@\w+)?\s*/i, ""));
-  const style = getPromptStyle(key);
-  if (!style) return ctx.reply(`❌ Стиль "${key}" не знайдено.`);
-
-  ctx.session.awaitingPromptExamplesKey = key;
-  return ctx.reply(
-    `Надішли до ${MAX_PROMPT_EXAMPLE_PHOTOS} фото для стилю "${key}".\n` +
-    `Напиши "готово" щоб завершити або "видалити" щоб очистити всі приклади.`
-  );
-});
-
 bot.command("addpromti", async (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
@@ -2504,7 +1574,7 @@ bot.command("addpromti", async (ctx) => {
   const user = getUser(Number(id));
   user.promti = (user.promti || 0) + Number(amt);
   saveUsersSync();
-  await ctx.reply(`✅ +${amt} Promti ✨ ? user ${id}. Баланс: ${user.promti} Promti ✨`);
+  await ctx.reply(`✅ +${amt} Promti ✨ → user ${id}. Баланс: ${user.promti} Promti ✨`);
   bot.telegram.sendMessage(Number(id), `🎉 +${amt} Promti ✨ на баланс!\nБаланс: ${user.promti} Promti ✨`, mainMenu()).catch(() => {});
 });
 
@@ -2581,25 +1651,23 @@ bot.command("broadcast", async (ctx) => {
   const all = Object.values(users).filter(u => !u.banned);
   let sent = 0, failed = 0;
   const photoId = content.broadcastPhoto || null;
-  await ctx.reply(`? Надсилаю ${all.length} користувачам${photoId ? " (з фото)" : ""}...`);
+  await ctx.reply(`⏳ Надсилаю ${all.length} користувачам${photoId ? " (з фото)" : ""}...`);
 
   const BATCH_SIZE  = 25;
   const BATCH_DELAY = 1500;
   const MSG_DELAY   = 50;
+  const CAPTION_LIMIT = 1024;
 
   for (let i = 0; i < all.length; i++) {
     const u = all[i];
     try {
       if (photoId) {
-        await sendPhotoWithSafeCaption({
-          photo: photoId,
-          text,
-          sendPhoto: (photo, options) => bot.telegram.sendPhoto(u.id, photo, options),
-          sendText: (message, options) => bot.telegram.sendMessage(u.id, message, options),
-          photoOptions: { ...mainMenu() },
-          textOptions: mainMenu(),
-          logLabel: "broadcast.sendPhoto",
-        });
+        if (text.length <= CAPTION_LIMIT) {
+          await bot.telegram.sendPhoto(u.id, photoId, { caption: text, ...mainMenu() });
+        } else {
+          await bot.telegram.sendPhoto(u.id, photoId).catch(() => {});
+          await bot.telegram.sendMessage(u.id, text, mainMenu());
+        }
       } else {
         await bot.telegram.sendMessage(u.id, text, mainMenu());
       }
@@ -2609,7 +1677,7 @@ bot.command("broadcast", async (ctx) => {
     await new Promise(r => setTimeout(r, MSG_DELAY));
 
     if ((i + 1) % BATCH_SIZE === 0) {
-      await ctx.reply(`? Надіслано ${sent}/${all.length}...`);
+      await ctx.reply(`⏳ Надіслано ${sent}/${all.length}...`);
       await new Promise(r => setTimeout(r, BATCH_DELAY));
     }
   }
@@ -2617,7 +1685,7 @@ bot.command("broadcast", async (ctx) => {
   return ctx.reply(`✅ Broadcast завершено!\nНадіслано: ${sent}\nПомилок: ${failed}`);
 });
 
-// ─── АДМІН: КЕРУВАННЯ ПАКЕТАМ�? ────────────────────────────────────────────────
+// ─── АДМІН: КЕРУВАННЯ ПАКЕТАМИ ────────────────────────────────────────────────
 
 bot.command("analytics", (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
@@ -2674,9 +1742,7 @@ bot.command("analytics", (ctx) => {
     `👥 Юзери: ${totalUsers} всього\n` +
     `  🔥 Активних: ${activeUsers}\n` +
     `  💳 Платних: ${payingUsers}\n` +
-    `  ?? ?????????? ? ?????: ${triedNoPayment}
-
-` +
+    `  😶 Спробували і пішли: ${triedNoPayment}\n\n` +
     `💰 Конверсія:\n` +
     `  Всі→платні: ${conversion}%\n` +
     `  Активні→платні: ${actConversion}%\n\n` +
@@ -2723,7 +1789,7 @@ bot.command("addpackage", async (ctx) => {
   const parts = text.split(/\s+/);
   if (parts.length < 5) {
     return ctx.reply(
-      "Формат: /addpackage КЛЮЧ ??П КІЛЬКІСТЬ ЦІНА НАЗВА\n\n" +
+      "Формат: /addpackage КЛЮЧ ТИП КІЛЬКІСТЬ ЦІНА НАЗВА\n\n" +
       "Приклад: /addpackage promti_pack200 promti 200 1299 200 Promti"
     );
   }
@@ -2752,8 +1818,8 @@ bot.command("setlink", async (ctx) => {
   return ctx.reply(`✅ Посилання "${key}" збережено:\n${url}`);
 });
 
-// ─── АДМІН ХЕНДЛЕР�? ───────────────────────────────────────────────────────────
-bot.hears(BTN.ADMIN_STATUS, (ctx) => {
+// ─── АДМІН ХЕНДЛЕРИ ───────────────────────────────────────────────────────────
+bot.hears("📊 Статус бота", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const s = getBotStats();
@@ -2762,15 +1828,12 @@ bot.hears(BTN.ADMIN_STATUS, (ctx) => {
     `${s.hasFalKey       ? "✅" : "❌"} FAL_KEY\n` +
     `${s.hasWfp          ? "✅" : "❌"} WayForPay\n` +
     `${s.hasAnthropicKey ? "✅" : "❌"} Anthropic (AI промт)\n` +
-    `${s.aiPromptEnabled ? "✅" : "?"} AI промт: ${s.aiPromptEnabled ? "увімкнено" : "вимкнено"}\n` +
-    `${s.videoEnabled    ? "✅" : "?"} Відео: ${s.videoEnabled ? "увімкнено" : "вимкнено"}\n\n` +
-    `?? ?????: ${s.activeWorkers}/${s.maxWorkers} ???????? | ${s.queueLength} ? ?????
-
-` +
+    `${s.aiPromptEnabled ? "✅" : "⏸"} AI промт: ${s.aiPromptEnabled ? "увімкнено" : "вимкнено"}\n` +
+    `${s.videoEnabled    ? "✅" : "⏸"} Відео: ${s.videoEnabled ? "увімкнено" : "вимкнено"}\n\n` +
+    `⚙️ Черга: ${s.activeWorkers}/${s.maxWorkers} воркерів | ${s.queueLength} в черзі\n\n` +
     `📊 Статистика:\n` +
     `👥 Користувачів: ${s.totalUsers} (🚫${s.bannedUsers} забанено)\n` +
-    `?? New: ${s.segments.new} | ?? Active: ${s.segments.active} | ?? Paying: ${s.segments.paying} | ?? Whale: ${s.segments.whales}
-` +
+    `🆕 New: ${s.segments.new} | 🔥 Active: ${s.segments.active} | 💳 Paying: ${s.segments.paying} | 🐳 Whale: ${s.segments.whales}\n` +
     `🖼 Фото: ${s.totalPhotoGen}\n` +
     `🎬 Seedance: ${s.totalSeedanceGen}\n` +
     `🎥 Kling: ${s.totalKlingGen}\n` +
@@ -2781,9 +1844,9 @@ bot.hears(BTN.ADMIN_STATUS, (ctx) => {
   );
 });
 
-bot.hears(BTN.ADMIN_MY_ID, (ctx) => { touchUser(ctx); if (!isAdmin(ctx.from.id)) return ctx.reply("❌"); return ctx.reply(`Твій ID: ${ctx.from.id}`, adminMenu()); });
+bot.hears("👤 Мій ID", (ctx) => { touchUser(ctx); if (!isAdmin(ctx.from.id)) return ctx.reply("❌"); return ctx.reply(`Твій ID: ${ctx.from.id}`, adminMenu()); });
 
-bot.hears(BTN.ADMIN_USERS, (ctx) => {
+bot.hears("👥 Користувачі", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const all = Object.values(users);
@@ -2797,7 +1860,7 @@ bot.hears(BTN.ADMIN_USERS, (ctx) => {
   return ctx.reply(text, adminMenu());
 });
 
-bot.hears(BTN.ADMIN_PAYMENTS, (ctx) => {
+bot.hears("💳 Останні оплати", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   if (!payments.length) return ctx.reply("Оплат немає", adminMenu());
@@ -2807,7 +1870,7 @@ bot.hears(BTN.ADMIN_PAYMENTS, (ctx) => {
   return ctx.reply(text, adminMenu());
 });
 
-bot.hears(BTN.ADMIN_STYLE_LIB, (ctx) => {
+bot.hears("🎨 Бібліотека стилів", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   return sendPromptLibraryPage(ctx, 0, true);
@@ -2835,20 +1898,16 @@ bot.hears(["portrait", "beauty", "fashion", "art", "trend", "seedance", "kling"]
   return ctx.reply(`Ключ: ${ctx.message.text}\n\nПоточний:\n${prompts[ctx.message.text]}\n\nНадішли новий.`, adminMenu());
 });
 
-bot.hears(BTN.ADMIN_TEXTS, (ctx) => {
+bot.hears("📝 Поточні тексти", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
-  const SKIP_KEYS = new Set([
-    "promptLibrary", "promptCategories", "styleLibrary",
-    "welcomePhoto", "infoPhoto", "helpPhoto", "pricesPhoto", "ideaPhoto", "broadcastPhoto"
-  ]);
   const textOnlyEntries = Object.entries(content).filter(([k, v]) =>
-    !SKIP_KEYS.has(k) && typeof v !== "object"
+    !["promptLibrary", "promptCategories"].includes(k) && typeof v !== "object"
   );
   return replyLongText(ctx, textOnlyEntries.map(([k, v]) => `${k}:\n${v}`).join("\n\n==\n\n"), adminMenu());
 });
 
-bot.hears(BTN.ADMIN_EDIT_TEXT, (ctx) => {
+bot.hears("✏️ Змінити текст", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   resetState(ctx);
@@ -2865,7 +1924,7 @@ bot.hears(["welcomeText", "infoText", "helpText", "supportText", "ideaText", "pr
 });
 
 // ─── АДМІН: УПРАВЛІННЯ ФОТО ───────────────────────────────────────────────────
-bot.hears(BTN.ADMIN_ATTACH_PHOTO, (ctx) => {
+bot.hears("🖼 Прикріпити фото", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   resetState(ctx);
@@ -2886,16 +1945,16 @@ bot.hears(BTN.ADMIN_ATTACH_PHOTO, (ctx) => {
   );
 });
 
-bot.hears([BTN.PHOTO_WELCOME, BTN.PHOTO_INFO, BTN.PHOTO_HELP, BTN.PHOTO_PRICES, BTN.PHOTO_IDEA, BTN.PHOTO_BROADCAST], (ctx) => {
+bot.hears(["📷 welcomePhoto", "📷 infoPhoto", "📷 helpPhoto", "📷 pricesPhoto", "📷 ideaPhoto", "📷 broadcastPhoto"], (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return;
   const map = {
-    [BTN.PHOTO_WELCOME]:   "welcomePhoto",
-    [BTN.PHOTO_INFO]:      "infoPhoto",
-    [BTN.PHOTO_HELP]:      "helpPhoto",
-    [BTN.PHOTO_PRICES]:    "pricesPhoto",
-    [BTN.PHOTO_IDEA]:      "ideaPhoto",
-    [BTN.PHOTO_BROADCAST]: "broadcastPhoto",
+    "📷 welcomePhoto":   "welcomePhoto",
+    "📷 infoPhoto":      "infoPhoto",
+    "📷 helpPhoto":      "helpPhoto",
+    "📷 pricesPhoto":    "pricesPhoto",
+    "📷 ideaPhoto":      "ideaPhoto",
+    "📷 broadcastPhoto": "broadcastPhoto",
   };
   const key = map[ctx.message.text];
   if (!key) return;
@@ -2910,23 +1969,21 @@ bot.hears([BTN.PHOTO_WELCOME, BTN.PHOTO_INFO, BTN.PHOTO_HELP, BTN.PHOTO_PRICES, 
 });
 
 
-bot.hears(BTN.ADMIN_SETTINGS, (ctx) => {
+bot.hears("⚙️ Налаштування", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const cfg = loadSettings();
   return ctx.reply(
-    `?? ??????? ????????????:
-
-` +
+    `⚙️ Поточні налаштування:\n\n` +
     `📷 Фото rate limit: ${cfg.photoRateLimitMs / 1000}сек\n` +
     `🎬 Відео rate limit: ${cfg.videoRateLimitMs / 1000}сек\n` +
     `🤖 AI промт rate limit: ${cfg.aiPromptRateLimitMs / 1000}сек\n\n` +
-    `? Таймаути:\nФото: ${cfg.photoTimeoutMs / 1000}с | Seedance: ${cfg.seedanceTimeoutMs / 1000}с | Kling: ${cfg.klingTimeoutMs / 1000}с\n\n` +
+    `⏱ Таймаути:\nФото: ${cfg.photoTimeoutMs / 1000}с | Seedance: ${cfg.seedanceTimeoutMs / 1000}с | Kling: ${cfg.klingTimeoutMs / 1000}с\n\n` +
     `🎬 Seedance: ${cfg.seedanceDurationSec}сек, ${cfg.seedanceAspectRatio}\n` +
     `🎥 Kling: ${cfg.klingDurationSec}сек, ${cfg.klingAspectRatio}\n\n` +
     `👥 maxWorkers: ${cfg.maxWorkers}\n` +
-    `📅 Денний ліміт Seedance: ${cfg.dailySeedanceLimit} (0=?)\n` +
-    `📅 Денний ліміт Kling: ${cfg.dailyKlingLimit} (0=?)\n\n` +
+    `📅 Денний ліміт Seedance: ${cfg.dailySeedanceLimit} (0=∞)\n` +
+    `📅 Денний ліміт Kling: ${cfg.dailyKlingLimit} (0=∞)\n\n` +
     `🤖 AI промт: ${cfg.aiPromptEnabled ? "✅" : "❌"}\n` +
     `🎬 Відео: ${cfg.videoEnabled ? "✅" : "❌"}\n\n` +
     `Редагуй settings.json на сервері та перезапусти бота.`,
@@ -2934,7 +1991,7 @@ bot.hears(BTN.ADMIN_SETTINGS, (ctx) => {
   );
 });
 
-bot.hears(BTN.ADMIN_ANALYTICS, (ctx) => {
+bot.hears("📈 Аналітика", (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const all = Object.values(users);
   const paid = payments.filter(p => p.status === "credited");
@@ -2972,9 +2029,7 @@ bot.hears(BTN.ADMIN_ANALYTICS, (ctx) => {
     `👥 Юзери: ${totalUsers} всього\n` +
     `  🔥 Активних: ${activeUsers}\n` +
     `  💳 Платних: ${payingUsers}\n` +
-    `  ?? ?????????? ? ?????: ${triedNoPayment}
-
-` +
+    `  😶 Спробували і пішли: ${triedNoPayment}\n\n` +
     `💰 Конверсія:\n` +
     `  Всі→платні: ${conversion}%\n` +
     `  Активні→платні: ${actConversion}%\n\n` +
@@ -2988,7 +2043,7 @@ bot.hears(BTN.ADMIN_ANALYTICS, (ctx) => {
   );
 });
 
-bot.hears(BTN.ADMIN_PACKAGES, (ctx) => {
+bot.hears("📦 Пакети", (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const pkgs = getPackages();
   const text = Object.values(pkgs).map(p =>
@@ -3004,8 +2059,8 @@ bot.hears(BTN.ADMIN_PACKAGES, (ctx) => {
 });
 
 // ─── НАВІГАЦІЯ ────────────────────────────────────────────────────────────────
-bot.hears(BTN.BACK,          (ctx) => { touchUser(ctx); resetState(ctx); return ctx.reply("Головне меню ✨", mainMenu()); });
-bot.hears(BTN.BACK_PHOTO, (ctx) => {
+bot.hears("↩️ Назад",          (ctx) => { touchUser(ctx); resetState(ctx); return ctx.reply("Головне меню ✨", mainMenu()); });
+bot.hears("↩️ Назад до фото", (ctx) => {
   touchUser(ctx); resetState(ctx);
   ctx.session.mode = "photo";
   return ctx.reply(
@@ -3017,7 +2072,7 @@ bot.hears(BTN.BACK_PHOTO, (ctx) => {
     photoMenu()
   );
 });
-bot.hears(BTN.BACK_VIDEO, (ctx) => {
+bot.hears("↩️ Назад до відео", (ctx) => {
   touchUser(ctx); resetState(ctx);
   ctx.session.mode = "video";
   return ctx.reply(
@@ -3028,22 +2083,22 @@ bot.hears(BTN.BACK_VIDEO, (ctx) => {
     videoMenu()
   );
 });
-bot.hears(BTN.INFO,     (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.infoText,    content.infoPhoto,    mainMenu()); });
-bot.hears(BTN.HELP,       (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.helpText,    content.helpPhoto,    mainMenu()); });
-    Markup.keyboard([[BTN.BACK]]).resize()
-bot.hears(BTN.PRICES,           (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.pricesText || "💰 Ціни тимчасово недоступні", content.pricesPhoto, mainMenu()); });
+bot.hears("ℹ️ Інформація",     (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.infoText,    content.infoPhoto,    mainMenu()); });
+bot.hears("❓ Допомога",       (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.helpText,    content.helpPhoto,    mainMenu()); });
+bot.hears("🆘 Підтримка",      (ctx) => { touchUser(ctx); return ctx.reply(content.supportText, mainMenu()); });
+bot.hears("💰 Ціни",           (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.pricesText || "💰 Ціни тимчасово недоступні", content.pricesPhoto, mainMenu()); });
 
-bot.hears(BTN.CUSTOM_AMOUNT, async (ctx) => {
+bot.hears("💬 Своя сума", async (ctx) => {
   touchUser(ctx);
   if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
   ctx.session.awaitingCustomAmount = true;
   return ctx.reply(
     `💬 Введи бажану суму в гривнях\n\n1 Promti ✨ = 9.9 грн\nМінімум: 50 грн\n\nПриклад: 200`,
-    Markup.keyboard([[BTN.BACK]]).resize()
+    Markup.keyboard([["↩️ Назад"]]).resize()
   );
 });
 
-bot.hears([BTN.BUY_PROMTI, BTN.BUY_PROMTI_ALT, BTN.BUY_PROMTI_CARD], (ctx) => {
+bot.hears(["✨ Купити Promti ✨", "✨ Купити Promti", "💳 Купити Promti"], (ctx) => {
   touchUser(ctx);
   if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
   return ctx.reply(
@@ -3068,7 +2123,7 @@ bot.hears([BTN.BUY_PROMTI, BTN.BUY_PROMTI_ALT, BTN.BUY_PROMTI_CARD], (ctx) => {
   );
 });
 
-bot.hears(BTN.INVITE, async (ctx) => {
+bot.hears("👫 Запросити друга", async (ctx) => {
   touchUser(ctx);
   const userId  = ctx.from.id;
   const user    = getUser(userId);
@@ -3088,10 +2143,10 @@ bot.hears(BTN.INVITE, async (ctx) => {
     mainMenu()
   );
 });
-bot.hears(BTN.IDEAS,(ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.ideaText, content.ideaPhoto, mainMenu()); });
+bot.hears("💡 Ідея для промтів",(ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.ideaText, content.ideaPhoto, mainMenu()); });
 
 // ─── БАЛАНС ───────────────────────────────────────────────────────────────────
-bot.hears(BTN.BALANCE, (ctx) => {
+bot.hears("📊 Баланс", (ctx) => {
   const user = touchUser(ctx);
   if (isAdmin(ctx.from.id)) return ctx.reply("📊 Адмін: безліміт ✅", adminMenu());
   const botUsername = ctx.botInfo?.username || "Promtiai_bot";
@@ -3110,8 +2165,8 @@ bot.hears(BTN.BALANCE, (ctx) => {
   );
 });
 
-// ─── РОЗДІЛ�? ──────────────────────────────────────────────────────────────────
-bot.hears(BTN.PHOTO, (ctx) => {
+// ─── РОЗДІЛИ ──────────────────────────────────────────────────────────────────
+bot.hears("🖼 Фото", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   clearPromptAttribution(ctx);
   ctx.session.mode = "photo";
@@ -3124,11 +2179,11 @@ bot.hears(BTN.PHOTO, (ctx) => {
     photoMenu()
   );
 });
-bot.hears(BTN.TRENDING, (ctx) => {
+bot.hears("🎨 Трендові стилі", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   return sendPromptLibraryPage(ctx, 0, false);
 });
-bot.hears(BTN.VIDEO, (ctx) => {
+bot.hears("🎬 Відео", (ctx) => {
   const cfg = loadSettings();
   if (!cfg.videoEnabled) return ctx.reply("🎬 Відео тимчасово недоступне. Спробуй пізніше.", mainMenu());
   touchUser(ctx); ensureSession(ctx);
@@ -3143,8 +2198,8 @@ bot.hears(BTN.VIDEO, (ctx) => {
   );
 });
 
-// ─── ФОТО РЕЖ�??? ──────────────────────────────────────────────────────────────
-bot.hears(BTN.EDIT_PHOTO, (ctx) => {
+// ─── ФОТО РЕЖИМИ ──────────────────────────────────────────────────────────────
+bot.hears("🖼 Редагувати фото", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   clearPromptAttribution(ctx);
   ctx.session.mode = "photo";
@@ -3158,7 +2213,7 @@ bot.hears(BTN.EDIT_PHOTO, (ctx) => {
   );
 });
 
-bot.hears(BTN.CREATE_PHOTO, (ctx) => {
+bot.hears("✨ Створити фото", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   clearPromptAttribution(ctx);
   ctx.session.mode = "photo";
@@ -3173,10 +2228,10 @@ bot.hears(BTN.CREATE_PHOTO, (ctx) => {
 });
 
 // ─── ВІДЕО МОДЕЛІ ─────────────────────────────────────────────────────────────
-bot.hears(BTN.SEEDANCE, (ctx) => {
+bot.hears("🎬 Seedance", (ctx) => {
   const cfg = loadSettings();
   if (cfg.seedanceEnabled === false) {
-    return ctx.reply(cfg.seedanceComingSoonText || "?? Seedance ????????? ???????????. ????? ???????????! ??????? ?? Kling.", videoMenu());
+    return ctx.reply(cfg.seedanceComingSoonText || "🎬 Seedance тимчасово недоступний. Скоро повернеться! Спробуй 🎥 Kling.", videoMenu());
   }
   touchUser(ctx); ensureSession(ctx);
   clearPromptAttribution(ctx);
@@ -3184,15 +2239,27 @@ bot.hears(BTN.SEEDANCE, (ctx) => {
   ctx.session.customType = null; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   ctx.session.videoInputMode = null;
   return ctx.reply(
-    "?? Seedance 2.0\n\n??????????????? ?? ???????? ??'?????, ???????, ?????????????? ?? ???????????? ????.\n\n? ???? ???????? ? ??????? ????, ?????? ???????????\n?? ???????? + ????? ? ??????? ???? ?? ????? ?????? ????\n?? ????? ? ?????? ? ?????? ????? ? ???? ?? ?????\n\n? ????????? ???:\n? ??????, ???????, ???????\n? ???????, ???????, ???????\n? ???, ??????????????, ???????\n? ????????, ????????, ????????\n\n?? ?? ????????? ???? ???????? ?????\n?? ??? ???????? ????? ? ???????????? ?? Kling\n\n?? ????: t.me/promteamai",
+    "🎬 Seedance 2.0\n\n" +
+    "Спеціалізується на анімації об'єктів, природи, мультиплікації та фантастичних сцен.\n\n" +
+    "⚡ Авто анімація — надішли фото, оживлю автоматично\n" +
+    "🎬 Анімація + промт — надішли фото зі своїм описом руху\n" +
+    "🎥 Відео з тексту — створю відео з нуля по опису\n\n" +
+    "✅ Підходить для:\n" +
+    "• Ляльки, іграшки, фігурки\n" +
+    "• Природа, пейзажі, тварини\n" +
+    "• Арт, мультиплікація, фентезі\n" +
+    "• Продукти, предмети, логотипи\n\n" +
+    "⛔️ Не підтримує фото реальних людей\n" +
+    "👉 Для анімації людей — використовуй 🎥 Kling\n\n" +
+    "💡 Ідеї: t.me/promteamai",
     seedanceMenu()
   );
 });
 
-bot.hears(BTN.AUTO_ANIM, (ctx) => {
+bot.hears("⚡ Авто анімація", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
-  if (!style) return ctx.reply("???????? ????? ??????: ?? Seedance ??? ?? Kling", videoMenu());
+  if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
   ctx.session.videoInputMode = "image";
   ctx.session.customType = `custom_video_${style}`;
   ctx.session.awaitingCustomPrompt = false;
@@ -3201,17 +2268,17 @@ bot.hears(BTN.AUTO_ANIM, (ctx) => {
   const defaultPrompt = prompts[style] || "cinematic motion, smooth animation";
   const isSeeedance = style === "seedance";
   return ctx.reply(
-    "? ???? ????????\n\n??????? ???? ? ?????? ? ????????? ???????:\n" + `?? "${defaultPrompt}"\n\n` +
-    (isSeeedance ? "?? ???? ??? ??'????? ?? ??????? (?? ?????)\n?? ??? ????? ? ???????????? Kling\n\n" : "") +
-    "?? ????? ???? ?????? ?????? ???? ????? ????.",
+    `⚡ Авто анімація\n\nНадішли фото — оживлю з дефолтним промтом:\n📝 "${defaultPrompt}"\n\n` +
+    (isSeeedance ? "⛔️ Лише для об'єктів та природи (не людей)\n👉 Для людей — використовуй Kling\n\n" : "") +
+    `✍️ Хочеш свій промт? Напиши його перед фото.`,
     menu
   );
 });
 
-bot.hears(BTN.ANIM_PROMPT, (ctx) => {
+bot.hears("🎬 Анімація + промт", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
-  if (!style) return ctx.reply("???????? ????? ??????: ?? Seedance ??? ?? Kling", videoMenu());
+  if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
   ctx.session.videoInputMode = "image";
   ctx.session.customType = `custom_video_${style}`;
   ctx.session.awaitingCustomPrompt = true;
@@ -3219,29 +2286,31 @@ bot.hears(BTN.ANIM_PROMPT, (ctx) => {
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
   const isSeedanceStyle = style === "seedance";
   return ctx.reply(
-    "?? ???????? + ?????\n\n?????? ?????, ????? ??????? ????.\n\n" +
-    (isSeedanceStyle ? "???????: \"gentle swaying in wind, soft light\"\n\n?? ???? ??? ??'????? ?? ??????? ? ?? ?????\n?? ??? ???????? ????? ? Kling\n\n" : "???????: \"cinematic close-up, eyes slowly opening\"\n\n") +
-    "?? t.me/promteamai",
+    `🎬 Анімація + промт\n\nНапиши промт, потім надішли фото.\n\n` +
+    (isSeedanceStyle
+      ? `Приклад: "gentle swaying in wind, soft light"\n\n⛔️ Лише для об'єктів та природи — не людей\n👉 Для анімації людей — Kling\n\n`
+      : `Приклад: "cinematic close-up, eyes slowly opening"\n\n`) +
+    `💡 t.me/promteamai`,
     menu
   );
 });
 
-bot.hears(BTN.VIDEO_FROM_TEXT, (ctx) => {
+bot.hears("🎥 Відео з тексту", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
-  if (!style) return ctx.reply("???????? ????? ??????: ?? Seedance ??? ?? Kling", videoMenu());
+  if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
   ctx.session.videoInputMode = "text";
   ctx.session.customType = `custom_video_${style}`;
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
   return ctx.reply(
-    "?? ????? ? ??????\n\n?????? ????????? ????? ? ?????? ????? ? ????!\n\n???????: \"cinematic portrait of woman, wind in hair, golden hour\"\n\n?? t.me/promteamai",
+    `🎥 Відео з тексту\n\nНапиши детальний промт — створю відео з нуля!\n\nПриклад: "cinematic portrait of woman, wind in hair, golden hour"\n\n💡 t.me/promteamai`,
     menu
   );
 });
 
-bot.hears(BTN.KLING, (ctx) => {
+bot.hears("🎥 Kling", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   clearPromptAttribution(ctx);
   ctx.session.mode = "video"; ctx.session.style = "kling";
@@ -3249,8 +2318,8 @@ bot.hears(BTN.KLING, (ctx) => {
   ctx.session.videoInputMode = null;
   return ctx.reply(
     "🎥 Kling\n\n" +
-    "📸 Фото ? Відео — надішли фото + промт, оживлю!\n" +
-    "✍️ Текст ? Відео — напиши промт, створю кінематографічне відео\n\n" +
+    "📸 Фото → Відео — надішли фото + промт, оживлю!\n" +
+    "✍️ Текст → Відео — напиши промт, створю кінематографічне відео\n\n" +
     "Приклад: \"cinematic close-up, soft bokeh\"\n\n" +
     "💡 Ідеї: t.me/promteamai",
     klingMenu()
@@ -3258,7 +2327,7 @@ bot.hears(BTN.KLING, (ctx) => {
 });
 
 // ─── AI ПРОМТ ─────────────────────────────────────────────────────────────────
-bot.hears(BTN.AI_PHOTO, (ctx) => {
+bot.hears("🤖 AI промт для фото", (ctx) => {
   const cfg  = loadSettings();
   const user = touchUser(ctx);
   if (!cfg.aiPromptEnabled) return ctx.reply("🤖 AI промт тимчасово вимкнено.", photoMenu());
@@ -3275,7 +2344,7 @@ bot.hears(BTN.AI_PHOTO, (ctx) => {
   return ctx.reply("🤖 Надішли фото — я запропоную промт для генерації.", photoMenu());
 });
 
-bot.hears(BTN.AI_VIDEO, (ctx) => {
+bot.hears("🤖 AI промт для відео", (ctx) => {
   const cfg  = loadSettings();
   const user = touchUser(ctx);
   if (!cfg.aiPromptEnabled) return ctx.reply("🤖 AI промт тимчасово вимкнено.", videoMenu());
@@ -3315,7 +2384,7 @@ async function sendAutoPayment(ctx, packKey) {
 bot.action(/^buy_pack_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
-      Markup.keyboard([[BTN.BACK]]).resize()
+    const packKey = ctx.match[1];
     await sendAutoPayment(ctx, packKey);
   } catch (e) {
     console.error("BUY_PACK CALLBACK ERROR:", e.message);
@@ -3331,7 +2400,7 @@ bot.action("buy_custom_amount", async (ctx) => {
     ctx.session.awaitingCustomAmount = true;
     return ctx.reply(
       `💬 Введи бажану суму в гривнях\n\n1 Promti ✨ = 9.9 грн\nМінімум: 50 грн\n\nПриклад: 200`,
-      Markup.keyboard([[BTN.BACK]]).resize()
+      Markup.keyboard([["↩️ Назад"]]).resize()
     );
   } catch (e) { console.error("BUY CUSTOM AMOUNT:", e.message); }
 });
@@ -3347,7 +2416,7 @@ bot.action(/^checkpay_(.+)$/, async (ctx) => {
   catch (e) { console.error("CHECKPAY:", e.message); }
 });
 
-// ─── АПСЕЛ INLINE КНОПК�? ─────────────────────────────────────────────────────
+// ─── АПСЕЛ INLINE КНОПКИ ─────────────────────────────────────────────────────
 bot.action(/^pay_custom_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -3384,7 +2453,7 @@ bot.action("upsell_promti", async (ctx) => {
   } catch (e) { console.error("UPSELL PROMTI:", e.message); }
 });
 
-// ─── AI ПРОМТ INLINE КНОПК�? ───────────────────────────────────────────────────
+// ─── AI ПРОМТ INLINE КНОПКИ ───────────────────────────────────────────────────
 bot.action(/^promptlib_page_(\d+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -3403,9 +2472,7 @@ bot.action(/^admin_promptlib_page_(\d+)$/, async (ctx) => {
 bot.action(/^promptlib_open_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
-    const key = normalizePromptKey(ctx.match[1]);
-    incrementStyleMetric(key, "clicks");
-    return sendPromptStyleCard(ctx, key, false);
+    return sendPromptStyleCard(ctx, normalizePromptKey(ctx.match[1]), false);
   } catch (e) { console.error("PROMPTLIB OPEN:", e.message); }
 });
 
@@ -3419,133 +2486,12 @@ bot.action(/^admin_promptlib_open_(.+)$/, async (ctx) => {
 
 bot.action(/^promptlib_apply_(.+)$/, async (ctx) => {
   try {
-    await ctx.answerCbQuery("Style loaded");
+    await ctx.answerCbQuery("Стиль завантажено ✅");
     touchUser(ctx);
-    const style = getStyle(normalizePromptKey(ctx.match[1]));
-    if (!style) return ctx.reply("Style not found.");
-    incrementStyleMetric(style.key, "clicks");
-    if (style.type === "dynamic") {
-      return startDynamicStyleFlow(ctx, style);
-    }
-    applyStaticStyleToSession(ctx, style);
+    const style = applyPromptStyleToSession(ctx, normalizePromptKey(ctx.match[1]));
+    if (!style) return ctx.reply("❌ Стиль не знайдено.");
     return sendPromptReadyMessage(ctx, style, { withPreview: false });
   } catch (e) { console.error("PROMPTLIB APPLY:", e.message); }
-});
-
-bot.action(/^stylelib_select_(.+)__([a-z0-9_-]+)__([a-z0-9_-]+)$/, async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    const styleKey = normalizePromptKey(ctx.match[1]);
-    const selectorKey = normalizePromptKey(ctx.match[2]);
-    const optionKey = normalizePromptKey(ctx.match[3]);
-    const style = getStyle(styleKey);
-    if (!style || style.type !== "dynamic") return ctx.reply("Style not found.");
-    const selector = style.selectors.find(item => item.key === selectorKey);
-    if (!selector || !selector.options[optionKey]) return ctx.reply("Option not found.");
-    ensureSession(ctx);
-    if (!ctx.session.pendingDynamicStyle || ctx.session.pendingDynamicStyle.styleKey !== styleKey) {
-      ctx.session.pendingDynamicStyle = { styleKey, selections: {} };
-    }
-    ctx.session.pendingDynamicStyle.selections = {
-      ...(ctx.session.pendingDynamicStyle.selections || {}),
-      [selectorKey]: optionKey,
-    };
-    incrementDynamicOptionMetric(styleKey, selectorKey, optionKey, "clicks");
-    return continueDynamicStyleFlow(ctx, styleKey);
-  } catch (e) { console.error("STYLELIB SELECT:", e.message); }
-});
-
-bot.action(/^stylewizard_type_(static|dynamic)$/, async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    if (!isAdmin(ctx.from.id)) return;
-    ensureSession(ctx);
-    if (!ctx.session.styleWizard) startStyleWizard(ctx);
-    ctx.session.styleWizard.style.type = ctx.match[1];
-    ctx.session.styleWizard.step = "key";
-    return promptStyleWizardStep(ctx);
-  } catch (e) { console.error("STYLEWIZARD TYPE:", e.message); }
-});
-
-bot.action("stylewizard_continue_option", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
-    ctx.session.styleWizard.step = "option_key";
-    return promptStyleWizardStep(ctx);
-  } catch (e) { console.error("STYLEWIZARD OPTION:", e.message); }
-});
-
-bot.action("stylewizard_continue_selector", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
-    ctx.session.styleWizard.currentSelector = null;
-    ctx.session.styleWizard.currentOption = null;
-    ctx.session.styleWizard.step = "selector_key";
-    return promptStyleWizardStep(ctx);
-  } catch (e) { console.error("STYLEWIZARD SELECTOR:", e.message); }
-});
-
-bot.action("stylewizard_continue_media", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
-    ctx.session.styleWizard.step = "preview";
-    return promptStyleWizardStep(ctx);
-  } catch (e) { console.error("STYLEWIZARD MEDIA:", e.message); }
-});
-
-bot.action("stylewizard_skip_preview", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
-    ctx.session.styleWizard.style.previewPhoto = null;
-    ctx.session.styleWizard.step = "examples";
-    return promptStyleWizardStep(ctx);
-  } catch (e) { console.error("STYLEWIZARD SKIP PREVIEW:", e.message); }
-});
-
-bot.action("stylewizard_done_examples", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
-    ctx.session.styleWizard.step = "confirm";
-    return promptStyleWizardStep(ctx);
-  } catch (e) { console.error("STYLEWIZARD DONE EXAMPLES:", e.message); }
-});
-
-bot.action("stylewizard_skip_examples", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    if (!isAdmin(ctx.from.id) || !ctx.session.styleWizard) return;
-    ctx.session.styleWizard.style.examplePhotos = [];
-    ctx.session.styleWizard.step = "confirm";
-    return promptStyleWizardStep(ctx);
-  } catch (e) { console.error("STYLEWIZARD SKIP EXAMPLES:", e.message); }
-});
-
-bot.action("stylewizard_save", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    if (!isAdmin(ctx.from.id)) return;
-    const style = saveWizardStyle(ctx);
-    if (!style) return ctx.reply("❌ Не вдалося зберегти стиль.", adminMenu());
-    const botUsername = await resolveBotUsername(ctx);
-    return ctx.reply(
-      `✅ Стиль збережено\n\nKEY: ${style.key}\nType: ${style.type}\nDeep-link: ${getStyleDeepLink(botUsername, style.key)}`,
-      adminMenu()
-    );
-  } catch (e) { console.error("STYLEWIZARD SAVE:", e.message); }
-});
-
-bot.action("stylewizard_cancel", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    if (!isAdmin(ctx.from.id)) return;
-    ctx.session.styleWizard = null;
-    return ctx.reply("Wizard скасовано.", adminMenu());
-  } catch (e) { console.error("STYLEWIZARD CANCEL:", e.message); }
 });
 
 bot.action(/^admin_promptlib_trend_(.+)_(on|off)$/, async (ctx) => {
@@ -3575,22 +2521,6 @@ bot.action(/^admin_promptlib_preview_(.+)$/, async (ctx) => {
   } catch (e) { console.error("ADMIN PROMPTLIB PREVIEW:", e.message); }
 });
 
-bot.action(/^admin_promptlib_examples_(.+)$/, async (ctx) => {
-  try {
-    await ctx.answerCbQuery("Send up to 10 photos");
-    if (!isAdmin(ctx.from.id)) return;
-    const key = normalizePromptKey(ctx.match[1]);
-    const style = getPromptStyle(key);
-    if (!style) return ctx.reply("❌ Стиль не знайдено.");
-    ctx.session.awaitingPromptExamplesKey = key;
-    return ctx.reply(
-      `Надішли до ${MAX_PROMPT_EXAMPLE_PHOTOS} фото для стилю "${key}".\n` +
-      `Напиши "готово" щоб завершити або "видалити" щоб очистити всі приклади.`,
-      adminMenu()
-    );
-  } catch (e) { console.error("ADMIN PROMPTLIB EXAMPLES:", e.message); }
-});
-
 bot.action(/^admin_promptlib_delete_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -3616,7 +2546,7 @@ bot.action(/^apply_ai_prompt_(photo|video)$/, async (ctx) => {
     await ctx.answerCbQuery("✅ Промт застосовано! Надішли фото.");
     const aiMode = ctx.match[1];
     await ctx.reply(
-      `✅ Промт збережено:\n\n📝 <code>${escapeHtml(ctx.session.customPrompt || "-")}</code>\n\nНадішли фото 📸`,
+      `✅ Промт збережено:\n\n📝 <code>${ctx.session.customPrompt || "-"}</code>\n\nНадішли фото 📸`,
       { parse_mode: "HTML", ...(aiMode === "video" ? videoMenu() : photoMenu()) }
     );
   } catch (e) { console.error("APPLY AI PROMPT:", e.message); }
@@ -3631,20 +2561,20 @@ bot.action(/^regen_ai_prompt_(photo|video)$/, async (ctx) => {
   } catch (e) { console.error("REGEN AI PROMPT:", e.message); }
 });
 
-// ─── ТЕКСТОВ�?Й ХЕНДЛЕР ────────────────────────────────────────────────────────
+// ─── ТЕКСТОВИЙ ХЕНДЛЕР ────────────────────────────────────────────────────────
 const ALL_BUTTONS = [
-  BTN.PHOTO, BTN.VIDEO, BTN.TRENDING, BTN.BALANCE, BTN.IDEAS, BTN.INFO, BTN.HELP, BTN.SUPPORT, BTN.PRICES,
-  BTN.INVITE,
-  BTN.EDIT_PHOTO, BTN.CREATE_PHOTO,
-  BTN.AUTO_ANIM, BTN.ANIM_PROMPT, BTN.VIDEO_FROM_TEXT,
-  BTN.AI_PHOTO, BTN.AI_VIDEO,
-  BTN.BUY_PROMTI, BTN.BUY_PROMTI_ALT, BTN.BUY_PROMTI_CARD, BTN.CUSTOM_AMOUNT,
-  BTN.SEEDANCE, BTN.KLING,
-  BTN.BACK, BTN.BACK_VIDEO, BTN.BACK_PHOTO,
-  BTN.ADMIN_STATUS, BTN.ADMIN_MY_ID, BTN.ADMIN_USERS, BTN.ADMIN_PAYMENTS, BTN.ADMIN_STYLE_LIB, BTN.ADMIN_ANALYTICS,
-  BTN.ADMIN_PACKAGES, BTN.ADMIN_EDIT_TEXT, BTN.ADMIN_TEXTS, BTN.ADMIN_SETTINGS,
-  BTN.ADMIN_ATTACH_PHOTO,
-  BTN.PHOTO_WELCOME, BTN.PHOTO_INFO, BTN.PHOTO_HELP, BTN.PHOTO_PRICES, BTN.PHOTO_IDEA, BTN.PHOTO_BROADCAST,
+  "🖼 Фото","🎬 Відео","🎨 Трендові стилі","📊 Баланс","💡 Ідея для промтів","ℹ️ Інформація","❓ Допомога","🆘 Підтримка","💰 Ціни",
+  "👫 Запросити друга",
+  "🖼 Редагувати фото","✨ Створити фото",
+  "⚡ Авто анімація","🎬 Анімація + промт","🎥 Відео з тексту",
+  "🤖 AI промт для фото","🤖 AI промт для відео",
+  "✨ Купити Promti ✨","✨ Купити Promti","💳 Купити Promti","💬 Своя сума",
+  "🎬 Seedance","🎥 Kling",
+  "↩️ Назад","↩️ Назад до відео","↩️ Назад до фото",
+  "📊 Статус бота","👤 Мій ID","👥 Користувачі","💳 Останні оплати","🎨 Бібліотека стилів","📈 Аналітика",
+  "📦 Пакети","✏️ Змінити текст","📝 Поточні тексти","⚙️ Налаштування",
+  "🖼 Прикріпити фото",
+  "📷 welcomePhoto","📷 infoPhoto","📷 helpPhoto","📷 pricesPhoto","📷 ideaPhoto","📷 broadcastPhoto",
 ];
 
 bot.on("text", async (ctx, next) => {
@@ -3656,76 +2586,6 @@ bot.on("text", async (ctx, next) => {
     const isPackButton = /^\d+\s+Promti/i.test(text);
     if (ALL_BUTTONS.includes(text) || text.startsWith("/") || isPackButton) return next();
 
-    if (isAdmin(ctx.from.id) && ctx.session.styleWizard) {
-      const wizard = ctx.session.styleWizard;
-      if (wizard.step === "key") {
-        const key = normalizePromptKey(text);
-        if (!key) return ctx.reply("❌ Некоректний key. Використовуй a-z, 0-9, _ та -");
-        if (getStyle(key)) return ctx.reply(`❌ Стиль "${key}" вже існує.`);
-        wizard.style.key = key;
-        wizard.step = "category";
-        return promptStyleWizardStep(ctx);
-      }
-      if (wizard.step === "category") {
-        wizard.style.category = text.trim() || "other";
-        wizard.step = "title";
-        return promptStyleWizardStep(ctx);
-      }
-      if (wizard.step === "title") {
-        wizard.style.title = text.trim();
-        wizard.step = wizard.style.type === "dynamic" ? "template" : "prompt";
-        return promptStyleWizardStep(ctx);
-      }
-      if (wizard.step === "prompt") {
-        wizard.style.prompt = text.trim();
-        wizard.step = "preview";
-        return promptStyleWizardStep(ctx);
-      }
-      if (wizard.step === "template") {
-        wizard.style.template = text.trim();
-        wizard.step = "selector_key";
-        return promptStyleWizardStep(ctx);
-      }
-      if (wizard.step === "selector_key") {
-        const selectorKey = normalizePromptKey(text);
-        if (!selectorKey) return ctx.reply("❌ Некоректний selector key.");
-        wizard.currentSelector = { key: selectorKey, label: "", type: "inline", options: {} };
-        wizard.step = "selector_label";
-        return promptStyleWizardStep(ctx);
-      }
-      if (wizard.step === "selector_label") {
-        wizard.currentSelector.label = text.trim();
-        wizard.style.selectors.push(wizard.currentSelector);
-        wizard.step = "option_key";
-        return promptStyleWizardStep(ctx);
-      }
-      if (wizard.step === "option_key") {
-        const optionKey = normalizePromptKey(text);
-        if (!optionKey) return ctx.reply("❌ Некоректний option key.");
-        wizard.currentOption = { key: optionKey, label: "", variables: {} };
-        wizard.step = "option_label";
-        return promptStyleWizardStep(ctx);
-      }
-      if (wizard.step === "option_label") {
-        wizard.currentOption.label = text.trim();
-        wizard.step = "option_variables";
-        return promptStyleWizardStep(ctx);
-      }
-      if (wizard.step === "option_variables") {
-        try {
-          const variables = JSON.parse(text);
-          appendWizardSelectorOption(ctx, {
-            ...wizard.currentOption,
-            variables,
-          });
-          wizard.step = "selector_continue";
-          return promptStyleWizardStep(ctx);
-        } catch {
-          return ctx.reply("❌ Variables мають бути валідним JSON.");
-        }
-      }
-    }
-
     if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptEditKey) {
       const key = ctx.session.awaitingPromptEditKey; prompts[key] = text; savePrompts();
       ctx.session.awaitingPromptEditKey = null;
@@ -3735,28 +2595,6 @@ bot.on("text", async (ctx, next) => {
       const key = ctx.session.awaitingTextEditKey; content[key] = text; saveContent();
       ctx.session.awaitingTextEditKey = null;
       return ctx.reply(`✅ Текст "${key}" оновлено.`, adminMenu());
-    }
-
-    if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptExamplesKey) {
-      const lower = text.toLowerCase().trim();
-      const key = ctx.session.awaitingPromptExamplesKey;
-      const style = getPromptStyle(key);
-
-      if (lower === "готово") {
-        ctx.session.awaitingPromptExamplesKey = null;
-        const count = style ? getPromptExamplePhotos(style).length : 0;
-        return ctx.reply(`✅ Фото-приклади для "${key}" збережено: ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS}.`, adminMenu());
-      }
-
-      if (lower === "видалити") {
-        ctx.session.awaitingPromptExamplesKey = null;
-        if (!style) return ctx.reply(`❌ Стиль "${key}" не знайдено.`, adminMenu());
-        style.examplePhotos = [];
-        style.previewPhoto = null;
-        content.promptLibrary[key] = style;
-        saveContent();
-        return ctx.reply(`✅ Усі фото-приклади для "${key}" видалено.`, adminMenu());
-      }
     }
 
     if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptPreviewKey && text.toLowerCase().trim() === "видалити") {
@@ -3786,11 +2624,11 @@ bot.on("text", async (ctx, next) => {
 
       if (ctx.session.customType === "create_photo") {
         const user = getUser(ctx.from.id);
-        return ctx.reply("? ?????????? ???? 50 ???. ????? ?????:", Markup.keyboard([[BTN.BACK]]).resize());
+        if (userGenerating.has(ctx.from.id)) return ctx.reply("⏳ Зачекай, ще обробляється...");
         userGenerating.add(ctx.from.id);
         enqueueGeneration(ctx.from.id, () => _processGeneration(ctx, user, ctx.from.id, "photo", null), "photo", ctx)
           .catch(e => {
-        return ctx.reply("? ??????? 50 ??? (5 Promti ?). ????? ?????? ????:", Markup.keyboard([[BTN.BACK]]).resize());
+            userGenerating.delete(ctx.from.id);
             console.error("CREATE PHOTO ENQUEUE ERROR:", e.message);
             ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
           });
@@ -3802,11 +2640,11 @@ bot.on("text", async (ctx, next) => {
     if (ctx.session.awaitingCustomAmount) {
       const amount = parseInt(text);
       if (isNaN(amount) || amount < 50) {
-        return ctx.reply("? ?????????? ???? 50 ???. ????? ?????:", Markup.keyboard([[BTN.BACK]]).resize());
+        return ctx.reply("❌ Мінімальна сума 50 грн. Введи число:", Markup.keyboard([["↩️ Назад"]]).resize());
       }
       const promtiCount = Math.floor(amount / 9.9);
       if (promtiCount < 5) {
-        return ctx.reply("? ??????? 50 ??? (5 Promti ?). ????? ?????? ????:", Markup.keyboard([[BTN.BACK]]).resize());
+        return ctx.reply("❌ Мінімум 50 грн (5 Promti ✨). Введи більшу суму:", Markup.keyboard([["↩️ Назад"]]).resize());
       }
       ctx.session.awaitingCustomAmount = false;
       const tempKey = `custom_${Date.now()}`;
@@ -3845,7 +2683,7 @@ bot.on("text", async (ctx, next) => {
 
       if (videoInputMode === "text") {
         const user = getUser(ctx.from.id);
-        if (userGenerating.has(ctx.from.id)) return ctx.reply("? Зачекай, ще обробляється...");
+        if (userGenerating.has(ctx.from.id)) return ctx.reply("⏳ Зачекай, ще обробляється...");
         userGenerating.add(ctx.from.id);
         enqueueGeneration(ctx.from.id, () => _processGeneration(ctx, user, ctx.from.id, "video", null), "video", ctx)
           .catch(e => {
@@ -3858,7 +2696,7 @@ bot.on("text", async (ctx, next) => {
       return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", menu);
     }
     return ctx.reply("Обери розділ через меню або /start", mainMenu());
-  } catch (e) { console.error("TEXT HANDLER:", e.message); return ctx.reply("??????? ??", mainMenu()); }
+  } catch (e) { console.error("TEXT HANDLER:", e.message); return ctx.reply("Помилка 😢", mainMenu()); }
 });
 
 // ─── ХЕНДЛЕР ФОТО ────────────────────────────────────────────────────────────
@@ -3870,32 +2708,6 @@ bot.on("photo", async (ctx) => {
   if (user.banned) return ctx.reply("🚫 Ваш акаунт заблокований.");
 
   const photo         = ctx.message.photo[ctx.message.photo.length - 1];
-
-  if (isAdmin(userId) && ctx.session.styleWizard) {
-    const wizard = ctx.session.styleWizard;
-    if (wizard.step === "preview") {
-      wizard.style.previewPhoto = photo.file_id;
-      wizard.step = "examples";
-      return promptStyleWizardStep(ctx);
-    }
-    if (wizard.step === "examples") {
-      wizard.style.examplePhotos = normalizePromptExamplePhotos([
-        ...(wizard.style.examplePhotos || []),
-        photo.file_id,
-      ]);
-      if (wizard.style.examplePhotos.length >= MAX_PROMPT_EXAMPLE_PHOTOS) {
-        wizard.step = "confirm";
-        return promptStyleWizardStep(ctx);
-      }
-      return ctx.reply(
-        `✅ Додано приклад ${wizard.style.examplePhotos.length}/${MAX_PROMPT_EXAMPLE_PHOTOS}. Надішли ще фото або натисни done.`,
-        Markup.inlineKeyboard([
-          [Markup.button.callback("Done examples", "stylewizard_done_examples")],
-          [Markup.button.callback("Skip examples", "stylewizard_skip_examples")],
-        ])
-      );
-    }
-  }
 
   // ✅ Адмін прикріпляє фото до текстового ключа (welcomePhoto/infoPhoto тощо)
   if (isAdmin(userId) && ctx.session.awaitingPhotoForKey) {
@@ -3917,46 +2729,18 @@ bot.on("photo", async (ctx) => {
     return ctx.reply(`✅ Preview-фото для стилю "${key}" збережено.`, adminMenu());
   }
 
-  if (isAdmin(userId) && ctx.session.awaitingPromptExamplesKey) {
-    const key = ctx.session.awaitingPromptExamplesKey;
-    const style = getPromptStyle(key);
-    if (!style) {
-      ctx.session.awaitingPromptExamplesKey = null;
-      return ctx.reply(`❌ Стиль "${key}" не знайдено.`, adminMenu());
-    }
-
-    const examples = getPromptExamplePhotos(style);
-    if (examples.length >= MAX_PROMPT_EXAMPLE_PHOTOS) {
-      ctx.session.awaitingPromptExamplesKey = null;
-      return ctx.reply(`Ліміт досягнуто: ${MAX_PROMPT_EXAMPLE_PHOTOS}/${MAX_PROMPT_EXAMPLE_PHOTOS}.`, adminMenu());
-    }
-
-    style.examplePhotos = [...examples, photo.file_id].slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
-    if (!style.previewPhoto) style.previewPhoto = style.examplePhotos[0] || null;
-    content.promptLibrary[key] = style;
-    saveContent();
-
-    const count = style.examplePhotos.length;
-    if (count >= MAX_PROMPT_EXAMPLE_PHOTOS) {
-      ctx.session.awaitingPromptExamplesKey = null;
-      return ctx.reply(`✅ Додано фото ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS}. Ліміт заповнено.`, adminMenu());
-    }
-
-    return ctx.reply(`✅ Додано фото ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS} для стилю "${key}". Надішли ще або напиши "готово".`, adminMenu());
-  }
-
   const validationErr = validatePhoto(photo);
   if (validationErr) return ctx.reply(validationErr);
 
   if (!isAdmin(userId) && checkPhotoSpam(userId)) {
-    return ctx.reply("?? ????? ?????? ???? ??????. ??????? ?????? ??????.");
+    return ctx.reply("⚠️ Надто багато фото підряд. Зачекай кілька секунд.");
   }
 
   if (ctx.session.awaitingAiPrompt) {
     const aiMode = ctx.session.awaitingAiPrompt;
     if (!isAdmin(userId)) {
       const secs = checkRateLimit(userId, "ai");
-      if (secs > 0) return ctx.reply(`? Зачекай ${secs} сек. перед наступним AI-промтом.`);
+      if (secs > 0) return ctx.reply(`⏳ Зачекай ${secs} сек. перед наступним AI-промтом.`);
       const aiDailyErr = checkDailyAiLimit(user);
       if (aiDailyErr) return ctx.reply(aiDailyErr, ctx.session.mode === "video" ? videoMenu() : photoMenu());
       incrementDailyAi(user); saveUsers();
@@ -3973,7 +2757,7 @@ bot.on("photo", async (ctx) => {
       ctx.session.awaitingCustomPrompt = false;
       const label = aiMode === "video" ? (ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance") : "🖼 Фото";
       return ctx.reply(
-        `🤖 AI промт для ${label}:\n\n📝 <code>${escapeHtml(suggested)}</code>\n\nНадішли фото ще раз — промт буде застосовано.`,
+        `🤖 AI промт для ${label}:\n\n📝 <code>${suggested}</code>\n\nНадішли фото ще раз — промт буде застосовано.`,
         { parse_mode: "HTML", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("✅ Застосувати", `apply_ai_prompt_${aiMode}`)], [Markup.button.callback("🔄 Новий варіант", `regen_ai_prompt_${aiMode}`)]]).reply_markup }
       );
     } catch (e) {
@@ -3982,17 +2766,17 @@ bot.on("photo", async (ctx) => {
     }
   }
 
-  if (userGenerating.has(userId)) return ctx.reply("? Зачекай, твоє фото ще обробляється...");
+  if (userGenerating.has(userId)) return ctx.reply("⏳ Зачекай, твоє фото ще обробляється...");
 
   if (!isAdmin(userId)) {
     const mode = ctx.session.mode;
     const secs = checkRateLimit(userId, mode === "video" ? "video" : "photo");
-    if (secs > 0) return ctx.reply(`? Зачекай ще ${secs} сек.`);
+    if (secs > 0) return ctx.reply(`⏳ Зачекай ще ${secs} сек.`);
   }
 
   const MAX_QUEUE = 50;
   const currentQueue = ctx.session.mode === "video" ? videoQueue : photoQueue;
-  if (currentQueue.length >= MAX_QUEUE) return ctx.reply("?? ?????? ????? ??????????????. ??????? ????? ?????? ??????.");
+  if (currentQueue.length >= MAX_QUEUE) return ctx.reply("⚠️ Сервіс зараз перевантажений. Спробуй через кілька хвилин.");
 
   userGenerating.add(userId);
 
@@ -4005,7 +2789,7 @@ bot.on("photo", async (ctx) => {
     });
 });
 
-// ─── ПРОЦЕС�?НГ ГЕНЕРАЦІЇ ─────────────────────────────────────────────────────
+// ─── ПРОЦЕСИНГ ГЕНЕРАЦІЇ ─────────────────────────────────────────────────────
 async function _processGeneration(ctx, user, userId, mode, photo) {
   const cfg = loadSettings();
   let chargedFromBalance = false;
@@ -4038,8 +2822,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       const videoInputMode = ctx.session.videoInputMode || "image";
       const stopProgress = startVideoProgress(ctx);
       const modeLabel = videoInputMode === "text" ? "з тексту" : "з фото";
-      await ctx.reply(`? ??????? ${videoStyle === "seedance" ? "Seedance" : "Kling"} ????? ${modeLabel}...
-?? ????? 1-8 ?? ?`);
+      await ctx.reply(`⏳ Генерую ${videoStyle === "seedance" ? "Seedance" : "Kling"} відео ${modeLabel}...\nЦе займе 1-8 хв ⌛`);
 
       const image = videoInputMode === "text" ? null : await getImage(ctx, photo.file_id);
 
@@ -4148,26 +2931,10 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     if (customType === "custom_photo" || customType === "create_photo") {
       if (!ctx.session.customPrompt) { userGenerating.delete(userId); return ctx.reply("Спочатку напиши промт текстом.", photoMenu()); }
       prompt = ctx.session.customPrompt;
-      const selectedStyleKey =
-        ctx.session.currentStyleKey ||
-        ctx.session.sourceStyleKey ||
-        ctx.session.currentPromptKey ||
-        ctx.session.sourcePromptKey ||
-        user.sourceStyleKey ||
-        user.sourcePromptKey;
-      const selectedStyle = getStyle(selectedStyleKey);
-      const selectedSelections =
-        ctx.session.currentDynamicSelections ||
-        ctx.session.sourceDynamicSelections ||
-        user.sourceDynamicSelections ||
-        {};
-      if (selectedStyle) {
-        const expectedPrompt = selectedStyle.type === "dynamic"
-          ? buildDynamicPrompt(selectedStyle, selectedSelections)
-          : selectedStyle.prompt;
-        if (expectedPrompt === prompt) {
-          promptKeyForStats = selectedStyle.key;
-        }
+      const selectedPromptKey = ctx.session.currentPromptKey || ctx.session.sourcePromptKey || user.sourcePromptKey;
+      const selectedStyle = getPromptStyle(selectedPromptKey);
+      if (selectedStyle && selectedStyle.prompt === prompt) {
+        promptKeyForStats = selectedStyle.key;
       }
     } else {
       userGenerating.delete(userId);
@@ -4191,7 +2958,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     let url = null;
 
     if (photoMode === "create") {
-      await ctx.reply("? ??????? ???? ? ????... (~45 ???)");
+      await ctx.reply("⏳ Створюю фото з нуля... (~45 сек)");
       const result = await falWithRetry(
         "fal-ai/nano-banana-2",
         {
@@ -4206,7 +2973,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       );
       url = result?.data?.images?.[0]?.url;
     } else {
-      await ctx.reply("? ??????? ????... (~45 ???)");
+      await ctx.reply("⏳ Редагую фото... (~45 сек)");
       const image  = await getImage(ctx, photo.file_id);
       const result = await falWithRetry(
         "fal-ai/nano-banana-2/edit",
@@ -4227,20 +2994,14 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     if (!url) throw new Error("fal не повернув зображення");
 
     user.generations = (user.generations || 0) + 1;
-    if (promptKeyForStats) markPromptGeneration(user, promptKeyForStats, ctx.session.currentDynamicSelections || ctx.session.sourceDynamicSelections || user.sourceDynamicSelections || null);
+    if (promptKeyForStats) markPromptGeneration(user, promptKeyForStats);
     saveUsersSync();
     userGenerating.delete(userId);
     log("PHOTO_OK", userId, `dur:${Date.now()-startMs}ms`);
     appendLog({ type: "photo", model: customType || "custom", userId, prompt, success: true, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
 
     const caption = isAdmin(userId) ? "Готово ✨\nАдмін: безліміт ✅" : `Готово ✨\nЗалишилось: ${user.promti || 0} Promti ✨`;
-    await tgSendWithRetry(() => sendPhotoWithSafeCaption({
-      photo: { url },
-      text: caption,
-      sendPhoto: (photo, options) => ctx.replyWithPhoto(photo, options),
-      sendText: (message, options) => ctx.reply(message, options),
-      logLabel: "generation.replyWithPhoto",
-    }));
+    await tgSendWithRetry(() => ctx.replyWithPhoto({ url }, { caption }));
 
     if (!isAdmin(userId) && user.generations % 3 === 0) {
       await ctx.reply(
@@ -4265,7 +3026,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       }
     }
     notifyAdminsError(`${mode === "video" ? "VIDEO" : "PHOTO"} ERROR: user ${userId}\n${e.message}`).catch(() => {});
-    if (e.message === "FAL_TIMEOUT") return ctx.reply("? Занадто довго. Спробуй ще раз.");
+    if (e.message === "FAL_TIMEOUT") return ctx.reply("⏱ Занадто довго. Спробуй ще раз.");
     return ctx.reply("❌ Помилка генерації. Спробуй ще раз.");
   }
 }
@@ -4303,7 +3064,7 @@ bot.on(["video", "video_note"], async (ctx) => {
     ctx.session.awaitingCustomPrompt = false;
     const label = ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance";
     return ctx.reply(
-      `🤖 AI промт для ${label}:\n\n📝 <code>${escapeHtml(suggested)}</code>\n\n✅ Промт збережено. Надішли фото для генерації відео 📸`,
+      `🤖 AI промт для ${label}:\n\n📝 <code>${suggested}</code>\n\n✅ Промт збережено. Надішли фото для генерації відео 📸`,
       { parse_mode: "HTML", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("✅ Застосувати", "apply_ai_prompt_video")], [Markup.button.callback("🔄 Новий варіант", "regen_ai_prompt_video")]]).reply_markup }
     );
   } catch (e) {
@@ -4508,12 +3269,12 @@ app.listen(PORT, "0.0.0.0", () => {
   const cfg = loadSettings();
   console.log(`🌐 HTTP on port ${PORT}`);
   console.log(`📡 WFP Callback: ${WAYFORPAY.serviceUrl || "НЕ ЗАДАНО!"}`);
-  console.log(`??  maxWorkers: ${cfg.maxWorkers} | photoRL: ${cfg.photoRateLimitMs}ms | videoRL: ${cfg.videoRateLimitMs}ms`);
+  console.log(`⚙️  maxWorkers: ${cfg.maxWorkers} | photoRL: ${cfg.photoRateLimitMs}ms | videoRL: ${cfg.videoRateLimitMs}ms`);
   console.log(`📅 Seedance limit/day: ${cfg.dailySeedanceLimit} | Kling: ${cfg.dailyKlingLimit}`);
   console.log(`🤖 AI промт: ${cfg.aiPromptEnabled ? "✅" : "❌"} | Anthropic key: ${process.env.ANTHROPIC_API_KEY ? "✅" : "❌"}`);
 });
 
-// ─── BACKUP КОЖНІ 6 ГОД�?Н ────────────────────────────────────────────────────
+// ─── BACKUP КОЖНІ 6 ГОДИН ────────────────────────────────────────────────────
 const BACKUP_DIR   = path.join(DATA_DIR, "backups");
 const BACKUP_FILES = [USERS_PATH, PAYMENTS_PATH, PAYMENT_LOCK_PATH, PACKAGES_PATH];
 
@@ -4560,29 +3321,28 @@ bot.launch({
 
 // ─── GRACEFUL SHUTDOWN ───────────────────────────────────────────────────────
 async function gracefulShutdown(signal) {
-  console.log(`? ${signal} — чекаємо завершення генерацій...`);
+  console.log(`⏳ ${signal} — чекаємо завершення генерацій...`);
 
   for (const adminId of ADMINS) {
-    bot.telegram.sendMessage(adminId, `?? ??? ???????????????? (${signal})
-???????? ?????????: ${activeWorkers}`).catch(() => {});
+    bot.telegram.sendMessage(adminId, `⚠️ Бот перезапускається (${signal})\nАктивних генерацій: ${activeWorkers}`).catch(() => {});
   }
 
   const maxWait = 5 * 60 * 1000;
   const start   = Date.now();
 
   while (activeWorkers > 0 && Date.now() - start < maxWait) {
-    console.log(`? Активних генерацій: ${activeWorkers}, чекаємо...`);
+    console.log(`⏳ Активних генерацій: ${activeWorkers}, чекаємо...`);
     await new Promise(r => setTimeout(r, 3000));
   }
 
   if (activeWorkers > 0) {
-    console.log(`?? ??????? ?????????? ? ??????????? ? ${activeWorkers} ????????? ???????????`);
+    console.log(`⚠️ Таймаут очікування — зупиняємось з ${activeWorkers} активними генераціями`);
     for (const userId of userGenerating) {
       const user = users[userId];
       if (user) {
         bot.telegram.sendMessage(
           userId,
-          "?? ????????? ????????? ????? ????????? ????.\n?????? ????????? ? ??????? ?? ???!"
+          "⚠️ Генерацію перервано через оновлення бота.\nБаланс збережено — спробуй ще раз!"
         ).catch(() => {});
       }
     }
@@ -4590,7 +3350,7 @@ async function gracefulShutdown(signal) {
   }
 
   console.log("✅ Завершено — зупиняємось.");
-  console.log("? ????????? ? ???????????.");
+  bot.stop(signal);
   process.exit(0);
 }
 

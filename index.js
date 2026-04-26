@@ -1,4 +1,4 @@
-﻿require("dotenv").config();
+require("dotenv").config();
 
 process.on("uncaughtException",  (err)    => { console.error("UNCAUGHT EXCEPTION:", err.message); });
 process.on("unhandledRejection", (reason) => { console.error("UNHANDLED REJECTION:", reason);     });
@@ -9,17 +9,18 @@ const crypto   = require("crypto");
 const express  = require("express");
 const axios    = require("axios");
 const { execSync } = require("child_process");
+const iconv    = require("iconv-lite");
 const { Telegraf, Markup } = require("telegraf");
 const LocalSession = require("telegraf-session-local");
 const { fal } = require("@fal-ai/client");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// в”Ђв”Ђв”Ђ РџРћРЎРўР†Р™РќР• РЎРҐРћР’РР©Р• (РјР°С” Р±СѓС‚Рё РґРѕ LocalSession!) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ПОСТІЙНЕ СХОВ�?ЩЕ (має бути до LocalSession!) ────────────────────────────
 const DATA_DIR = "/app/data";
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// в”Ђв”Ђв”Ђ РџР•Р РЎРРЎРўР•РќРўРќРђ РЎР•РЎР†РЇ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ПЕРС�?СТЕНТНА СЕСІЯ ───────────────────────────────────────────────────────
 const localSession = new LocalSession({
   database: path.join(DATA_DIR, "sessions.json"),
   property: "session",
@@ -36,11 +37,11 @@ bot.use(async (ctx, next) => {
     await next();
   } catch (e) {
     console.error("GLOBAL HANDLER ERROR:", e.message);
-    try { await ctx.reply("вќЊ РЎС‚Р°Р»Р°СЃСЏ РїРѕРјРёР»РєР°. РЎРїСЂРѕР±СѓР№ С‰Рµ СЂР°Р· Р°Р±Рѕ /start"); } catch {}
+    try { await ctx.reply("? ??????? ???????. ??????? ?? ??? ??? /start"); } catch {}
   }
 });
 
-// в”Ђв”Ђв”Ђ РљРћРќРЎРўРђРќРўР в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── КОНСТАНТ�? ────────────────────────────────────────────────────────────────
 const ADMINS = [346101852, 688515215];
 
 const WAYFORPAY = {
@@ -61,7 +62,7 @@ const PROMTI_PRICES = {
   kling:    8,
 };
 
-// в”Ђв”Ђв”Ђ РЁР›РЇРҐР Р”Рћ Р¤РђР™Р›Р†Р’ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ШЛЯХ�? ДО ФАЙЛІВ ─────────────────────────────────────────────────────────
 const USERS_PATH        = path.join(DATA_DIR, "users.json");
 const PAYMENTS_PATH     = path.join(DATA_DIR, "payments.json");
 const PAYMENT_LOCK_PATH = path.join(DATA_DIR, "payment.lock.json");
@@ -96,7 +97,7 @@ for (const [src, dst] of [
     const dstExists = fs.existsSync(dst);
     if (!dstExists) {
       fs.copyFileSync(src, dst);
-      console.log(`рџ“‹ Copied ${path.basename(src)} to Volume`);
+      console.log(`📋 Copied ${path.basename(src)} to Volume`);
     } else if (path.basename(src) === "settings.json") {
       const srcContent = fs.readFileSync(src, "utf8");
       const dstContent = fs.readFileSync(dst, "utf8");
@@ -105,16 +106,16 @@ for (const [src, dst] of [
         JSON.parse(dstContent);
         const merged = { ...srcJson, ...JSON.parse(dstContent) };
         fs.writeFileSync(dst, JSON.stringify(merged, null, 2));
-        console.log(`рџ”„ Merged settings.json`);
+        console.log(`🔄 Merged settings.json`);
       } catch (e) {
         fs.copyFileSync(src, dst);
-        console.log(`рџ”§ Fixed corrupted settings.json from GitHub`);
+        console.log(`🔧 Fixed corrupted settings.json from GitHub`);
       }
     }
   }
 }
 
-// в”Ђв”Ђв”Ђ РќРђР›РђРЁРўРЈР’РђРќРќРЇ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── НАЛАШТУВАННЯ ─────────────────────────────────────────────────────────────
 const DEFAULT_SETTINGS = {
   photoRateLimitMs:    15000,
   videoRateLimitMs:    60000,
@@ -152,16 +153,123 @@ function invalidateSettingsCache() {
   _settingsCache = null;
 }
 
-// в”Ђв”Ђв”Ђ JSON HELPERS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── JSON HELPERS ─────────────────────────────────────────────────────────────
+function looksLikeGarbledText(value) {
+  return typeof value === "string" && [
+    "Рџ",
+    "Рґ",
+    "РЅ",
+    "СЊ",
+    "С–",
+    "СЏ",
+    "вњ",
+    "рџ",
+    "РІС",
+    "Р ",
+    "Р’",
+    "Р“",
+    "Р—",
+  ].some((pattern) => value.includes(pattern));
+}
+
+function repairBrokenText(value) {
+  if (typeof value !== "string" || !looksLikeGarbledText(value)) return value;
+  try {
+    const repaired = iconv.decode(iconv.encode(value, "win1251"), "utf8");
+    return looksLikeGarbledText(repaired) ? value : repaired;
+  } catch {
+    return value;
+  }
+}
+
+function repairCustomGarbledValue(value, stats) {
+  if (typeof value === "string") {
+    if (!looksLikeGarbledText(value)) return value;
+    const repaired = repairBrokenText(value);
+    if (!looksLikeGarbledText(repaired)) {
+      stats.replaced += 1;
+      return repaired;
+    }
+    stats.replaced += 1;
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => repairCustomGarbledValue(item, stats))
+      .filter((item) => item !== undefined);
+  }
+  if (value && typeof value === "object") {
+    const result = {};
+    for (const [key, item] of Object.entries(value)) {
+      const repaired = repairCustomGarbledValue(item, stats);
+      if (repaired !== undefined) result[key] = repaired;
+    }
+    return result;
+  }
+  return value;
+}
+
+function repairGarbledJson(defaultValue, currentValue, stats = { replaced: 0 }) {
+  if (typeof defaultValue === "string") {
+    if (typeof currentValue === "string" && looksLikeGarbledText(currentValue)) {
+      stats.replaced += 1;
+      return defaultValue;
+    }
+    return typeof currentValue === "string" ? currentValue : (currentValue !== undefined ? currentValue : defaultValue);
+  }
+
+  if (Array.isArray(defaultValue)) {
+    const source = Array.isArray(currentValue) ? currentValue : [];
+    const template = defaultValue[0];
+    return source.map((item, index) => {
+      const defaultItem = defaultValue[index] !== undefined ? defaultValue[index] : template;
+      if (defaultItem === undefined) return repairCustomGarbledValue(item, stats);
+      return repairGarbledJson(defaultItem, item, stats);
+    });
+  }
+
+  if (defaultValue && typeof defaultValue === "object") {
+    const source = currentValue && typeof currentValue === "object" && !Array.isArray(currentValue) ? currentValue : {};
+    const result = {};
+
+    for (const key of Object.keys(defaultValue)) {
+      result[key] = repairGarbledJson(defaultValue[key], source[key], stats);
+    }
+
+    for (const key of Object.keys(source)) {
+      if (key in result) continue;
+      const repaired = repairCustomGarbledValue(source[key], stats);
+      if (repaired !== undefined) result[key] = repaired;
+    }
+
+    return result;
+  }
+
+  return currentValue !== undefined ? currentValue : defaultValue;
+}
+
 function loadJson(filePath, fallback) {
   try {
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), "utf8");
       return JSON.parse(JSON.stringify(fallback));
     }
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    const stats = { replaced: 0 };
+    const repaired = repairGarbledJson(fallback, parsed, stats);
+
+    if (stats.replaced > 0) {
+      saveJson(filePath, repaired);
+      console.log(`🧹 ${path.basename(filePath)} repaired: ${stats.replaced} strings replaced`);
+    }
+
+    return repaired;
   } catch (e) {
     console.error(`LOAD JSON ERROR ${filePath}:`, e.message);
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), "utf8");
+    } catch {}
     return JSON.parse(JSON.stringify(fallback));
   }
 }
@@ -193,14 +301,7 @@ function deepMerge(defaultValue, incomingValue) {
 }
 
 function looksLikeBrokenLandingText(value) {
-  return typeof value === "string" && (
-    value.includes("РІСљ") ||
-    value.includes("РІР‚") ||
-    value.includes("Р Р†РЎ") ||
-    value.includes("Р РЋ") ||
-    value.includes("Р’В©") ||
-    value.includes("?? ???? ???")
-  );
+  return looksLikeGarbledText(value);
 }
 
 function repairLandingContent(defaultValue, incomingValue) {
@@ -251,11 +352,11 @@ function loadLandingContent() {
 
 let landingContent = loadLandingContent();
 
-if (landingContent?.locales?.uk?.hero?.trust === "1 Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ РїСЂРё СЃС‚Р°СЂС‚С–") {
-  landingContent.locales.uk.hero.trust = "3 Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ РїСЂРё СЃС‚Р°СЂС‚С–";
+if (landingContent?.locales?.uk?.hero?.trust === "1 Promti ✨ безкоштовно при старті") {
+  landingContent.locales.uk.hero.trust = "3 Promti ✨ безкоштовно при старті";
 }
-if (landingContent?.locales?.uk?.ctaSection?.title === "РЎРїСЂРѕР±СѓР№ Р·Р°СЂР°Р· С– РѕС‚СЂРёРјР°Р№ РїРµСЂС€РёР№ Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ") {
-  landingContent.locales.uk.ctaSection.title = "РЎРїСЂРѕР±СѓР№ Р·Р°СЂР°Р· С– РѕС‚СЂРёРјР°Р№ РїРµСЂС€С– 3 Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ";
+if (landingContent?.locales?.uk?.ctaSection?.title === "Спробуй зараз і отримай перший Promti ✨ безкоштовно") {
+  landingContent.locales.uk.ctaSection.title = "Спробуй зараз і отримай перші 3 Promti ✨ безкоштовно";
 }
 saveJson(LANDING_CONTENT_PATH, landingContent);
 
@@ -398,7 +499,7 @@ function log(type, userId, details = "") {
   console.log(`[${ts}] ${type} | user:${userId || "-"} | ${details}`);
 }
 
-// в”Ђв”Ђв”Ђ Р”РђРќР† в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ДАНІ ─────────────────────────────────────────────────────────────────────
 const DEFAULT_PROMPTS = {
   portrait: "ultra realistic portrait, studio lighting, preserve face, do not change identity",
   beauty:   "beauty editorial, glossy skin, preserve face, do not change identity",
@@ -410,17 +511,19 @@ const DEFAULT_PROMPTS = {
 };
 
 const DEFAULT_CONTENT = {
-  welcomeText:  "РџСЂРёРІС–С‚ вњЁ\n\nРћР±РµСЂРё С‰Рѕ С…РѕС‡РµС€ Р·СЂРѕР±РёС‚Рё:\nрџ–ј Р¤РѕС‚Рѕ вЂ” РіРµРЅРµСЂР°С†С–СЏ С„РѕС‚Рѕ РїРѕ СЃС‚РёР»СЏС…\nрџЋ¬ Р’С–РґРµРѕ вЂ” Р°РЅС–РјР°С†С–СЏ С„РѕС‚Рѕ Сѓ РІС–РґРµРѕ\n\nрџЋЃ 3 Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ РїСЂРё СЃС‚Р°СЂС‚С–",
-  infoText:     "PROMTI AI Bot\n\nрџ–ј Р¤РѕС‚Рѕ:\n10/99РіСЂРЅ В· 20/179РіСЂРЅ В· 30/249РіСЂРЅ В· 50/399РіСЂРЅ\n\nрџЋ¬ Seedance:\n3/199РіСЂРЅ В· 5/349РіСЂРЅ В· 10/599РіСЂРЅ\n\nрџЋҐ Kling:\n3/299РіСЂРЅ В· 5/499РіСЂРЅ В· 10/899РіСЂРЅ",
-  helpText:     "Р”РѕРїРѕРјРѕРіР°:\n\nрџ–ј Р¤РѕС‚Рѕ:\n1. РќР°С‚РёСЃРЅРё рџ–ј Р¤РѕС‚Рѕ\n2. РћР±РµСЂРё СЃС‚РёР»СЊ\n3. РќР°РґС–С€Р»Рё С„РѕС‚Рѕ\n\nрџЋ¬ Р’С–РґРµРѕ:\n1. РќР°С‚РёСЃРЅРё рџЋ¬ Р’С–РґРµРѕ\n2. РћР±РµСЂРё РјРѕРґРµР»СЊ\n3. РќР°РґС–С€Р»Рё С„РѕС‚Рѕ РґР»СЏ Р°РЅС–РјР°С†С–С—",
-  supportText:  "РќР°РїРёС€Рё РІ РїС–РґС‚СЂРёРјРєСѓ: https://t.me/promteamai?direct",
-  ideaText:     "рџ’Ў Р†РґРµС— РґР»СЏ РїСЂРѕРјС‚С–РІ:\n\nрџ–ј Р¤РѕС‚Рѕ:\nвЂў \"portrait in Renaissance style\"\nвЂў \"cyberpunk neon portrait\"\n\nрџЋ¬ Р’С–РґРµРѕ:\nвЂў \"hair gently flowing in wind\"\nвЂў \"eyes slowly opening, cinematic\"",
+  welcomeText:  "Привіт ✨\n\nОбери що хочеш зробити:\n🖼 Фото — генерація фото по стилях\n🎬 Відео — анімація фото у відео\n\n🎁 3 Promti ✨ безкоштовно при старті",
+  infoText:     "PROMTI AI Bot\n\n🖼 Фото:\n10/99грн В· 20/179грн В· 30/249грн В· 50/399грн\n\n🎬 Seedance:\n3/199грн В· 5/349грн В· 10/599грн\n\n🎥 Kling:\n3/299грн В· 5/499грн В· 10/899грн",
+  helpText:     "Допомога:\n\n🖼 Фото:\n1. Натисни 🖼 Фото\n2. Обери стиль\n3. Надішли фото\n\n🎬 Відео:\n1. Натисни 🎬 Відео\n2. Обери модель\n3. Надішли фото для анімації",
+  supportText:  "Напиши в підтримку: https://t.me/promteamai?direct",
+  ideaText:     "💡 Ідеї для промтів:\n\n🖼 Фото:\n• \"portrait in Renaissance style\"\n• \"cyberpunk neon portrait\"\n\n🎬 Відео:\n• \"hair gently flowing in wind\"\n• \"eyes slowly opening, cinematic\"",
   support_link: "https://t.me/promteamai?direct",
-  pricesText:   "рџ’° PROMTI AI вЂ” Р¦С–РЅРё\n\nрџ’Ћ Р’Р°Р»СЋС‚Р°: Promti вњЁ\n1 Promti вњЁ = РІС–Рґ 6.7 РґРѕ 9.9 РіСЂРЅ\n\nрџ“¦ РџР°РєРµС‚Рё:\n10 Promti вњЁ вЂ” 99 РіСЂРЅ (9.9 РіСЂРЅ/вњЁ)\n30 Promti вњЁ вЂ” 249 РіСЂРЅ (8.3 РіСЂРЅ/вњЁ)\n60 Promti вњЁ вЂ” 449 РіСЂРЅ (7.5 РіСЂРЅ/вњЁ)\n150 Promti вњЁ вЂ” 999 РіСЂРЅ (6.7 РіСЂРЅ/вњЁ) рџ”Ґ\n\nрџ’° Р¦С–РЅРё РїРѕСЃР»СѓРі:\nрџ–ј Р¤РѕС‚Рѕ вЂ” 1 Promti вњЁ\nрџЋ¬ Seedance РІС–РґРµРѕ вЂ” 5 Promti вњЁ\nрџЋҐ Kling РІС–РґРµРѕ вЂ” 8 Promti вњЁ\n\nрџЋЃ 3 Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ РїСЂРё СЂРµС”СЃС‚СЂР°С†С–С—!\nрџ‘« +5 Promti вњЁ Р·Р° РєРѕР¶РЅРѕРіРѕ РґСЂСѓРіР° СЏРєРёР№ РѕРїР»Р°С‚РёС‚СЊ",
+  pricesText:   "💰 PROMTI AI — Ціни\n\n💎 Валюта: Promti ✨\n1 Promti ✨ = від 6.7 до 9.9 грн\n\n📦 Пакети:\n10 Promti ✨ — 99 грн (9.9 грн/✨)\n30 Promti ✨ — 249 грн (8.3 грн/✨)\n60 Promti ✨ — 449 грн (7.5 грн/✨)\n150 Promti ✨ — 999 грн (6.7 грн/✨) 🔥\n\n💰 Ціни послуг:\n🖼 Фото — 1 Promti ✨\n🎬 Seedance відео — 5 Promti ✨\n🎥 Kling відео — 8 Promti ✨\n\n🎁 3 Promti ✨ безкоштовно при реєстрації!\n👫 +5 Promti ✨ за кожного друга який оплатить",
   styleLibrary: {},
   promptLibrary: {},
   promptCategories: {},
 };
+
+const startupEncodingRepairSummary = runEncodingRepair();
 
 let users    = loadJson(USERS_PATH,    {});
 let prompts  = loadJson(PROMPTS_PATH,  DEFAULT_PROMPTS);
@@ -438,37 +541,37 @@ if (Object.keys(content.styleLibrary).length === 0 && Object.keys(content.prompt
 content.promptLibrary = content.styleLibrary;
 if (typeof content.welcomeText === "string") {
   content.welcomeText = content.welcomeText
-    .replaceAll("1 С„РѕС‚Рѕ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ", "3 Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ")
-    .replaceAll("1 Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ РїСЂРё СЃС‚Р°СЂС‚С–", "3 Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ РїСЂРё СЃС‚Р°СЂС‚С–");
+    .replaceAll("1 фото безкоштовно", "3 Promti ✨ безкоштовно")
+    .replaceAll("1 Promti ✨ безкоштовно при старті", "3 Promti ✨ безкоштовно при старті");
 }
 if (typeof content.pricesText === "string") {
-  content.pricesText = content.pricesText.replaceAll("1 Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ РїСЂРё СЂРµС”СЃС‚СЂР°С†С–С—", "3 Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ РїСЂРё СЂРµС”СЃС‚СЂР°С†С–С—");
+  content.pricesText = content.pricesText.replaceAll("1 Promti ✨ безкоштовно при реєстрації", "3 Promti ✨ безкоштовно при реєстрації");
 }
 saveJson(PROMPTS_PATH, prompts);
 saveJson(CONTENT_PATH, content);
 
-// в”Ђв”Ђв”Ђ РџРђРљР•РўР в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ПАКЕТ�? ──────────────────────────────────────────────────────────────────
 const DEFAULT_PACKAGES = {
-  promti_pack10:  { key: "promti_pack10",  type: "promti", title: "10 Promti вњЁ",  promti: 10,  amount: 99,  priceText: "99 РіСЂРЅ"  },
-  promti_pack30:  { key: "promti_pack30",  type: "promti", title: "30 Promti вњЁ",  promti: 30,  amount: 249, priceText: "249 РіСЂРЅ" },
-  promti_pack60:  { key: "promti_pack60",  type: "promti", title: "60 Promti вњЁ",  promti: 60,  amount: 449, priceText: "449 РіСЂРЅ" },
-  promti_pack150: { key: "promti_pack150", type: "promti", title: "150 Promti вњЁ", promti: 150, amount: 999, priceText: "999 РіСЂРЅ" },
+  promti_pack10:  { key: "promti_pack10",  type: "promti", title: "10 Promti ✨",  promti: 10,  amount: 99,  priceText: "99 грн"  },
+  promti_pack30:  { key: "promti_pack30",  type: "promti", title: "30 Promti ✨",  promti: 30,  amount: 249, priceText: "249 грн" },
+  promti_pack60:  { key: "promti_pack60",  type: "promti", title: "60 Promti ✨",  promti: 60,  amount: 449, priceText: "449 грн" },
+  promti_pack150: { key: "promti_pack150", type: "promti", title: "150 Promti ✨", promti: 150, amount: 999, priceText: "999 грн" },
 };
 
 function loadPackages() {
   const saved = loadJson(PACKAGES_PATH, null);
-  // вњ… РЇРєС‰Рѕ С„Р°Р№Р»Сѓ РЅРµРјР° Р°Р±Рѕ РІ РЅСЊРѕРјСѓ РІС–РґСЃСѓС‚РЅС– РєР»СЋС‡С– DEFAULT_PACKAGES вЂ” РјРµСЂР¶РёРјРѕ
+  // ✅ Якщо файлу нема або в ньому відсутні ключі DEFAULT_PACKAGES — мержимо
   if (!saved || Object.keys(saved).length === 0) {
     saveJson(PACKAGES_PATH, DEFAULT_PACKAGES);
     return JSON.parse(JSON.stringify(DEFAULT_PACKAGES));
   }
-  // вњ… РЇРєС‰Рѕ С…РѕС‡Р° Р± РѕРґРЅРѕРіРѕ РґРµС„РѕР»С‚РЅРѕРіРѕ РїР°РєРµС‚Сѓ РЅРµРјР° РІ saved вЂ” РґРѕРґР°С”РјРѕ
+  // ✅ Якщо хоча б одного дефолтного пакету нема в saved — додаємо
   let changed = false;
   for (const key of Object.keys(DEFAULT_PACKAGES)) {
     if (!saved[key]) {
       saved[key] = DEFAULT_PACKAGES[key];
       changed = true;
-      console.log(`рџ“¦ Р”РѕРґР°РЅРѕ РґРµС„РѕР»С‚РЅРёР№ РїР°РєРµС‚: ${key}`);
+      console.log(`📦 Додано дефолтний пакет: ${key}`);
     }
   }
   if (changed) saveJson(PACKAGES_PATH, saved);
@@ -479,12 +582,12 @@ let dynamicPackages = loadPackages();
 function getPackages()         { return dynamicPackages; }
 function saveDynamicPackages() { saveJson(PACKAGES_PATH, dynamicPackages); }
 
-// в”Ђв”Ђв”Ђ РђРўРћРњРђР РќРР™ LOCK РћРџР›РђРў в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── АТОМАРН�?Й LOCK ОПЛАТ ─────────────────────────────────────────────────────
 let creditedSet = new Set(loadJson(PAYMENT_LOCK_PATH, []));
 function markAsCredited(ref) { creditedSet.add(ref); saveJson(PAYMENT_LOCK_PATH, [...creditedSet]); }
 function isCredited(ref)     { return creditedSet.has(ref); }
 
-// в”Ђв”Ђв”Ђ Р§Р•Р Р“Рђ Р“Р•РќР•Р РђР¦Р†Р™ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ЧЕРГА ГЕНЕРАЦІЙ ─────────────────────────────────────────────────────────
 const photoQueue = [];
 const videoQueue = [];
 let activePhotoWorkers = 0;
@@ -521,7 +624,7 @@ function processQueue() {
     if (job.notifiedPosition !== idx + 1) {
       job.notifiedPosition = idx + 1;
       if (job.ctx) {
-        job.ctx.reply(`вЏі РўРё РІ С‡РµСЂР·С–: #${idx + 1}\nР—Р°СЂР°Р· РѕР±СЂРѕР±Р»СЏС”С‚СЊСЃСЏ С„РѕС‚Рѕ...\nРћСЂС–С”РЅС‚РѕРІРЅРѕ 45 СЃРµРє вЂ” 1 С…РІ вЊ›`).catch(() => {});
+        job.ctx.reply(`? ?? ? ?????: #${idx + 1}\n????? ???????????? ????...\n?????????? 45 ??? ? 1 ?? ?`).catch(() => {});
       }
     }
   });
@@ -530,7 +633,7 @@ function processQueue() {
     if (job.notifiedPosition !== idx + 1) {
       job.notifiedPosition = idx + 1;
       if (job.ctx) {
-        job.ctx.reply(`вЏі РўРё РІ С‡РµСЂР·С–: #${idx + 1}\nР—Р°СЂР°Р· РіРµРЅРµСЂСѓС”С‚СЊСЃСЏ РІС–РґРµРѕ...\nРћСЂС–С”РЅС‚РѕРІРЅРѕ 1-8 С…РІ вЊ›`).catch(() => {});
+        job.ctx.reply(`? ?? ? ?????: #${idx + 1}\n????? ??????????? ?????...\n?????????? 1-8 ?? ?`).catch(() => {});
       }
     }
   });
@@ -540,7 +643,7 @@ function processQueue() {
     activePhotoWorkers++;
     activeWorkers++;
     if (job.ctx && job.notifiedPosition > 1) {
-      job.ctx.reply("вњ… Р§РµСЂРіР° РґС–Р№С€Р»Р°! РџРѕС‡РёРЅР°СЋ РіРµРЅРµСЂР°С†С–СЋ...").catch(() => {});
+      job.ctx.reply("✅ Черга дійшла! Починаю генерацію...").catch(() => {});
     }
     job.taskFn()
       .then(job.resolve).catch(job.reject)
@@ -552,7 +655,7 @@ function processQueue() {
     activeVideoWorkers++;
     activeWorkers++;
     if (job.ctx && job.notifiedPosition > 1) {
-      job.ctx.reply("вњ… Р§РµСЂРіР° РґС–Р№С€Р»Р°! РџРѕС‡РёРЅР°СЋ РіРµРЅРµСЂР°С†С–СЋ РІС–РґРµРѕ...").catch(() => {});
+      job.ctx.reply("✅ Черга дійшла! Починаю генерацію відео...").catch(() => {});
     }
     job.taskFn()
       .then(job.resolve).catch(job.reject)
@@ -560,7 +663,7 @@ function processQueue() {
   }
 }
 
-// в”Ђв”Ђв”Ђ RATE LIMITING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── RATE LIMITING ────────────────────────────────────────────────────────────
 const userLastPhoto    = {};
 const userLastVideo    = {};
 const userLastAiPrompt = {};
@@ -592,7 +695,7 @@ function touchRateLimit(userId, type) {
   map[userId] = Date.now();
 }
 
-// в”Ђв”Ђв”Ђ Р”Р•РќРќР† Р›Р†РњР†РўР в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ДЕННІ ЛІМІТ�? ─────────────────────────────────────────────────────────────
 function getTodayDate() { return new Date().toISOString().slice(0, 10); }
 
 function checkDailyVideoLimit(user, model) {
@@ -602,7 +705,7 @@ function checkDailyVideoLimit(user, model) {
   if (limit === 0) return null;
   if (user.dailyVideoDate !== today) { user.dailyVideoDate = today; user.dailySeedanceCount = 0; user.dailyKlingCount = 0; }
   const used = model === "kling" ? (user.dailyKlingCount || 0) : (user.dailySeedanceCount || 0);
-  if (used >= limit) return `вќЊ Р”РµРЅРЅРёР№ Р»С–РјС–С‚ ${model === "kling" ? "Kling" : "Seedance"}: ${limit} РІС–РґРµРѕ/РґРµРЅСЊ.\nРЎРїСЂРѕР±СѓР№ Р·Р°РІС‚СЂР° Р°Р±Рѕ РєСѓРїРё Р±С–Р»СЊС€РёР№ РїР°РєРµС‚.`;
+  if (used >= limit) return `❌ Денний ліміт ${model === "kling" ? "Kling" : "Seedance"}: ${limit} відео/день.\nСпробуй завтра або купи більший пакет.`;
   return null;
 }
 
@@ -612,7 +715,7 @@ function checkDailyAiLimit(user) {
   if (limit === 0) return null;
   const today = getTodayDate();
   if (user.dailyAiDate !== today) { user.dailyAiDate = today; user.dailyAiCount = 0; }
-  if ((user.dailyAiCount || 0) >= limit) return `вќЊ Р”РµРЅРЅРёР№ Р»С–РјС–С‚ AI-РїСЂРѕРјС‚С–РІ: ${limit}/РґРµРЅСЊ. РЎРїСЂРѕР±СѓР№ Р·Р°РІС‚СЂР° Р°Р±Рѕ РЅР°РїРёС€Рё РїСЂРѕРјС‚ РІСЂСѓС‡РЅСѓ С‡РµСЂРµР· вњЌпёЏ РЎРІС–Р№ РїСЂРѕРјС‚.`;
+  if ((user.dailyAiCount || 0) >= limit) return `❌ Денний ліміт AI-промтів: ${limit}/день. Спробуй завтра або напиши промт вручну через ✍️ Свій промт.`;
   return null;
 }
 
@@ -629,7 +732,7 @@ function incrementDailyVideo(user, model) {
   else user.dailySeedanceCount = (user.dailySeedanceCount || 0) + 1;
 }
 
-// в”Ђв”Ђв”Ђ РџРћРњРР›РљР в†’ РђР”РњР†РќР в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ПОМ�?ЛК�? ? АДМІН�? ────────────────────────────────────────────────────────
 const adminErrorLog = {};
 const ADMIN_ERROR_DEBOUNCE_MS = 60000;
 
@@ -642,12 +745,14 @@ async function notifyAdminsError(message) {
   }
   adminErrorLog[key] = now;
   for (const adminId of ADMINS) {
-    try { await bot.telegram.sendMessage(adminId, `вљ пёЏ РџРћРњРР›РљРђ:\n\n${message}`); }
+    try { await bot.telegram.sendMessage(adminId, `?? ???????:
+
+${message}`); }
     catch (e) { console.error("NOTIFY ADMIN ERROR:", e.message); }
   }
 }
 
-// в”Ђв”Ђв”Ђ Р®Р—Р•Р  HELPERS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ЮЗЕР HELPERS ─────────────────────────────────────────────────────────────
 function isAdmin(userId) { return ADMINS.includes(userId); }
 function ensureSession(ctx) { if (!ctx.session) ctx.session = {}; }
 
@@ -737,6 +842,58 @@ function saveUsersSync() { saveJson(USERS_PATH, users); }
 function savePrompts()  { saveJson(PROMPTS_PATH,  prompts);  }
 function saveContent()  { saveJson(CONTENT_PATH,  content);  }
 function savePayments() { saveJson(PAYMENTS_PATH, payments); }
+
+function loadRepoJson(relativePath, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, relativePath), "utf8"));
+  } catch {
+    return cloneJson(fallback);
+  }
+}
+
+function getEncodingRepairTargets() {
+  return [
+    { filePath: CONTENT_PATH, label: "content.json", defaultValue: loadRepoJson("content.json", DEFAULT_CONTENT) },
+    { filePath: SETTINGS_PATH, label: "settings.json", defaultValue: cloneJson(DEFAULT_SETTINGS) },
+    { filePath: PROMPTS_PATH, label: "prompts.json", defaultValue: loadRepoJson("prompts.json", DEFAULT_PROMPTS) },
+    { filePath: DYNAMIC_PROMPTS_PATH, label: "dynamic-prompts.json", defaultValue: loadRepoJson("dynamic-prompts.json", { templates: [] }) },
+    { filePath: LANDING_CONTENT_PATH, label: "landing-content.json", defaultValue: loadRepoJson("landing-content.default.json", DEFAULT_LANDING_CONTENT) },
+  ];
+}
+
+function runEncodingRepair(options = {}) {
+  const { forceDefaults = false } = options;
+  const summary = [];
+
+  for (const target of getEncodingRepairTargets()) {
+    const { filePath, label, defaultValue } = target;
+
+    try {
+      const currentValue = fs.existsSync(filePath)
+        ? JSON.parse(fs.readFileSync(filePath, "utf8"))
+        : cloneJson(defaultValue);
+      const stats = { replaced: 0 };
+      const nextValue = forceDefaults
+        ? cloneJson(defaultValue)
+        : repairGarbledJson(defaultValue, currentValue, stats);
+      const changed = forceDefaults || JSON.stringify(nextValue) !== JSON.stringify(currentValue);
+
+      if (changed) saveJson(filePath, nextValue);
+
+      if (changed || stats.replaced > 0) {
+        console.log(`🧹 ${label}: ${forceDefaults ? "reset to clean defaults" : `${stats.replaced} garbled strings replaced`}`);
+      }
+
+      summary.push({ file: label, replaced: stats.replaced, changed, reset: forceDefaults });
+    } catch (error) {
+      saveJson(filePath, defaultValue);
+      console.log(`🧹 ${label}: overwritten with clean defaults after parse error (${error.message})`);
+      summary.push({ file: label, replaced: 0, changed: true, reset: true, error: error.message });
+    }
+  }
+
+  return summary;
+}
 
 function getUserVideoTotal(user) { return (user.seedanceGenerations || 0) + (user.klingGenerations || 0); }
 
@@ -1088,9 +1245,9 @@ function parseStyleStartPayload(payload = "") {
 }
 
 function getPromptBalanceText(userId) {
-  if (isAdmin(userId)) return "РђРґРјС–РЅ: Р±РµР·Р»С–РјС–С‚ вњ…";
+  if (isAdmin(userId)) return "Адмін: безліміт ✅";
   const user = getUser(userId);
-  return `${user.promti || 0} Promti вњЁ`;
+  return `${user.promti || 0} Promti ✨`;
 }
 
 function clearPromptAttribution(ctx) {
@@ -1160,15 +1317,15 @@ async function startDynamicStyleFlow(ctx, style, initialSelections = {}) {
   ctx.session.currentStyleType = style.type;
   ctx.session.currentDynamicSelections = { ...(initialSelections || {}) };
   const previewText =
-    `рџЋЁ <b>${escapeHtml(style.title)}</b>\n\n` +
-    `РЎРїРѕС‡Р°С‚РєСѓ РїРѕРґРёРІРёСЃСЊ РїСЂРёРєР»Р°РґРё СЃС‚РёР»СЋ, Р° РїРѕС‚С–Рј РѕР±РµСЂРё РїР°СЂР°РјРµС‚СЂРё.`;
+    `🎨 <b>${escapeHtml(style.title)}</b>\n\n` +
+    `Спочатку подивись приклади стилю, а потім обери параметри.`;
   await sendPromptExamplePhotos(ctx, style, previewText);
   return continueDynamicStyleFlow(ctx, style.key);
 }
 
 async function continueDynamicStyleFlow(ctx, styleKey) {
   const style = getStyle(styleKey);
-  if (!style || style.type !== "dynamic") return ctx.reply("вќЊ РЎС‚РёР»СЊ РЅРµ Р·РЅР°Р№РґРµРЅРѕ.");
+  if (!style || style.type !== "dynamic") return ctx.reply("❌ Стиль не знайдено.");
   ensureSession(ctx);
   if (!ctx.session.pendingDynamicStyle || ctx.session.pendingDynamicStyle.styleKey !== styleKey) {
     ctx.session.pendingDynamicStyle = {
@@ -1189,9 +1346,9 @@ async function continueDynamicStyleFlow(ctx, styleKey) {
   ]);
 
   const text =
-    `рџЋ› <b>${escapeHtml(style.title)}</b>\n\n` +
+    `🎛 <b>${escapeHtml(style.title)}</b>\n\n` +
     `${escapeHtml(remainingSelector.label)}\n` +
-    `РљСЂРѕРєС–РІ Р·Р°Р»РёС€РёР»РѕСЃСЊ: <b>${style.selectors.filter(selector => !pending.selections?.[selector.key]).length}</b>`;
+    `Кроків залишилось: <b>${style.selectors.filter(selector => !pending.selections?.[selector.key]).length}</b>`;
 
   return ctx.reply(text, {
     parse_mode: "HTML",
@@ -1201,11 +1358,11 @@ async function continueDynamicStyleFlow(ctx, styleKey) {
 
 async function finalizeDynamicStylePrompt(ctx, styleKey) {
   const style = getStyle(styleKey);
-  if (!style || style.type !== "dynamic") return ctx.reply("вќЊ РЎС‚РёР»СЊ РЅРµ Р·РЅР°Р№РґРµРЅРѕ.");
+  if (!style || style.type !== "dynamic") return ctx.reply("❌ Стиль не знайдено.");
   ensureSession(ctx);
   const selections = { ...(ctx.session.pendingDynamicStyle?.selections || {}) };
   const finalPrompt = buildDynamicPrompt(style, selections);
-  if (!finalPrompt) return ctx.reply("вќЊ РќРµ РІРґР°Р»РѕСЃСЏ Р·С–Р±СЂР°С‚Рё РїСЂРѕРјС‚.");
+  if (!finalPrompt) return ctx.reply("❌ Не вдалося зібрати промт.");
 
   applyStaticStyleToSession(ctx, style, selections);
   ctx.session.customPrompt = finalPrompt;
@@ -1254,17 +1411,17 @@ function markPromptPurchase(user, orderReference) {
 
 function buildPromptStyleCardText(style, options = {}) {
   const { admin = false, userId = null, botUsername = "Promtiai_bot" } = options;
-  const trendMark = style.isTrending ? "рџ”Ґ РўСЂРµРЅРґ\n" : "";
+  const trendMark = style.isTrending ? "🔥 Тренд\n" : "";
   const styleTypeLabel = style.type === "dynamic" ? "dynamic" : "static";
   const deepLink = getStyleDeepLink(botUsername, style.key);
   const examplesCount = Array.isArray(style.examplePhotos) ? style.examplePhotos.length : 0;
   if (admin) {
     return (
-      `рџЋЁ <b>${escapeHtml(style.title)}</b>\n` +
+      `🎨 <b>${escapeHtml(style.title)}</b>\n` +
       `${trendMark}` +
-      `РљР»СЋС‡: <code>${escapeHtml(style.key)}</code>\n` +
-      `РўРёРї: <b>${styleTypeLabel}</b>\n` +
-      `РљР°С‚РµРіРѕСЂС–СЏ: <b>${escapeHtml(style.category)}</b>\n\n` +
+      `Ключ: <code>${escapeHtml(style.key)}</code>\n` +
+      `Тип: <b>${styleTypeLabel}</b>\n` +
+      `Категорія: <b>${escapeHtml(style.category)}</b>\n\n` +
       `Examples: <b>${examplesCount}/${MAX_PROMPT_EXAMPLE_PHOTOS}</b>\n` +
       `Clicks: <b>${style.clicks}</b>\n` +
       `Generations: <b>${style.generations}</b>\n` +
@@ -1273,20 +1430,20 @@ function buildPromptStyleCardText(style, options = {}) {
       `Gen conversion: <b>${formatConversion(style.generations, style.clicks)}</b>\n` +
       `Purchase conversion: <b>${formatConversion(style.purchases, style.clicks)}</b>\n\n` +
       `Deep-link:\n<code>${escapeHtml(deepLink)}</code>\n\n` +
-      `${style.type === "dynamic" ? "Template" : "РџСЂРѕРјС‚"}:\n<code>${escapeHtml(style.type === "dynamic" ? style.template : style.prompt)}</code>`
+      `${style.type === "dynamic" ? "Template" : "Промт"}:\n<code>${escapeHtml(style.type === "dynamic" ? style.template : style.prompt)}</code>`
     );
   }
 
   const balanceText = userId ? getPromptBalanceText(userId) : "-";
   return (
-    `рџЋЁ <b>${escapeHtml(style.title)}</b>\n` +
+    `🎨 <b>${escapeHtml(style.title)}</b>\n` +
     `${trendMark}` +
-    `РўРёРї: <b>${styleTypeLabel}</b>\n` +
-    `РљР°С‚РµРіРѕСЂС–СЏ: <b>${escapeHtml(style.category)}</b>\n\n` +
-    (examplesCount ? `РџСЂРёРєР»Р°РґРё: <b>${examplesCount}</b>\n` : "") +
-    (style.type === "dynamic" ? `РџР°СЂР°РјРµС‚СЂС–РІ: <b>${style.selectors.length}</b>\n` : "") +
-    `РќР°РґС–С€Р»Рё СЃРІРѕС” С„РѕС‚Рѕ вЂ” Р±РѕС‚ Р·СЂРѕР±РёС‚СЊ С‚Р°РєРµ Р¶.\n` +
-    `Р‘Р°Р»Р°РЅСЃ: <b>${escapeHtml(balanceText)}</b>`
+    `Тип: <b>${styleTypeLabel}</b>\n` +
+    `Категорія: <b>${escapeHtml(style.category)}</b>\n\n` +
+    (examplesCount ? `Приклади: <b>${examplesCount}</b>\n` : "") +
+    (style.type === "dynamic" ? `Параметрів: <b>${style.selectors.length}</b>\n` : "") +
+    `Надішли своє фото — бот зробить таке ж.\n` +
+    `Баланс: <b>${escapeHtml(balanceText)}</b>`
   );
 }
 
@@ -1299,14 +1456,14 @@ function buildPromptLibraryKeyboard(page = 0, admin = false) {
   const prefix = admin ? "admin_promptlib" : "promptlib";
   const rows = pageItems.map(style => [
     Markup.button.callback(
-      `${style.isTrending ? "рџ”Ґ " : ""}${style.title}`,
+      `${style.isTrending ? "🔥 " : ""}${style.title}`,
       `${prefix}_open_${style.key}`
     )
   ]);
   const nav = [];
-  if (safePage > 0) nav.push(Markup.button.callback("в¬…пёЏ", `${prefix}_page_${safePage - 1}`));
+  if (safePage > 0) nav.push(Markup.button.callback("??", `${prefix}_page_${safePage - 1}`));
   nav.push(Markup.button.callback(`${safePage + 1}/${totalPages}`, `${prefix}_noop`));
-  if (safePage < totalPages - 1) nav.push(Markup.button.callback("вћЎпёЏ", `${prefix}_page_${safePage + 1}`));
+  if (safePage < totalPages - 1) nav.push(Markup.button.callback("??", `${prefix}_page_${safePage + 1}`));
   if (nav.length) rows.push(nav);
   return Markup.inlineKeyboard(rows);
 }
@@ -1314,16 +1471,16 @@ function buildPromptLibraryKeyboard(page = 0, admin = false) {
 function buildPromptStyleKeyboard(style, admin = false) {
   if (!admin) {
     return Markup.inlineKeyboard([
-      [Markup.button.callback(style.type === "dynamic" ? "рџЋ› РћР±СЂР°С‚Рё РїР°СЂР°РјРµС‚СЂРё" : "вњ… РћР±СЂР°С‚Рё СЃС‚РёР»СЊ", `promptlib_apply_${style.key}`)],
-      [Markup.button.callback("рџ“љ Р”Рѕ СЃРїРёСЃРєСѓ СЃС‚РёР»С–РІ", "promptlib_page_0")],
+      [Markup.button.callback(style.type === "dynamic" ? "🎛 Обрати параметри" : "✅ Обрати стиль", `promptlib_apply_${style.key}`)],
+      [Markup.button.callback("📚 До списку стилів", "promptlib_page_0")],
     ]);
   }
   return Markup.inlineKeyboard([
-    [Markup.button.callback(style.isTrending ? "рџ”• Р—РЅСЏС‚Рё С‚СЂРµРЅРґ" : "рџ”Ґ Р—СЂРѕР±РёС‚Рё С‚СЂРµРЅРґРѕРј", `admin_promptlib_trend_${style.key}_${style.isTrending ? "off" : "on"}`)],
-    [Markup.button.callback("рџ–ј Preview С„РѕС‚Рѕ", `admin_promptlib_preview_${style.key}`)],
-    [Markup.button.callback("рџ–ј Examples x10", `admin_promptlib_examples_${style.key}`)],
-    [Markup.button.callback("рџ—‘ Р’РёРґР°Р»РёС‚Рё", `admin_promptlib_delete_${style.key}`)],
-    [Markup.button.callback("рџ“љ Р”Рѕ Р±С–Р±Р»С–РѕС‚РµРєРё", "admin_promptlib_page_0")],
+    [Markup.button.callback(style.isTrending ? "🔕 Зняти тренд" : "🔥 Зробити трендом", `admin_promptlib_trend_${style.key}_${style.isTrending ? "off" : "on"}`)],
+    [Markup.button.callback("🖼 Preview фото", `admin_promptlib_preview_${style.key}`)],
+    [Markup.button.callback("🖼 Examples x10", `admin_promptlib_examples_${style.key}`)],
+    [Markup.button.callback("🗑 Видалити", `admin_promptlib_delete_${style.key}`)],
+    [Markup.button.callback("📚 До бібліотеки", "admin_promptlib_page_0")],
   ]);
 }
 
@@ -1378,8 +1535,8 @@ async function sendPromptLibraryPage(ctx, page = 0, admin = false) {
   if (!items.length) {
     return ctx.reply(
       admin
-        ? "рџЋЁ Р‘С–Р±Р»С–РѕС‚РµРєР° СЃС‚РёР»С–РІ РїРѕСЂРѕР¶РЅСЏ.\n\nР”РѕРґР°Р№ РїРµСЂС€РёР№ СЃС‚РёР»СЊ С‡РµСЂРµР· /addprompt KEY | CATEGORY | TITLE | PROMPT"
-        : "рџЋЁ РџРѕРєРё С‰Рѕ СЃС‚РёР»С–РІ РЅРµРјР°С”. РЎРїСЂРѕР±СѓР№ С‚СЂРѕС…Рё РїС–Р·РЅС–С€Рµ."
+        ? "🎨 Бібліотека стилів порожня.\n\nДодай перший стиль через /addprompt KEY | CATEGORY | TITLE | PROMPT"
+        : "🎨 Поки що стилів немає. Спробуй трохи пізніше."
     );
   }
 
@@ -1389,11 +1546,11 @@ async function sendPromptLibraryPage(ctx, page = 0, admin = false) {
   const categoryText = Object.entries(categoryStats)
     .slice(0, 6)
     .map(([category, count]) => `${category}: ${count}`)
-    .join(" вЂў ");
+    .join(" • ");
 
   const text = admin
-    ? `рџЋЁ <b>Р‘С–Р±Р»С–РѕС‚РµРєР° СЃС‚РёР»С–РІ</b>\n\nРЈСЃСЊРѕРіРѕ СЃС‚РёР»С–РІ: <b>${items.length}</b>\nРљР°С‚РµРіРѕСЂС–С—: ${escapeHtml(categoryText || "-")}\n\nР’С–РґРєСЂРёР№ СЃС‚РёР»СЊ, С‰РѕР± РїРѕР±Р°С‡РёС‚Рё deep-link, СЃС‚Р°С‚РёСЃС‚РёРєСѓ С‚Р° РєРµСЂСѓРІР°РЅРЅСЏ.`
-    : `рџЋЁ <b>РўСЂРµРЅРґРѕРІС– СЃС‚РёР»С–</b>\n\nРћР±РµСЂРё СЃС‚РёР»СЊ Р·С– СЃРїРёСЃРєСѓ. РЎРїРѕС‡Р°С‚РєСѓ РїРѕРєР°Р·Р°РЅС– С‚СЂРµРЅРґРѕРІС–, РґР°Р»С– вЂ” РІСЃС– С–РЅС€С–.\n\nРљР°С‚РµРіРѕСЂС–С—: ${escapeHtml(categoryText || "-")}`;
+    ? `🎨 <b>Бібліотека стилів</b>\n\nУсього стилів: <b>${items.length}</b>\nКатегорії: ${escapeHtml(categoryText || "-")}\n\nВідкрий стиль, щоб побачити deep-link, статистику та керування.`
+    : `🎨 <b>Трендові стилі</b>\n\nОбери стиль зі списку. Спочатку показані трендові, далі — всі інші.\n\nКатегорії: ${escapeHtml(categoryText || "-")}`;
 
   const markup = buildPromptLibraryKeyboard(safePage, admin);
 
@@ -1416,7 +1573,7 @@ async function sendPromptLibraryPage(ctx, page = 0, admin = false) {
 
 async function sendPromptStyleCard(ctx, promptKey, admin = false) {
   const style = getPromptStyle(promptKey);
-  if (!style) return ctx.reply("вќЊ РЎС‚РёР»СЊ РЅРµ Р·РЅР°Р№РґРµРЅРѕ.");
+  if (!style) return ctx.reply("❌ Стиль не знайдено.");
   const botUsername = await resolveBotUsername(ctx);
   const text = buildPromptStyleCardText(style, { admin, userId: ctx.from?.id, botUsername });
   const markup = buildPromptStyleKeyboard(style, admin);
@@ -1424,7 +1581,7 @@ async function sendPromptStyleCard(ctx, promptKey, admin = false) {
   if (examples.length) {
     const sentExamples = await sendPromptExamplePhotos(ctx, style, text, { fallbackCaption: false });
     if (sentExamples) {
-      return ctx.reply(admin ? "Р¤РѕС‚Рѕ-РїСЂРёРєР»Р°РґРё РЅР°РґС–СЃР»Р°РЅРѕ РІРёС‰Рµ." : "РћР±РµСЂРё РґС–СЋ РЅРёР¶С‡Рµ.", {
+      return ctx.reply(admin ? "Фото-приклади надіслано вище." : "Обери дію нижче.", {
         parse_mode: "HTML",
         reply_markup: markup.reply_markup,
       });
@@ -1439,15 +1596,15 @@ async function sendPromptStyleCard(ctx, promptKey, admin = false) {
 async function sendPromptReadyMessage(ctx, style, options = {}) {
   const { withPreview = false } = options;
   const text =
-    `вњ… РЎС‚РёР»СЊ Р·Р°РІР°РЅС‚Р°Р¶РµРЅРѕ\n\n` +
-    `рџЋЁ ${style.title}\n` +
-    `РљР°С‚РµРіРѕСЂС–СЏ: ${style.category}\n` +
-    `Р‘Р°Р»Р°РЅСЃ: ${getPromptBalanceText(ctx.from.id)}\n\n` +
-    `РќР°РґС–С€Р»Рё СЃРІРѕС” С„РѕС‚Рѕ рџ“ё`;
+    `✅ Стиль завантажено\n\n` +
+    `🎨 ${style.title}\n` +
+    `Категорія: ${style.category}\n` +
+    `Баланс: ${getPromptBalanceText(ctx.from.id)}\n\n` +
+    `Надішли своє фото 📸`;
 
   if (withPreview && getPromptExamplePhotos(style).length) {
     const sentExamples = await sendPromptExamplePhotos(ctx, style, text, { fallbackCaption: false });
-    if (sentExamples) return ctx.reply("РќР°РґС–С€Р»Рё СЃРІРѕС” С„РѕС‚Рѕ рџ“ё", photoMenu());
+    if (sentExamples) return ctx.reply("Надішли своє фото 📸", photoMenu());
   }
   return ctx.reply(text, photoMenu());
 }
@@ -1481,53 +1638,53 @@ function startStyleWizard(ctx) {
 
 async function promptStyleWizardStep(ctx) {
   const wizard = getStyleWizardDraft(ctx);
-  if (!wizard) return ctx.reply("вќЊ Wizard РЅРµ Р°РєС‚РёРІРЅРёР№.", adminMenu());
+  if (!wizard) return ctx.reply("❌ Wizard не активний.", adminMenu());
 
   switch (wizard.step) {
     case "type":
-      return ctx.reply("РћР±РµСЂС–С‚СЊ С‚РёРї СЃС‚РёР»СЋ:", Markup.inlineKeyboard([
+      return ctx.reply("Оберіть тип стилю:", Markup.inlineKeyboard([
         [Markup.button.callback("Static", "stylewizard_type_static")],
         [Markup.button.callback("Dynamic", "stylewizard_type_dynamic")],
       ]));
     case "key":
-      return ctx.reply("Р’РІРµРґРё key СЃС‚РёР»СЋ Р»Р°С‚РёРЅРёС†РµСЋ. РџСЂРёРєР»Р°Рґ: zodiac_goddess");
+      return ctx.reply("Введи key стилю латиницею. Приклад: zodiac_goddess");
     case "category":
-      return ctx.reply("Р’РІРµРґРё category СЃС‚РёР»СЋ. РџСЂРёРєР»Р°Рґ: zodiac");
+      return ctx.reply("Введи category стилю. Приклад: zodiac");
     case "title":
-      return ctx.reply("Р’РІРµРґРё title СЃС‚РёР»СЋ РґР»СЏ РєРѕСЂРёСЃС‚СѓРІР°С‡Р°.");
+      return ctx.reply("Введи title стилю для користувача.");
     case "prompt":
-      return ctx.reply("РќР°РґС–С€Р»Рё РіРѕС‚РѕРІРёР№ prompt РґР»СЏ static СЃС‚РёР»СЋ.");
+      return ctx.reply("Надішли готовий prompt для static стилю.");
     case "template":
-      return ctx.reply("РќР°РґС–С€Р»Рё template РґР»СЏ dynamic СЃС‚РёР»СЋ Р· [PLACEHOLDER].");
+      return ctx.reply("Надішли template для dynamic стилю з [PLACEHOLDER].");
     case "selector_key":
-      return ctx.reply(`Р’РІРµРґРё key selector-Р° в„–${wizard.style.selectors.length + 1}. РџСЂРёРєР»Р°Рґ: zodiac`);
+      return ctx.reply(`Введи key selector-а №${wizard.style.selectors.length + 1}. Приклад: zodiac`);
     case "selector_label":
-      return ctx.reply("Р’РІРµРґРё label selector-Р°. РџСЂРёРєР»Р°Рґ: РћР±РµСЂРё Р·РЅР°Рє Р·РѕРґС–Р°РєСѓ");
+      return ctx.reply("Введи label selector-а. Приклад: Обери знак зодіаку");
     case "option_key":
-      return ctx.reply("Р’РІРµРґРё key option. РџСЂРёРєР»Р°Рґ: pisces");
+      return ctx.reply("Введи key option. Приклад: pisces");
     case "option_label":
-      return ctx.reply("Р’РІРµРґРё label option. РџСЂРёРєР»Р°Рґ: Р РёР±Рё");
+      return ctx.reply("Введи label option. Приклад: Риби");
     case "option_variables":
-      return ctx.reply("РќР°РґС–С€Р»Рё variables Сѓ JSON. РџСЂРёРєР»Р°Рґ:\n{\"ZODIAC\":\"Pisces\",\"ZODIAC_COLORS\":\"seafoam, pearl, lilac\"}");
+      return ctx.reply("Надішли variables у JSON. Приклад:\n{\"ZODIAC\":\"Pisces\",\"ZODIAC_COLORS\":\"seafoam, pearl, lilac\"}");
     case "selector_continue":
-      return ctx.reply("Р©Рѕ СЂРѕР±РёРјРѕ РґР°Р»С– Р· selector-Р°РјРё?", Markup.inlineKeyboard([
-        [Markup.button.callback("Р©Рµ option", "stylewizard_continue_option")],
-        [Markup.button.callback("РќРѕРІРёР№ selector", "stylewizard_continue_selector")],
-        [Markup.button.callback("Р”Р°Р»С– РґРѕ С„РѕС‚Рѕ", "stylewizard_continue_media")],
+      return ctx.reply("Що робимо далі з selector-ами?", Markup.inlineKeyboard([
+        [Markup.button.callback("Ще option", "stylewizard_continue_option")],
+        [Markup.button.callback("Новий selector", "stylewizard_continue_selector")],
+        [Markup.button.callback("Далі до фото", "stylewizard_continue_media")],
       ]));
     case "preview":
-      return ctx.reply("РќР°РґС–С€Р»Рё preview photo Р°Р±Рѕ РЅР°С‚РёСЃРЅРё skip.", Markup.inlineKeyboard([
+      return ctx.reply("Надішли preview photo або натисни skip.", Markup.inlineKeyboard([
         [Markup.button.callback("Skip preview", "stylewizard_skip_preview")],
       ]));
     case "examples":
-      return ctx.reply(`РќР°РґС–С€Р»Рё РґРѕ ${MAX_PROMPT_EXAMPLE_PHOTOS} example photos.\nРљРѕР»Рё Р·Р°РІРµСЂС€РёС€ вЂ” РЅР°С‚РёСЃРЅРё done Р°Р±Рѕ skip.`, Markup.inlineKeyboard([
+      return ctx.reply(`Надішли до ${MAX_PROMPT_EXAMPLE_PHOTOS} example photos.\nКоли завершиш — натисни done або skip.`, Markup.inlineKeyboard([
         [Markup.button.callback("Done examples", "stylewizard_done_examples")],
         [Markup.button.callback("Skip examples", "stylewizard_skip_examples")],
       ]));
     case "confirm": {
       const style = normalizeStyleItem(wizard.style, wizard.style.key);
       const summary =
-        `вњ… РџРµСЂРµРІС–СЂ СЃС‚РёР»СЊ РїРµСЂРµРґ Р·Р±РµСЂРµР¶РµРЅРЅСЏРј\n\n` +
+        `✅ Перевір стиль перед збереженням\n\n` +
         `Key: ${style.key}\n` +
         `Type: ${style.type}\n` +
         `Category: ${style.category}\n` +
@@ -1536,12 +1693,12 @@ async function promptStyleWizardStep(ctx) {
         `Preview: ${style.previewPhoto ? "yes" : "no"}\n` +
         `Examples: ${style.examplePhotos.length}/${MAX_PROMPT_EXAMPLE_PHOTOS}`;
       return ctx.reply(summary, Markup.inlineKeyboard([
-        [Markup.button.callback("Р—Р±РµСЂРµРіС‚Рё СЃС‚РёР»СЊ", "stylewizard_save")],
-        [Markup.button.callback("РЎРєР°СЃСѓРІР°С‚Рё", "stylewizard_cancel")],
+        [Markup.button.callback("Зберегти стиль", "stylewizard_save")],
+        [Markup.button.callback("Скасувати", "stylewizard_cancel")],
       ]));
     }
     default:
-      return ctx.reply("вќЊ РќРµРІС–РґРѕРјРёР№ РєСЂРѕРє wizard.", adminMenu());
+      return ctx.reply("❌ Невідомий крок wizard.", adminMenu());
   }
 }
 
@@ -1615,7 +1772,7 @@ async function sendPhotoWithSafeCaption({
   }
 }
 
-// в”Ђв”Ђв”Ђ Р Р•Р¤Р•Р РђР›Р¬РќРђ РЎРРЎРўР•РњРђ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── РЕФЕРАЛЬНА ј?СТЕМА ───────────────────────────────────────────────────────
 async function handleReferral(ctx, referrerId) {
   const newUserId = ctx.from.id;
   if (referrerId === newUserId) return;
@@ -1627,23 +1784,23 @@ async function handleReferral(ctx, referrerId) {
   newUser.refPaid        = false;
   referrer.referralCount = (referrer.referralCount || 0) + 1;
   saveUsers();
-  try { await bot.telegram.sendMessage(referrerId, `рџ‘‹ РќРѕРІРёР№ РґСЂСѓРі Р·Р°СЂРµС”СЃС‚СЂСѓРІР°РІСЃСЏ РїРѕ С‚РІРѕС”РјСѓ Р»С–РЅРєСѓ!\nрџЋЃ Р‘РѕРЅСѓСЃ +${REFERRAL_PROMTI_BONUS} Promti вњЁ РѕС‚СЂРёРјР°С”С€ РєРѕР»Рё РІС–РЅ Р·СЂРѕР±РёС‚СЊ РїРµСЂС€Сѓ РѕРїР»Р°С‚Сѓ.`); }
+  try { await bot.telegram.sendMessage(referrerId, `👋 Новий друг зареєструвався по твоєму лінку!\n🎁 Бонус +${REFERRAL_PROMTI_BONUS} Promti ✨ отримаєш коли він зробить першу оплату.`); }
   catch (e) { console.error("REFERRAL NOTIFY:", e.message); }
 }
 
-// в”Ђв”Ђв”Ђ Р’РђР›Р†Р”РђР¦Р†РЇ Р¤РћРўРћ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ВАЛІДАЦІЯ ФОТО ───────────────────────────────────────────────────────────
 function validatePhoto(photo) {
   const size = photo.file_size || 0;
-  if (size > 0 && size < 50 * 1024) return `вќЊ Р¤РѕС‚Рѕ Р·Р°РЅР°РґС‚Рѕ РјР°Р»РµРЅСЊРєРµ (${Math.round(size/1024)}KB). РњС–РЅС–РјСѓРј 50KB.`;
-  if (size > 20 * 1024 * 1024)      return `вќЊ Р¤РѕС‚Рѕ Р·Р°РЅР°РґС‚Рѕ РІРµР»РёРєРµ. РњР°РєСЃРёРјСѓРј 20MB.`;
+  if (size > 0 && size < 50 * 1024) return `❌ Фото занадто маленьке (${Math.round(size/1024)}KB). Мінімум 50KB.`;
+  if (size > 20 * 1024 * 1024)      return `❌ Фото занадто велике. Максимум 20MB.`;
   return null;
 }
 
-// в”Ђв”Ђв”Ђ РћРўР РРњРђРќРќРЇ Р—РћР‘Р РђР–Р•РќРќРЇ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-// в”Ђв”Ђв”Ђ РҐР•Р›РџР•Р : РЅР°РґС–СЃР»Р°С‚Рё С‚РµРєСЃС‚ Р· РѕРїС†С–РѕРЅР°Р»СЊРЅРёРј С„РѕС‚Рѕ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-// РЇРєС‰Рѕ С„РѕС‚Рѕ С” С– С‚РµРєСЃС‚ в‰¤1024 СЃРёРјРІРѕР»С–РІ в†’ С„РѕС‚Рѕ Р· caption
-// РЇРєС‰Рѕ С„РѕС‚Рѕ С” С– С‚РµРєСЃС‚ РґРѕРІС€РёР№ в†’ С„РѕС‚Рѕ Р±РµР· caption + С‚РµРєСЃС‚ РѕРєСЂРµРјРёРј РїРѕРІС–РґРѕРјР»РµРЅРЅСЏРј
-// РЇРєС‰Рѕ С„РѕС‚Рѕ РЅРµРјР°С” в†’ Р·РІРёС‡Р°Р№РЅРёР№ С‚РµРєСЃС‚
+// ─── ОТР�?МАННЯ ЗОБРАЖЕННЯ ─────────────────────────────────────────────────────
+// ─── ХЕЛПЕР: надіслати текст з опціональним фото ────────────────────────────
+// Якщо фото є і текст ?1024 символів ? фото з caption
+// Якщо фото є і текст довший ? фото без caption + текст окремим повідомленням
+// Якщо фото немає ? звичайний текст
 async function sendWithOptionalPhoto(ctx, text, photoFileId, menu) {
   try {
     return await sendPhotoWithSafeCaption({
@@ -1657,7 +1814,7 @@ async function sendWithOptionalPhoto(ctx, text, photoFileId, menu) {
     });
   } catch (e) {
     console.error("sendWithOptionalPhoto ERROR:", e.message);
-    // Fallback РЅР° Р·РІРёС‡Р°Р№РЅРёР№ С‚РµРєСЃС‚ СЏРєС‰Рѕ С„РѕС‚Рѕ РЅРµ РІРґР°Р»РѕСЃСЊ РЅР°РґС–СЃР»Р°С‚Рё
+    // Fallback на звичайний текст якщо фото не вдалось надіслати
     try { return await ctx.reply(text, menu); } catch {}
   }
 }
@@ -1692,7 +1849,7 @@ async function tgSendWithRetry(fn, maxRetries = 3) {
   throw lastErr;
 }
 
-// в”Ђв”Ђв”Ђ FAL UPLOAD IMAGE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── FAL UPLOAD IMAGE ────────────────────────────────────────────────────────
 async function uploadImageToFal(base64DataUrl) {
   try {
     const base64Data = base64DataUrl.replace(/^data:image\/[^;]+;base64,/, "");
@@ -1711,7 +1868,7 @@ async function uploadImageToFal(base64DataUrl) {
   }
 }
 
-// в”Ђв”Ђв”Ђ FAL RETRY в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── FAL RETRY ────────────────────────────────────────────────────────────────
 async function falWithRetry(model, input, timeoutMs, maxRetries = 3) {
   let lastError = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -1735,18 +1892,18 @@ async function falWithRetry(model, input, timeoutMs, maxRetries = 3) {
   throw lastError;
 }
 
-// в”Ђв”Ђв”Ђ РџР РћР“Р Р•РЎ Р’Р†Р”Р•Рћ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ПРОГРЕС ВІДЕО ────────────────────────────────────────────────────────────
 function startVideoProgress(ctx) {
   const iv = setInterval(() => ctx.telegram.sendChatAction(ctx.chat.id, "upload_video").catch(() => {}), 5000);
   return () => clearInterval(iv);
 }
 
-// в”Ђв”Ђв”Ђ AI РџР РћРњРў в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── AI ПРОМТ ─────────────────────────────────────────────────────────────────
 async function generateAiPrompt(imageBase64, mode) {
   const cfg = loadSettings();
   if (!cfg.aiPromptEnabled) return null;
   if (!process.env.ANTHROPIC_API_KEY) {
-    notifyAdminsError("ANTHROPIC_API_KEY РІС–РґСЃСѓС‚РЅС–Р№ вЂ” AI-РїСЂРѕРјС‚ РЅРµ РїСЂР°С†СЋС”!").catch(() => {});
+    notifyAdminsError("ANTHROPIC_API_KEY відсутній — AI-промт не працює!").catch(() => {});
     return null;
   }
   try {
@@ -1754,7 +1911,7 @@ async function generateAiPrompt(imageBase64, mode) {
     const anthropic = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const systemPrompt = mode === "video"
       ? `You are an expert at writing image-to-video animation prompts for Seedance and Kling AI models.
-Write ONE ultra-short English prompt вЂ” MAXIMUM 10 words (в‰€5 seconds to read aloud).
+Write ONE ultra-short English prompt — MAXIMUM 10 words (?5 seconds to read aloud).
 Focus on natural motion: hair, eyes, lips, wind, camera movement.
 Examples: "hair gently flowing in wind, soft bokeh" / "eyes slowly opening, cinematic close-up"
 Output ONLY the prompt. No punctuation at end. No extra words.`
@@ -1782,14 +1939,14 @@ Output ONLY the prompt text, nothing else.`;
   }
 }
 
-// в”Ђв”Ђв”Ђ WAYFORPAY в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── WAYFORPAY ────────────────────────────────────────────────────────────────
 function buildOrderReference(userId, packKey) {
   return `tg_${userId}_${packKey}_${Date.now()}`;
 }
 
 function parseOrderReference(ref) {
-  // вњ… Р¤РѕСЂРјР°С‚: tg_{userId}_{packKey}_{timestamp}
-  // packKey РјРѕР¶Рµ Р±СѓС‚Рё: promti_pack10, custom_1776681162229, photo_pack20 С– С‚.Рґ.
+  // ✅ Формат: tg_{userId}_{packKey}_{timestamp}
+  // packKey може бути: promti_pack10, custom_1776681162229, photo_pack20 і т.д.
   const m = /^tg_(\d+)_(.+)_(\d+)$/.exec(ref || "");
   if (!m) return null;
   return { userId: Number(m[1]), packKey: m[2] };
@@ -1891,15 +2048,15 @@ function updatePaymentStatus(ref, data, status) {
   savePayments();
 }
 
-// в”Ђв”Ђв”Ђ РЎР•Р“РњР•РќРўРђР¦Р†РЇ Р®Р—Р•Р Р†Р’ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── СЕГМЕНТАЦІЯ ЮЗЕРІВ ───────────────────────────────────────────────────────
 function getUserSegment(u) {
-  if ((u.totalSpent || 0) >= 500)                            return "рџђі Whale";
-  if ((u.totalSpent || 0) > 0)                               return "рџ’і Paying";
-  if ((u.generations || 0) > 0 || getUserVideoTotal(u) > 0) return "рџ”Ґ Active";
-  return "рџ†• New";
+  if ((u.totalSpent || 0) >= 500)                            return "?? Whale";
+  if ((u.totalSpent || 0) > 0)                               return "?? Paying";
+  if ((u.generations || 0) > 0 || getUserVideoTotal(u) > 0) return "?? Active";
+  return "?? New";
 }
 
-// в”Ђв”Ђв”Ђ РЎРўРђРўРРЎРўРРљРђ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── СТАТ�?СТ�?КА ───────────────────────────────────────────────────────────────
 function getBotStats() {
   const all = Object.values(users);
   const cfg = loadSettings();
@@ -1917,10 +2074,10 @@ function getBotStats() {
     activeWorkers,
     maxWorkers:       cfg.maxWorkers,
     segments: {
-      new:    all.filter(u => getUserSegment(u) === "рџ†• New").length,
-      active: all.filter(u => getUserSegment(u) === "рџ”Ґ Active").length,
-      paying: all.filter(u => getUserSegment(u) === "рџ’і Paying").length,
-      whales: all.filter(u => getUserSegment(u) === "рџђі Whale").length,
+      new:    all.filter(u => getUserSegment(u) === "?? New").length,
+      active: all.filter(u => getUserSegment(u) === "?? Active").length,
+      paying: all.filter(u => getUserSegment(u) === "?? Paying").length,
+      whales: all.filter(u => getUserSegment(u) === "?? Whale").length,
     },
     aiPromptEnabled: cfg.aiPromptEnabled,
     videoEnabled:    cfg.videoEnabled,
@@ -1930,51 +2087,51 @@ function getBotStats() {
   };
 }
 
-// в”Ђв”Ђв”Ђ РњР•РќР® в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── МЕНЮ ─────────────────────────────────────────────────────────────────────
 const BTN = {
-  PHOTO: "🖼 Фото",
-  VIDEO: "🎬 Відео",
-  TRENDING: "🎨 Трендові стилі",
-  BUY_PROMTI: "✨ Купити Promti ✨",
-  BUY_PROMTI_ALT: "✨ Купити Promti",
-  BUY_PROMTI_CARD: "💳 Купити Promti",
-  CUSTOM_AMOUNT: "💬 Своя сума",
-  BALANCE: "📊 Баланс",
-  PRICES: "💰 Ціни",
-  IDEAS: "💡 Ідея для промтів",
-  INVITE: "👫 Запросити друга",
-  INFO: "ℹ️ Інформація",
-  HELP: "❓ Допомога",
-  SUPPORT: "🆘 Підтримка",
-  EDIT_PHOTO: "🖼 Редагувати фото",
-  CREATE_PHOTO: "✨ Створити фото",
-  AI_PHOTO: "🤖 AI промт для фото",
-  AI_VIDEO: "🤖 AI промт для відео",
-  BACK: "↩️ Назад",
-  BACK_PHOTO: "↩️ Назад до фото",
-  BACK_VIDEO: "↩️ Назад до відео",
-  SEEDANCE: "🎬 Seedance",
-  KLING: "🎥 Kling",
-  AUTO_ANIM: "⚡ Авто анімація",
-  ANIM_PROMPT: "🎬 Анімація + промт",
-  VIDEO_FROM_TEXT: "🎥 Відео з тексту",
-  ADMIN_STATUS: "📊 Статус бота",
-  ADMIN_MY_ID: "👤 Мій ID",
-  ADMIN_USERS: "👥 Користувачі",
-  ADMIN_PAYMENTS: "💳 Останні оплати",
-  ADMIN_STYLE_LIB: "🎨 Бібліотека стилів",
-  ADMIN_ANALYTICS: "📈 Аналітика",
-  ADMIN_PACKAGES: "📦 Пакети",
-  ADMIN_EDIT_TEXT: "✏️ Змінити текст",
-  ADMIN_TEXTS: "📝 Поточні тексти",
-  ADMIN_ATTACH_PHOTO: "🖼 Прикріпити фото",
-  ADMIN_SETTINGS: "⚙️ Налаштування",
-  PHOTO_WELCOME: "📷 welcomePhoto",
-  PHOTO_INFO: "📷 infoPhoto",
-  PHOTO_HELP: "📷 helpPhoto",
-  PHOTO_PRICES: "📷 pricesPhoto",
-  PHOTO_IDEA: "📷 ideaPhoto",
-  PHOTO_BROADCAST: "📷 broadcastPhoto",
+  PHOTO: "?? ????",
+  VIDEO: "?? ?????",
+  TRENDING: "?? ???????? ?????",
+  BUY_PROMTI: "? ?????? Promti ?",
+  BUY_PROMTI_ALT: "? ?????? Promti",
+  BUY_PROMTI_CARD: "?? ?????? Promti",
+  CUSTOM_AMOUNT: "?? ???? ????",
+  BALANCE: "?? ??????",
+  PRICES: "?? ????",
+  IDEAS: "?? ???? ??? ???????",
+  INVITE: "?? ????????? ?????",
+  INFO: "?? ??????????",
+  HELP: "? ????????",
+  SUPPORT: "?? ?????????",
+  EDIT_PHOTO: "?? ?????????? ????",
+  CREATE_PHOTO: "? ???????? ????",
+  AI_PHOTO: "?? AI ????? ??? ????",
+  AI_VIDEO: "?? AI ????? ??? ?????",
+  BACK: "?? ?????",
+  BACK_PHOTO: "?? ????? ?? ????",
+  BACK_VIDEO: "?? ????? ?? ?????",
+  SEEDANCE: "?? Seedance",
+  KLING: "?? Kling",
+  AUTO_ANIM: "? ???? ????????",
+  ANIM_PROMPT: "?? ???????? + ?????",
+  VIDEO_FROM_TEXT: "?? ????? ? ??????",
+  ADMIN_STATUS: "?? ?????? ????",
+  ADMIN_MY_ID: "?? ??? ID",
+  ADMIN_USERS: "?? ???????????",
+  ADMIN_PAYMENTS: "?? ??????? ??????",
+  ADMIN_STYLE_LIB: "?? ?????????? ??????",
+  ADMIN_ANALYTICS: "?? ?????????",
+  ADMIN_PACKAGES: "?? ??????",
+  ADMIN_EDIT_TEXT: "?? ??????? ?????",
+  ADMIN_TEXTS: "?? ??????? ??????",
+  ADMIN_ATTACH_PHOTO: "?? ?????????? ????",
+  ADMIN_SETTINGS: "?? ????????????",
+  PHOTO_WELCOME: "?? welcomePhoto",
+  PHOTO_INFO: "?? infoPhoto",
+  PHOTO_HELP: "?? helpPhoto",
+  PHOTO_PRICES: "?? pricesPhoto",
+  PHOTO_IDEA: "?? ideaPhoto",
+  PHOTO_BROADCAST: "?? broadcastPhoto",
 };
 
 const mainMenu  = () => Markup.keyboard([
@@ -2027,11 +2184,11 @@ const adminPhotosMenu  = () => Markup.keyboard([
 ]).resize();
 
 const paymentInlineKeyboard = (payUrl, pack) => Markup.inlineKeyboard([
-  [Markup.button.url(`рџ’і РћРїР»Р°С‚РёС‚Рё ${pack.title} вЂ” ${pack.priceText}`, payUrl)],
-  [Markup.button.callback("рџ”„ РџРµСЂРµРІС–СЂРёС‚Рё РѕРїР»Р°С‚Сѓ", `checkpay_${pack.key}`)],
+  [Markup.button.url(`?? ???????? ${pack.title} ? ${pack.priceText}`, payUrl)],
+  [Markup.button.callback("?? ?????????? ??????", `checkpay_${pack.key}`)],
 ]);
 
-// в”Ђв”Ђв”Ђ START в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── START ────────────────────────────────────────────────────────────────────
 bot.start(async (ctx) => {
   ensureSession(ctx);
   const isNew = !users[ctx.from.id];
@@ -2071,10 +2228,10 @@ bot.start(async (ctx) => {
   return sendWithOptionalPhoto(ctx, content.welcomeText, content.welcomePhoto, mainMenu());
 });
 
-// в”Ђв”Ђв”Ђ РљРћРњРђРќР”Р в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── КОМАНД�? ──────────────────────────────────────────────────────────────────
 bot.command("help",  (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.helpText, content.helpPhoto, mainMenu()); });
 bot.command("info",  (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.infoText, content.infoPhoto, mainMenu()); });
-bot.command("myid",  (ctx) => { touchUser(ctx); return ctx.reply(`РўРІС–Р№ ID: ${ctx.from.id}`); });
+bot.command("myid",  (ctx) => { touchUser(ctx); return ctx.reply(`Твій ID: ${ctx.from.id}`); });
 bot.command("admin", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
@@ -2134,38 +2291,72 @@ bot.command("ref", (ctx) => {
   touchUser(ctx);
   const botUsername = ctx.botInfo?.username || "Promtiai_bot";
   const link = `https://t.me/${botUsername}?start=ref_${ctx.from.id}`;
-  return ctx.reply(`рџ”— Р РµС„РµСЂР°Р»СЊРЅРµ РїРѕСЃРёР»Р°РЅРЅСЏ:\n${link}\n\nрџЋЃ Р—Р° РєРѕР¶РЅРѕРіРѕ РґСЂСѓРіР° СЏРєРёР№ РѕРїР»Р°С‚РёС‚СЊ: +${REFERRAL_PROMTI_BONUS} Promti вњЁ\nР—Р°РїСЂРѕС€РµРЅРѕ: ${users[ctx.from.id]?.referralCount || 0}`);
+  return ctx.reply(`🔗 Реферальне посилання:\n${link}\n\n🎁 За кожного друга який оплатить: +${REFERRAL_PROMTI_BONUS} Promti ✨\nЗапрошено: ${users[ctx.from.id]?.referralCount || 0}`);
 });
 
 bot.command("stylewizard", async (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   startStyleWizard(ctx);
   return promptStyleWizardStep(ctx);
 });
 
 bot.command("importdynamic", async (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("?");
   const imported = importDynamicPromptTemplates();
-  return ctx.reply(`вњ… Р†РјРїРѕСЂС‚РѕРІР°РЅРѕ dynamic styles: ${imported}`, adminMenu());
+  return ctx.reply(`? ??????????? dynamic styles: ${imported}`, adminMenu());
+});
+
+bot.command("repair_encoding", (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("?");
+
+  const summary = runEncodingRepair();
+  prompts = loadJson(PROMPTS_PATH, DEFAULT_PROMPTS);
+  content = loadJson(CONTENT_PATH, DEFAULT_CONTENT);
+  landingContent = loadLandingContent();
+  invalidateSettingsCache();
+
+  const changed = summary.filter((item) => item.changed || item.replaced > 0);
+  if (!changed.length) return ctx.reply("? ??? ?????: ????????? ? ????????? JSON-?????? ? ?????.", adminMenu());
+
+  const summaryText = changed.map((item) => {
+    const details = item.reset ? "??????? ?? ?????? ????????" : `???????? ${item.replaced} ??????`;
+    return `? ${item.file}: ${details}`;
+  }).join("\n");
+
+  return ctx.reply("?? ?????? ????????? ?????????:\n\n" + summaryText, adminMenu());
+});
+
+bot.command("reset_content_clean", (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("?");
+
+  const summary = runEncodingRepair({ forceDefaults: true });
+  prompts = loadJson(PROMPTS_PATH, DEFAULT_PROMPTS);
+  content = loadJson(CONTENT_PATH, DEFAULT_CONTENT);
+  landingContent = loadLandingContent();
+  invalidateSettingsCache();
+
+  return ctx.reply("?? ???????? ????? ???????????? ??????? UTF-8 ?????????:\n\n" + summary.map((item) => `? ${item.file}`).join("\n"), adminMenu());
 });
 
 bot.command("addprompt", async (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
 
   const raw = ctx.message.text.replace(/^\/addprompt(@\w+)?\s*/i, "");
   const parts = raw.split("|").map(part => part.trim());
-  if (parts.length < 4) return ctx.reply("Р¤РѕСЂРјР°С‚: /addprompt KEY | CATEGORY | TITLE | PROMPT");
+  if (parts.length < 4) return ctx.reply("Формат: /addprompt KEY | CATEGORY | TITLE | PROMPT");
 
   const [rawKey, category, title, ...promptParts] = parts;
   const key = normalizePromptKey(rawKey);
   const prompt = promptParts.join(" | ").trim();
 
-  if (!key) return ctx.reply("вќЊ РќРµРєРѕСЂРµРєС‚РЅРёР№ KEY. Р”РѕР·РІРѕР»РµРЅС– СЃРёРјРІРѕР»Рё: a-z, 0-9, _ С‚Р° -");
-  if (!category || !title || !prompt) return ctx.reply("вќЊ РЈСЃС– РїРѕР»СЏ РѕР±РѕРІ'СЏР·РєРѕРІС–.");
-  if (getPromptStyle(key)) return ctx.reply(`вќЊ РЎС‚РёР»СЊ Р· key "${key}" РІР¶Рµ С–СЃРЅСѓС”.`);
+  if (!key) return ctx.reply("❌ Некоректний KEY. Дозволені символи: a-z, 0-9, _ та -");
+  if (!category || !title || !prompt) return ctx.reply("❌ Усі поля обов'язкові.");
+  if (getPromptStyle(key)) return ctx.reply(`❌ Стиль з key "${key}" вже існує.`);
 
   ensurePromptLibrary();
   if (!content.promptCategories[category]) {
@@ -2195,25 +2386,25 @@ bot.command("addprompt", async (ctx) => {
   ctx.session.awaitingPromptPreviewKey = key;
 
   return ctx.reply(
-    `вњ… РЎС‚РёР»СЊ СЃС‚РІРѕСЂРµРЅРѕ\n\n` +
+    `✅ Стиль створено\n\n` +
     `KEY: ${key}\n` +
-    `РљР°С‚РµРіРѕСЂС–СЏ: ${category}\n` +
-    `РќР°Р·РІР°: ${title}\n\n` +
+    `Категорія: ${category}\n` +
+    `Назва: ${title}\n\n` +
     `Deep-link:\n${deepLink}\n\n` +
-    `РњРѕР¶РµС€ РѕРґСЂР°Р·Сѓ РЅР°РґС–СЃР»Р°С‚Рё preview-С„РѕС‚Рѕ РґР»СЏ С†СЊРѕРіРѕ СЃС‚РёР»СЋ Р°Р±Рѕ Р·СЂРѕР±РёС‚Рё С†Рµ РїС–Р·РЅС–С€Рµ С‡РµСЂРµР· /setpromptpreview ${key}`
+    `Можеш одразу надіслати preview-фото для цього стилю або зробити це пізніше через /setpromptpreview ${key}`
   );
 });
 
 bot.command("prompts", async (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
 
   const items = getSortedPromptStyles();
-  if (!items.length) return ctx.reply("Р‘С–Р±Р»С–РѕС‚РµРєР° СЃС‚РёР»С–РІ РїРѕСЂРѕР¶РЅСЏ.");
+  if (!items.length) return ctx.reply("Бібліотека стилів порожня.");
 
   const botUsername = await resolveBotUsername(ctx);
   const text = items.map(style =>
-    `${style.isTrending ? "рџ”Ґ " : ""}${style.title}\n` +
+    `${style.isTrending ? "🔥 " : ""}${style.title}\n` +
     `key: ${style.key}\n` +
     `category: ${style.category}\n` +
     `deep-link: ${getPromptDeepLink(botUsername, style.key)}`
@@ -2224,20 +2415,20 @@ bot.command("prompts", async (ctx) => {
 
 bot.command("delprompt", (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
 
   const key = normalizePromptKey(ctx.message.text.replace(/^\/delprompt(@\w+)?\s*/i, ""));
-  if (!key) return ctx.reply("Р¤РѕСЂРјР°С‚: /delprompt KEY");
-  if (!getPromptStyle(key)) return ctx.reply(`вќЊ РЎС‚РёР»СЊ "${key}" РЅРµ Р·РЅР°Р№РґРµРЅРѕ.`);
+  if (!key) return ctx.reply("Формат: /delprompt KEY");
+  if (!getPromptStyle(key)) return ctx.reply(`❌ Стиль "${key}" не знайдено.`);
 
   delete content.promptLibrary[key];
   saveContent();
-  return ctx.reply(`вњ… РЎС‚РёР»СЊ "${key}" РІРёРґР°Р»РµРЅРѕ.`);
+  return ctx.reply(`✅ Стиль "${key}" видалено.`);
 });
 
 bot.command("topprompts", (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
 
   const sortBy = (ctx.message.text.split(/\s+/)[1] || "purchases").toLowerCase();
   const metric = ["clicks", "generations", "purchases"].includes(sortBy) ? sortBy : "purchases";
@@ -2245,7 +2436,7 @@ bot.command("topprompts", (ctx) => {
     .sort((a, b) => Number(b[metric] || 0) - Number(a[metric] || 0))
     .slice(0, 10);
 
-  if (!items.length) return ctx.reply("Р‘С–Р±Р»С–РѕС‚РµРєР° СЃС‚РёР»С–РІ РїРѕСЂРѕР¶РЅСЏ.");
+  if (!items.length) return ctx.reply("Бібліотека стилів порожня.");
 
   const text = items.map((style, index) =>
     `${index + 1}. ${style.title} (${style.key})\n` +
@@ -2254,82 +2445,82 @@ bot.command("topprompts", (ctx) => {
     `Purchase conversion: ${formatConversion(style.purchases, style.clicks)}`
   ).join("\n\n");
 
-  return replyLongText(ctx, `рџЏ† РўРѕРї СЃС‚РёР»С–РІ Р·Р° ${metric}\n\n${text}`);
+  return replyLongText(ctx, `🏆 Топ стилів за ${metric}\n\n${text}`);
 });
 
 bot.command("trendprompt", (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
 
   const [, rawKey, rawValue] = ctx.message.text.split(/\s+/);
   const key = normalizePromptKey(rawKey);
   const style = getPromptStyle(key);
-  if (!style) return ctx.reply(`вќЊ РЎС‚РёР»СЊ "${key}" РЅРµ Р·РЅР°Р№РґРµРЅРѕ.`);
+  if (!style) return ctx.reply(`❌ Стиль "${key}" не знайдено.`);
   if (!["on", "off"].includes((rawValue || "").toLowerCase())) {
-    return ctx.reply("Р¤РѕСЂРјР°С‚: /trendprompt KEY on|off");
+    return ctx.reply("Формат: /trendprompt KEY on|off");
   }
 
   style.isTrending = rawValue.toLowerCase() === "on";
   content.promptLibrary[key] = style;
   saveContent();
-  return ctx.reply(`вњ… Р”Р»СЏ СЃС‚РёР»СЋ "${key}" С‚СЂРµРЅРґ-СЃС‚Р°С‚СѓСЃ: ${style.isTrending ? "ON" : "OFF"}`);
+  return ctx.reply(`✅ Для стилю "${key}" тренд-статус: ${style.isTrending ? "ON" : "OFF"}`);
 });
 
 bot.command("setpromptpreview", (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
 
   const key = normalizePromptKey(ctx.message.text.replace(/^\/setpromptpreview(@\w+)?\s*/i, ""));
   const style = getPromptStyle(key);
-  if (!style) return ctx.reply(`вќЊ РЎС‚РёР»СЊ "${key}" РЅРµ Р·РЅР°Р№РґРµРЅРѕ.`);
+  if (!style) return ctx.reply(`❌ Стиль "${key}" не знайдено.`);
 
   ctx.session.awaitingPromptPreviewKey = key;
   return ctx.reply(
-    `рџ–ј РќР°РґС–С€Р»Рё preview-С„РѕС‚Рѕ РґР»СЏ СЃС‚РёР»СЋ "${key}".\n` +
-    `РђР±Рѕ РЅР°РїРёС€Рё "РІРёРґР°Р»РёС‚Рё", С‰РѕР± РїСЂРёР±СЂР°С‚Рё РїРѕС‚РѕС‡РЅРµ preview.`
+    `🖼 Надішли preview-фото для стилю "${key}".\n` +
+    `Або напиши "видалити", щоб прибрати поточне preview.`
   );
 });
 
 bot.command("setpromptexamples", (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
 
   const key = normalizePromptKey(ctx.message.text.replace(/^\/setpromptexamples(@\w+)?\s*/i, ""));
   const style = getPromptStyle(key);
-  if (!style) return ctx.reply(`вќЊ РЎС‚РёР»СЊ "${key}" РЅРµ Р·РЅР°Р№РґРµРЅРѕ.`);
+  if (!style) return ctx.reply(`❌ Стиль "${key}" не знайдено.`);
 
   ctx.session.awaitingPromptExamplesKey = key;
   return ctx.reply(
-    `РќР°РґС–С€Р»Рё РґРѕ ${MAX_PROMPT_EXAMPLE_PHOTOS} С„РѕС‚Рѕ РґР»СЏ СЃС‚РёР»СЋ "${key}".\n` +
-    `РќР°РїРёС€Рё "РіРѕС‚РѕРІРѕ" С‰РѕР± Р·Р°РІРµСЂС€РёС‚Рё Р°Р±Рѕ "РІРёРґР°Р»РёС‚Рё" С‰РѕР± РѕС‡РёСЃС‚РёС‚Рё РІСЃС– РїСЂРёРєР»Р°РґРё.`
+    `Надішли до ${MAX_PROMPT_EXAMPLE_PHOTOS} фото для стилю "${key}".\n` +
+    `Напиши "готово" щоб завершити або "видалити" щоб очистити всі приклади.`
   );
 });
 
 bot.command("addpromti", async (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const [, id, amt] = ctx.message.text.split(/\s+/);
-  if (!id || !amt) return ctx.reply("Р¤РѕСЂРјР°С‚: /addpromti ID РљР†Р›Р¬РљР†РЎРўР¬");
+  if (!id || !amt) return ctx.reply("Формат: /addpromti ID КІЛЬКІСТЬ");
   const user = getUser(Number(id));
   user.promti = (user.promti || 0) + Number(amt);
   saveUsersSync();
-  await ctx.reply(`вњ… +${amt} Promti вњЁ в†’ user ${id}. Р‘Р°Р»Р°РЅСЃ: ${user.promti} Promti вњЁ`);
-  bot.telegram.sendMessage(Number(id), `рџЋ‰ +${amt} Promti вњЁ РЅР° Р±Р°Р»Р°РЅСЃ!\nР‘Р°Р»Р°РЅСЃ: ${user.promti} Promti вњЁ`, mainMenu()).catch(() => {});
+  await ctx.reply(`✅ +${amt} Promti ✨ ? user ${id}. Баланс: ${user.promti} Promti ✨`);
+  bot.telegram.sendMessage(Number(id), `🎉 +${amt} Promti ✨ на баланс!\nБаланс: ${user.promti} Promti ✨`, mainMenu()).catch(() => {});
 });
 
 bot.command("reset_packages", (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   dynamicPackages = JSON.parse(JSON.stringify(DEFAULT_PACKAGES));
   saveDynamicPackages();
   const list = Object.keys(dynamicPackages).join("\n");
-  return ctx.reply(`вњ… РџР°РєРµС‚Рё СЃРєРёРЅСѓС‚Рѕ РґРѕ РґРµС„РѕР»С‚РЅРёС…:\n\n${list}`);
+  return ctx.reply(`✅ Пакети скинуто до дефолтних:\n\n${list}`);
 });
 
 bot.command("delete_user", (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const id = Number(ctx.message.text.split(/\s+/)[1]);
-  if (!id) return ctx.reply("Р¤РѕСЂРјР°С‚: /delete_user ID");
-  if (!users[id]) return ctx.reply("РќРµ Р·РЅР°Р№РґРµРЅРѕ");
+  if (!id) return ctx.reply("Формат: /delete_user ID");
+  if (!users[id]) return ctx.reply("Не знайдено");
 
   const u = users[id];
   delete users[id];
@@ -2341,56 +2532,56 @@ bot.command("delete_user", (ctx) => {
   savePayments();
 
   return ctx.reply(
-    `вњ… Р’РёРґР°Р»РµРЅРѕ:\nUser ${id} (@${u.username || "-"})\nРџР»Р°С‚РµР¶С–РІ: ${before - payments.length}\nР’РёС‚СЂР°С‡РµРЅРѕ Р±СѓР»Рѕ: ${u.totalSpent || 0} РіСЂРЅ`
+    `✅ Видалено:\nUser ${id} (@${u.username || "-"})\nПлатежів: ${before - payments.length}\nВитрачено було: ${u.totalSpent || 0} грн`
   );
 });
 
 bot.command("userinfo", (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const id = Number(ctx.message.text.split(/\s+/)[1]);
-  if (!id) return ctx.reply("Р¤РѕСЂРјР°С‚: /userinfo ID");
+  if (!id) return ctx.reply("Формат: /userinfo ID");
   const u = users[id];
-  if (!u) return ctx.reply("РљРѕСЂРёСЃС‚СѓРІР°С‡Р° РЅРµ Р·РЅР°Р№РґРµРЅРѕ");
+  if (!u) return ctx.reply("Користувача не знайдено");
   const cfg = loadSettings();
   return ctx.reply(
-    `рџ‘¤ ID: ${u.id} ${getUserSegment(u)}\n@${u.username || "-"} | ${u.firstName || "-"}\n\n` +
-    `рџ’Ћ Р‘Р°Р»Р°РЅСЃ Promti вњЁ: ${u.promti || 0}\n\n` +
-    `вљЎ Р¤РѕС‚Рѕ: ${u.generations || 0}\nрџЋ¬ Seedance: ${u.seedanceGenerations || 0}\nрџЋҐ Kling: ${u.klingGenerations || 0}\n\n` +
-    `рџ’° Р’РёС‚СЂР°С‡РµРЅРѕ: ${u.totalSpent || 0} РіСЂРЅ\nрџ‘« Р РµС„РµСЂР°Р»С–РІ: ${u.referralCount || 0}\n` +
-    `рџљ« Р‘Р°РЅ: ${u.banned ? "С‚Р°Рє" : "РЅС–"}\nрџ“… Р—: ${(u.createdAt || "").slice(0, 10)}\n\n` +
-    `рџ“Љ РЎСЊРѕРіРѕРґРЅС– Seedance: ${u.dailySeedanceCount || 0}/${cfg.dailySeedanceLimit}\n` +
-    `рџ“Љ РЎСЊРѕРіРѕРґРЅС– Kling: ${u.dailyKlingCount || 0}/${cfg.dailyKlingLimit}`
+    `👤 ID: ${u.id} ${getUserSegment(u)}\n@${u.username || "-"} | ${u.firstName || "-"}\n\n` +
+    `💎 Баланс Promti ✨: ${u.promti || 0}\n\n` +
+    `⚡ Фото: ${u.generations || 0}\n🎬 Seedance: ${u.seedanceGenerations || 0}\n🎥 Kling: ${u.klingGenerations || 0}\n\n` +
+    `💰 Витрачено: ${u.totalSpent || 0} грн\n👫 Рефералів: ${u.referralCount || 0}\n` +
+    `🚫 Бан: ${u.banned ? "так" : "ні"}\n📅 З: ${(u.createdAt || "").slice(0, 10)}\n\n` +
+    `📊 Сьогодні Seedance: ${u.dailySeedanceCount || 0}/${cfg.dailySeedanceLimit}\n` +
+    `📊 Сьогодні Kling: ${u.dailyKlingCount || 0}/${cfg.dailyKlingLimit}`
   );
 });
 
 bot.command("ban", async (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const id = Number(ctx.message.text.split(/\s+/)[1]);
-  if (!id) return ctx.reply("Р¤РѕСЂРјР°С‚: /ban ID");
+  if (!id) return ctx.reply("Формат: /ban ID");
   const user = getUser(id); user.banned = true; saveUsersSync();
-  await ctx.reply(`рџљ« User ${id} Р·Р°Р±Р»РѕРєРѕРІР°РЅРёР№`);
-  bot.telegram.sendMessage(id, "рџљ« Р’Р°С€ Р°РєР°СѓРЅС‚ Р·Р°Р±Р»РѕРєРѕРІР°РЅРёР№. РќР°РїРёС€С–С‚СЊ РІ РїС–РґС‚СЂРёРјРєСѓ.").catch(() => {});
+  await ctx.reply(`🚫 User ${id} заблокований`);
+  bot.telegram.sendMessage(id, "🚫 Ваш акаунт заблокований. Напишіть в підтримку.").catch(() => {});
 });
 
 bot.command("unban", async (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const id = Number(ctx.message.text.split(/\s+/)[1]);
-  if (!id) return ctx.reply("Р¤РѕСЂРјР°С‚: /unban ID");
+  if (!id) return ctx.reply("Формат: /unban ID");
   const user = getUser(id); user.banned = false; saveUsersSync();
-  await ctx.reply(`вњ… User ${id} СЂРѕР·Р±Р»РѕРєРѕРІР°РЅРёР№`);
-  bot.telegram.sendMessage(id, "вњ… Р’Р°С€ Р°РєР°СѓРЅС‚ СЂРѕР·Р±Р»РѕРєРѕРІР°РЅРѕ. РњРѕР¶РµС‚Рµ РїСЂРѕРґРѕРІР¶СѓРІР°С‚Рё.", mainMenu()).catch(() => {});
+  await ctx.reply(`✅ User ${id} розблокований`);
+  bot.telegram.sendMessage(id, "✅ Ваш акаунт розблоковано. Можете продовжувати.", mainMenu()).catch(() => {});
 });
 
 bot.command("broadcast", async (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const text = ctx.message.text.replace("/broadcast", "").trim();
-  if (!text) return ctx.reply("Р¤РѕСЂРјР°С‚: /broadcast РўРµРєСЃС‚\n\nРЇРєС‰Рѕ РїСЂРёРєСЂС–РїР»РµРЅРѕ рџ“· broadcastPhoto вЂ” РЅР°РґС–С€Р»РµС‚СЊСЃСЏ Р· С„РѕС‚Рѕ.");
+  if (!text) return ctx.reply("Формат: /broadcast Текст\n\nЯкщо прикріплено 📷 broadcastPhoto — надішлеться з фото.");
 
   const all = Object.values(users).filter(u => !u.banned);
   let sent = 0, failed = 0;
   const photoId = content.broadcastPhoto || null;
-  await ctx.reply(`вЏі РќР°РґСЃРёР»Р°СЋ ${all.length} РєРѕСЂРёСЃС‚СѓРІР°С‡Р°Рј${photoId ? " (Р· С„РѕС‚Рѕ)" : ""}...`);
+  await ctx.reply(`? Надсилаю ${all.length} користувачам${photoId ? " (з фото)" : ""}...`);
 
   const BATCH_SIZE  = 25;
   const BATCH_DELAY = 1500;
@@ -2418,18 +2609,18 @@ bot.command("broadcast", async (ctx) => {
     await new Promise(r => setTimeout(r, MSG_DELAY));
 
     if ((i + 1) % BATCH_SIZE === 0) {
-      await ctx.reply(`вЏі РќР°РґС–СЃР»Р°РЅРѕ ${sent}/${all.length}...`);
+      await ctx.reply(`? Надіслано ${sent}/${all.length}...`);
       await new Promise(r => setTimeout(r, BATCH_DELAY));
     }
   }
 
-  return ctx.reply(`вњ… Broadcast Р·Р°РІРµСЂС€РµРЅРѕ!\nРќР°РґС–СЃР»Р°РЅРѕ: ${sent}\nРџРѕРјРёР»РѕРє: ${failed}`);
+  return ctx.reply(`✅ Broadcast завершено!\nНадіслано: ${sent}\nПомилок: ${failed}`);
 });
 
-// в”Ђв”Ђв”Ђ РђР”РњР†Рќ: РљР•Р РЈР’РђРќРќРЇ РџРђРљР•РўРђРњР в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── АДМІН: КЕРУВАННЯ ПАКЕТАМ�? ────────────────────────────────────────────────
 
 bot.command("analytics", (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
 
   const all = Object.values(users);
   const paid = payments.filter(p => p.status === "credited");
@@ -2441,7 +2632,7 @@ bot.command("analytics", (ctx) => {
   const topPacks = Object.entries(packCount)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([key, cnt]) => `  ${key}: ${cnt} СЂР°Р·С–РІ`)
+    .map(([key, cnt]) => `  ${key}: ${cnt} разів`)
     .join("\n");
 
   const now = Date.now();
@@ -2456,7 +2647,7 @@ bot.command("analytics", (ctx) => {
     if (revenueByDay[d] !== undefined) revenueByDay[d] += Number(p.amount || 0);
   });
   const revenueChart = Object.entries(revenueByDay)
-    .map(([d, amt]) => `  ${d.slice(5)}: ${amt} РіСЂРЅ`)
+    .map(([d, amt]) => `  ${d.slice(5)}: ${amt} грн`)
     .join("\n");
 
   const totalUsers   = all.length;
@@ -2479,155 +2670,160 @@ bot.command("analytics", (ctx) => {
   }).length;
 
   return ctx.reply(
-    `рџ“Љ РђРЅР°Р»С–С‚РёРєР°\n\n` +
-    `рџ‘Ґ Р®Р·РµСЂРё: ${totalUsers} РІСЃСЊРѕРіРѕ\n` +
-    `  рџ”Ґ РђРєС‚РёРІРЅРёС…: ${activeUsers}\n` +
-    `  рџ’і РџР»Р°С‚РЅРёС…: ${payingUsers}\n` +
-    `  рџ¶ РЎРїСЂРѕР±СѓРІР°Р»Рё С– РїС–С€Р»Рё: ${triedNoPayment}\n\n` +
-    `рџ’° РљРѕРЅРІРµСЂСЃС–СЏ:\n` +
-    `  Р’СЃС–в†’РїР»Р°С‚РЅС–: ${conversion}%\n` +
-    `  РђРєС‚РёРІРЅС–в†’РїР»Р°С‚РЅС–: ${actConversion}%\n\n` +
-    `рџ’µ Р¤С–РЅР°РЅСЃРё:\n` +
-    `  Р’СЃСЊРѕРіРѕ: ${totalRevenue} РіСЂРЅ\n` +
-    `  РЎРµСЂРµРґРЅС–Р№ С‡РµРє: ${avgCheck} РіСЂРЅ\n` +
-    `  РџРѕРІС‚РѕСЂРЅС– РїРѕРєСѓРїРєРё: ${repeatBuyers} СЋР·РµСЂС–РІ\n\n` +
-    `рџ“¦ РўРѕРї РїР°РєРµС‚Рё:\n${topPacks || "  РЅРµРјР°С” РґР°РЅРёС…"}\n\n` +
-    `рџ“… Р’РёСЂСѓС‡РєР° (7 РґРЅС–РІ):\n${revenueChart}`
+    `📊 Аналітика\n\n` +
+    `👥 Юзери: ${totalUsers} всього\n` +
+    `  🔥 Активних: ${activeUsers}\n` +
+    `  💳 Платних: ${payingUsers}\n` +
+    `  ?? ?????????? ? ?????: ${triedNoPayment}
+
+` +
+    `💰 Конверсія:\n` +
+    `  Всі→платні: ${conversion}%\n` +
+    `  Активні→платні: ${actConversion}%\n\n` +
+    `💵 Фінанси:\n` +
+    `  Всього: ${totalRevenue} грн\n` +
+    `  Середній чек: ${avgCheck} грн\n` +
+    `  Повторні покупки: ${repeatBuyers} юзерів\n\n` +
+    `📦 Топ пакети:\n${topPacks || "  немає даних"}\n\n` +
+    `📅 Виручка (7 днів):\n${revenueChart}`
   );
 });
 
 bot.command("packages", (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const pkgs = getPackages();
   const text = Object.values(pkgs).map(p =>
-    `${p.key}\n  рџ’° ${p.amount} РіСЂРЅ | ${p.promti || p.count || 0} вњЁ | ${p.type}${p.model ? " / " + p.model : ""}`
+    `${p.key}\n  💰 ${p.amount} грн | ${p.promti || p.count || 0} ✨ | ${p.type}${p.model ? " / " + p.model : ""}`
   ).join("\n\n");
   return ctx.reply(
-    `рџ“¦ Р’СЃС– РїР°РєРµС‚Рё:\n\n${text}\n\n` +
-    `Р—РјС–РЅРёС‚Рё С†С–РЅСѓ:\n/setprice promti_pack10 120\n\n` +
-    `Р”РѕРґР°С‚Рё РїР°РєРµС‚:\n/addpackage KEY promti 15 1199 15 Promti\n\n` +
-    `РџРѕСЃРёР»Р°РЅРЅСЏ:\n/setlink support_link https://t.me/support`
+    `📦 Всі пакети:\n\n${text}\n\n` +
+    `Змінити ціну:\n/setprice promti_pack10 120\n\n` +
+    `Додати пакет:\n/addpackage KEY promti 15 1199 15 Promti\n\n` +
+    `Посилання:\n/setlink support_link https://t.me/support`
   );
 });
 
 bot.command("setprice", async (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const parts = ctx.message.text.split(/\s+/);
-  if (parts.length < 3) return ctx.reply("Р¤РѕСЂРјР°С‚: /setprice РљР›Р®Р§_РџРђРљР•РўРЈ Р¦Р†РќРђ\n\nРџСЂРёРєР»Р°Рґ: /setprice promti_pack10 120");
+  if (parts.length < 3) return ctx.reply("Формат: /setprice КЛЮЧ_ПАКЕТУ ЦІНА\n\nПриклад: /setprice promti_pack10 120");
   const packKey = parts[1];
   const amount  = Number(parts[2]);
-  if (!getPackages()[packKey]) return ctx.reply(`вќЊ РџР°РєРµС‚ "${packKey}" РЅРµ Р·РЅР°Р№РґРµРЅРѕ.\n\nР”РѕСЃС‚СѓРїРЅС– РєР»СЋС‡С–:\n${Object.keys(getPackages()).join("\n")}`);
-  if (isNaN(amount) || amount <= 0) return ctx.reply("вќЊ Р¦С–РЅР° РјР°С” Р±СѓС‚Рё С‡РёСЃР»РѕРј Р±С–Р»СЊС€Рµ 0");
+  if (!getPackages()[packKey]) return ctx.reply(`❌ Пакет "${packKey}" не знайдено.\n\nДоступні ключі:\n${Object.keys(getPackages()).join("\n")}`);
+  if (isNaN(amount) || amount <= 0) return ctx.reply("❌ Ціна має бути числом більше 0");
   dynamicPackages[packKey].amount    = amount;
-  dynamicPackages[packKey].priceText = `${amount} РіСЂРЅ`;
+  dynamicPackages[packKey].priceText = `${amount} грн`;
   saveDynamicPackages();
-  return ctx.reply(`вњ… Р¦С–РЅР° "${packKey}" РѕРЅРѕРІР»РµРЅР°: ${amount} РіСЂРЅ`);
+  return ctx.reply(`✅ Ціна "${packKey}" оновлена: ${amount} грн`);
 });
 
 bot.command("addpackage", async (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const text  = ctx.message.text.replace("/addpackage", "").trim();
   const parts = text.split(/\s+/);
   if (parts.length < 5) {
     return ctx.reply(
-      "Р¤РѕСЂРјР°С‚: /addpackage РљР›Р®Р§ РўРРџ РљР†Р›Р¬РљР†РЎРўР¬ Р¦Р†РќРђ РќРђР—Р’Рђ\n\n" +
-      "РџСЂРёРєР»Р°Рґ: /addpackage promti_pack200 promti 200 1299 200 Promti"
+      "Формат: /addpackage КЛЮЧ ??П КІЛЬКІСТЬ ЦІНА НАЗВА\n\n" +
+      "Приклад: /addpackage promti_pack200 promti 200 1299 200 Promti"
     );
   }
   const [key, type, countStr, amountStr, ...titleParts] = parts;
   const count  = Number(countStr);
   const amount = Number(amountStr);
   const title  = titleParts.join(" ");
-  if (isNaN(count)  || count  <= 0) return ctx.reply("вќЊ РљС–Р»СЊРєС–СЃС‚СЊ РјР°С” Р±СѓС‚Рё С‡РёСЃР»РѕРј > 0");
-  if (isNaN(amount) || amount <= 0) return ctx.reply("вќЊ Р¦С–РЅР° РјР°С” Р±СѓС‚Рё С‡РёСЃР»РѕРј > 0");
-  if (getPackages()[key]) return ctx.reply(`вќЊ РџР°РєРµС‚ "${key}" РІР¶Рµ С–СЃРЅСѓС”. Р”Р»СЏ Р·РјС–РЅРё С†С–РЅРё: /setprice ${key} Р¦Р†РќРђ`);
-  dynamicPackages[key] = { key, type, title, promti: count, amount, priceText: `${amount} РіСЂРЅ` };
+  if (isNaN(count)  || count  <= 0) return ctx.reply("❌ Кількість має бути числом > 0");
+  if (isNaN(amount) || amount <= 0) return ctx.reply("❌ Ціна має бути числом > 0");
+  if (getPackages()[key]) return ctx.reply(`❌ Пакет "${key}" вже існує. Для зміни ціни: /setprice ${key} ЦІНА`);
+  dynamicPackages[key] = { key, type, title, promti: count, amount, priceText: `${amount} грн` };
   saveDynamicPackages();
-  return ctx.reply(`вњ… РџР°РєРµС‚ РґРѕРґР°РЅРѕ!\n\nРљР»СЋС‡: ${key}\nРќР°Р·РІР°: ${title}\nРўРёРї: ${type}\nРљС–Р»СЊРєС–СЃС‚СЊ: ${count} вњЁ\nР¦С–РЅР°: ${amount} РіСЂРЅ`);
+  return ctx.reply(`✅ Пакет додано!\n\nКлюч: ${key}\nНазва: ${title}\nТип: ${type}\nКількість: ${count} ✨\nЦіна: ${amount} грн`);
 });
 
 bot.command("setlink", async (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const text  = ctx.message.text.replace("/setlink", "").trim();
   const parts = text.split(/\s+/);
-  if (parts.length < 2) return ctx.reply("Р¤РѕСЂРјР°С‚: /setlink РљР›Р®Р§ URL\n\nРџСЂРёРєР»Р°Рґ: /setlink support_link https://t.me/support");
+  if (parts.length < 2) return ctx.reply("Формат: /setlink КЛЮЧ URL\n\nПриклад: /setlink support_link https://t.me/support");
   const key = parts[0];
   const url  = parts[1];
-  if (!url.startsWith("http")) return ctx.reply("вќЊ URL РјР°С” РїРѕС‡РёРЅР°С‚РёСЃСЊ Р· http:// Р°Р±Рѕ https://");
+  if (!url.startsWith("http")) return ctx.reply("❌ URL має починатись з http:// або https://");
   content[key] = url;
   saveContent();
-  return ctx.reply(`вњ… РџРѕСЃРёР»Р°РЅРЅСЏ "${key}" Р·Р±РµСЂРµР¶РµРЅРѕ:\n${url}`);
+  return ctx.reply(`✅ Посилання "${key}" збережено:\n${url}`);
 });
 
-// в”Ђв”Ђв”Ђ РђР”РњР†Рќ РҐР•РќР”Р›Р•Р Р в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── АДМІН ХЕНДЛЕР�? ───────────────────────────────────────────────────────────
 bot.hears(BTN.ADMIN_STATUS, (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const s = getBotStats();
   return ctx.reply(
-    `рџ¤– РЎС‚Р°С‚СѓСЃ Р±РѕС‚Р°\n\n` +
-    `${s.hasFalKey       ? "вњ…" : "вќЊ"} FAL_KEY\n` +
-    `${s.hasWfp          ? "вњ…" : "вќЊ"} WayForPay\n` +
-    `${s.hasAnthropicKey ? "вњ…" : "вќЊ"} Anthropic (AI РїСЂРѕРјС‚)\n` +
-    `${s.aiPromptEnabled ? "вњ…" : "вЏё"} AI РїСЂРѕРјС‚: ${s.aiPromptEnabled ? "СѓРІС–РјРєРЅРµРЅРѕ" : "РІРёРјРєРЅРµРЅРѕ"}\n` +
-    `${s.videoEnabled    ? "вњ…" : "вЏё"} Р’С–РґРµРѕ: ${s.videoEnabled ? "СѓРІС–РјРєРЅРµРЅРѕ" : "РІРёРјРєРЅРµРЅРѕ"}\n\n` +
-    `вљ™пёЏ Р§РµСЂРіР°: ${s.activeWorkers}/${s.maxWorkers} РІРѕСЂРєРµСЂС–РІ | ${s.queueLength} РІ С‡РµСЂР·С–\n\n` +
-    `рџ“Љ РЎС‚Р°С‚РёСЃС‚РёРєР°:\n` +
-    `рџ‘Ґ РљРѕСЂРёСЃС‚СѓРІР°С‡С–РІ: ${s.totalUsers} (рџљ«${s.bannedUsers} Р·Р°Р±Р°РЅРµРЅРѕ)\n` +
-    `рџ†• New: ${s.segments.new} | рџ”Ґ Active: ${s.segments.active} | рџ’і Paying: ${s.segments.paying} | рџђі Whale: ${s.segments.whales}\n` +
-    `рџ–ј Р¤РѕС‚Рѕ: ${s.totalPhotoGen}\n` +
-    `рџЋ¬ Seedance: ${s.totalSeedanceGen}\n` +
-    `рџЋҐ Kling: ${s.totalKlingGen}\n` +
-    `рџ‘« Р РµС„РµСЂР°Р»С–РІ: ${s.totalReferrals}\n` +
-    `рџ’° Р—Р°СЂРѕР±Р»РµРЅРѕ: ${s.totalRevenue} РіСЂРЅ\n` +
-    `рџ§ѕ РћРїР»Р°С‚: ${s.totalPaidOrders}`,
+    `🤖 Статус бота\n\n` +
+    `${s.hasFalKey       ? "✅" : "❌"} FAL_KEY\n` +
+    `${s.hasWfp          ? "✅" : "❌"} WayForPay\n` +
+    `${s.hasAnthropicKey ? "✅" : "❌"} Anthropic (AI промт)\n` +
+    `${s.aiPromptEnabled ? "✅" : "?"} AI промт: ${s.aiPromptEnabled ? "увімкнено" : "вимкнено"}\n` +
+    `${s.videoEnabled    ? "✅" : "?"} Відео: ${s.videoEnabled ? "увімкнено" : "вимкнено"}\n\n` +
+    `?? ?????: ${s.activeWorkers}/${s.maxWorkers} ???????? | ${s.queueLength} ? ?????
+
+` +
+    `📊 Статистика:\n` +
+    `👥 Користувачів: ${s.totalUsers} (🚫${s.bannedUsers} забанено)\n` +
+    `?? New: ${s.segments.new} | ?? Active: ${s.segments.active} | ?? Paying: ${s.segments.paying} | ?? Whale: ${s.segments.whales}
+` +
+    `🖼 Фото: ${s.totalPhotoGen}\n` +
+    `🎬 Seedance: ${s.totalSeedanceGen}\n` +
+    `🎥 Kling: ${s.totalKlingGen}\n` +
+    `👫 Рефералів: ${s.totalReferrals}\n` +
+    `💰 Зароблено: ${s.totalRevenue} грн\n` +
+    `🧾 Оплат: ${s.totalPaidOrders}`,
     adminMenu()
   );
 });
 
-bot.hears(BTN.ADMIN_MY_ID, (ctx) => { touchUser(ctx); if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ"); return ctx.reply(`РўРІС–Р№ ID: ${ctx.from.id}`, adminMenu()); });
+bot.hears(BTN.ADMIN_MY_ID, (ctx) => { touchUser(ctx); if (!isAdmin(ctx.from.id)) return ctx.reply("❌"); return ctx.reply(`Твій ID: ${ctx.from.id}`, adminMenu()); });
 
 bot.hears(BTN.ADMIN_USERS, (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const all = Object.values(users);
-  if (!all.length) return ctx.reply("РќРµРјР°С”", adminMenu());
+  if (!all.length) return ctx.reply("Немає", adminMenu());
   const text = all.slice(-15).reverse().map(u =>
-    `${u.banned ? "рџљ« " : ""}ID: ${u.id} @${u.username || "-"}\n` +
-    `вњЁ ${u.promti || 0} Promti вњЁ | рџ’° ${u.totalSpent || 0}РіСЂРЅ\n` +
-    `вљЎ ${u.generations || 0}С„ ${u.seedanceGenerations || 0}s ${u.klingGenerations || 0}k | рџ‘« ${u.referralCount || 0}\n` +
-    `рџ“… ${(u.createdAt || "").slice(0, 10)}`
+    `${u.banned ? "🚫 " : ""}ID: ${u.id} @${u.username || "-"}\n` +
+    `✨ ${u.promti || 0} Promti ✨ | 💰 ${u.totalSpent || 0}грн\n` +
+    `⚡ ${u.generations || 0}ф ${u.seedanceGenerations || 0}s ${u.klingGenerations || 0}k | 👫 ${u.referralCount || 0}\n` +
+    `📅 ${(u.createdAt || "").slice(0, 10)}`
   ).join("\n\n");
   return ctx.reply(text, adminMenu());
 });
 
 bot.hears(BTN.ADMIN_PAYMENTS, (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
-  if (!payments.length) return ctx.reply("РћРїР»Р°С‚ РЅРµРјР°С”", adminMenu());
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+  if (!payments.length) return ctx.reply("Оплат немає", adminMenu());
   const text = payments.slice(-15).reverse().map(p =>
-    `${p.packKey || "-"} | ${p.userId || "-"}\n${p.amount || "-"} РіСЂРЅ | ${p.status || "-"}\n${(p.updatedAt || p.createdAt || "").slice(0, 16)}`
+    `${p.packKey || "-"} | ${p.userId || "-"}\n${p.amount || "-"} грн | ${p.status || "-"}\n${(p.updatedAt || p.createdAt || "").slice(0, 16)}`
   ).join("\n\n");
   return ctx.reply(text, adminMenu());
 });
 
 bot.hears(BTN.ADMIN_STYLE_LIB, (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   return sendPromptLibraryPage(ctx, 0, true);
 });
 
-bot.hears("рџ“ќ РџРѕС‚РѕС‡РЅС– РїСЂРѕРјС‚Рё", (ctx) => {
+bot.hears("📝 Поточні промти", (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   return ctx.reply(Object.entries(prompts).map(([k, v]) => `${k}:\n${v}`).join("\n\n"), adminMenu());
 });
 
-bot.hears("вњЏпёЏ Р—РјС–РЅРёС‚Рё РїСЂРѕРјС‚", (ctx) => {
+bot.hears("✏️ Змінити промт", (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   resetState(ctx);
-  return ctx.reply("РћР±РµСЂРё:", adminPromptsMenu());
+  return ctx.reply("Обери:", adminPromptsMenu());
 });
 
 bot.hears(["portrait", "beauty", "fashion", "art", "trend", "seedance", "kling"], (ctx) => {
@@ -2636,12 +2832,12 @@ bot.hears(["portrait", "beauty", "fashion", "art", "trend", "seedance", "kling"]
   const valid = ["portrait", "beauty", "fashion", "art", "trend", "seedance", "kling"];
   if (!valid.includes(ctx.message.text)) return;
   ctx.session.awaitingPromptEditKey = ctx.message.text;
-  return ctx.reply(`РљР»СЋС‡: ${ctx.message.text}\n\nРџРѕС‚РѕС‡РЅРёР№:\n${prompts[ctx.message.text]}\n\nРќР°РґС–С€Р»Рё РЅРѕРІРёР№.`, adminMenu());
+  return ctx.reply(`Ключ: ${ctx.message.text}\n\nПоточний:\n${prompts[ctx.message.text]}\n\nНадішли новий.`, adminMenu());
 });
 
 bot.hears(BTN.ADMIN_TEXTS, (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const SKIP_KEYS = new Set([
     "promptLibrary", "promptCategories", "styleLibrary",
     "welcomePhoto", "infoPhoto", "helpPhoto", "pricesPhoto", "ideaPhoto", "broadcastPhoto"
@@ -2654,9 +2850,9 @@ bot.hears(BTN.ADMIN_TEXTS, (ctx) => {
 
 bot.hears(BTN.ADMIN_EDIT_TEXT, (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   resetState(ctx);
-  return ctx.reply("РћР±РµСЂРё:", adminTextsMenu());
+  return ctx.reply("Обери:", adminTextsMenu());
 });
 
 bot.hears(["welcomeText", "infoText", "helpText", "supportText", "ideaText", "pricesText"], (ctx) => {
@@ -2665,27 +2861,27 @@ bot.hears(["welcomeText", "infoText", "helpText", "supportText", "ideaText", "pr
   const valid = ["welcomeText", "infoText", "helpText", "supportText", "ideaText", "pricesText"];
   if (!valid.includes(ctx.message.text)) return;
   ctx.session.awaitingTextEditKey = ctx.message.text;
-  return ctx.reply(`РљР»СЋС‡: ${ctx.message.text}\n\nРџРѕС‚РѕС‡РЅРёР№:\n${content[ctx.message.text]}\n\nРќР°РґС–С€Р»Рё РЅРѕРІРёР№.`, adminMenu());
+  return ctx.reply(`Ключ: ${ctx.message.text}\n\nПоточний:\n${content[ctx.message.text]}\n\nНадішли новий.`, adminMenu());
 });
 
-// в”Ђв”Ђв”Ђ РђР”РњР†Рќ: РЈРџР РђР’Р›Р†РќРќРЇ Р¤РћРўРћ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── АДМІН: УПРАВЛІННЯ ФОТО ───────────────────────────────────────────────────
 bot.hears(BTN.ADMIN_ATTACH_PHOTO, (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   resetState(ctx);
   const statuses = [
-    `welcomePhoto   вЂ” ${content.welcomePhoto ? "вњ…" : "вќЊ"}`,
-    `infoPhoto      вЂ” ${content.infoPhoto ? "вњ…" : "вќЊ"}`,
-    `helpPhoto      вЂ” ${content.helpPhoto ? "вњ…" : "вќЊ"}`,
-    `pricesPhoto    вЂ” ${content.pricesPhoto ? "вњ…" : "вќЊ"}`,
-    `ideaPhoto      вЂ” ${content.ideaPhoto ? "вњ…" : "вќЊ"}`,
-    `broadcastPhoto вЂ” ${content.broadcastPhoto ? "вњ…" : "вќЊ"}`,
+    `welcomePhoto   — ${content.welcomePhoto ? "✅" : "❌"}`,
+    `infoPhoto      — ${content.infoPhoto ? "✅" : "❌"}`,
+    `helpPhoto      — ${content.helpPhoto ? "✅" : "❌"}`,
+    `pricesPhoto    — ${content.pricesPhoto ? "✅" : "❌"}`,
+    `ideaPhoto      — ${content.ideaPhoto ? "✅" : "❌"}`,
+    `broadcastPhoto — ${content.broadcastPhoto ? "✅" : "❌"}`,
   ].join("\n");
   return ctx.reply(
-    `рџ–ј РџСЂРёРєСЂС–РїРёС‚Рё С„РѕС‚Рѕ РґРѕ С‚РµРєСЃС‚Сѓ\n\n` +
-    `РџРѕС‚РѕС‡РЅРёР№ СЃС‚Р°РЅ:\n${statuses}\n\n` +
-    `РћР±РµСЂРё СЏРєРёР№ С‚РµРєСЃС‚ вЂ” РїРѕС‚С–Рј РЅР°РґС–С€Р»Рё С„РѕС‚Рѕ.\n` +
-    `Р©РѕР± РІРёРґР°Р»РёС‚Рё С–СЃРЅСѓСЋС‡Рµ вЂ” РЅР°РґС–С€Р»Рё "РІРёРґР°Р»РёС‚Рё" Р·Р°РјС–СЃС‚СЊ С„РѕС‚Рѕ.`,
+    `🖼 Прикріпити фото до тексту\n\n` +
+    `Поточний стан:\n${statuses}\n\n` +
+    `Обери який текст — потім надішли фото.\n` +
+    `Щоб видалити існуюче — надішли "видалити" замість фото.`,
     adminPhotosMenu()
   );
 });
@@ -2706,9 +2902,9 @@ bot.hears([BTN.PHOTO_WELCOME, BTN.PHOTO_INFO, BTN.PHOTO_HELP, BTN.PHOTO_PRICES, 
   ctx.session.awaitingPhotoForKey = key;
   const current = content[key];
   return ctx.reply(
-    `РљР»СЋС‡: ${key}\n\n` +
-    `РџРѕС‚РѕС‡РЅРµ С„РѕС‚Рѕ: ${current ? "вњ… С”" : "вќЊ РЅРµРјР°"}\n\n` +
-    `РќР°РґС–С€Р»Рё РЅРѕРІРµ С„РѕС‚Рѕ. РђР±Рѕ РЅР°РїРёС€Рё "РІРёРґР°Р»РёС‚Рё" С‰РѕР± РїСЂРёР±СЂР°С‚Рё С–СЃРЅСѓСЋС‡Рµ.`,
+    `Ключ: ${key}\n\n` +
+    `Поточне фото: ${current ? "✅ є" : "❌ нема"}\n\n` +
+    `Надішли нове фото. Або напиши "видалити" щоб прибрати існуюче.`,
     adminMenu()
   );
 });
@@ -2716,34 +2912,36 @@ bot.hears([BTN.PHOTO_WELCOME, BTN.PHOTO_INFO, BTN.PHOTO_HELP, BTN.PHOTO_PRICES, 
 
 bot.hears(BTN.ADMIN_SETTINGS, (ctx) => {
   touchUser(ctx);
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const cfg = loadSettings();
   return ctx.reply(
-    `вљ™пёЏ РџРѕС‚РѕС‡РЅС– РЅР°Р»Р°С€С‚СѓРІР°РЅРЅСЏ:\n\n` +
-    `рџ“· Р¤РѕС‚Рѕ rate limit: ${cfg.photoRateLimitMs / 1000}СЃРµРє\n` +
-    `рџЋ¬ Р’С–РґРµРѕ rate limit: ${cfg.videoRateLimitMs / 1000}СЃРµРє\n` +
-    `рџ¤– AI РїСЂРѕРјС‚ rate limit: ${cfg.aiPromptRateLimitMs / 1000}СЃРµРє\n\n` +
-    `вЏ± РўР°Р№РјР°СѓС‚Рё:\nР¤РѕС‚Рѕ: ${cfg.photoTimeoutMs / 1000}СЃ | Seedance: ${cfg.seedanceTimeoutMs / 1000}СЃ | Kling: ${cfg.klingTimeoutMs / 1000}СЃ\n\n` +
-    `рџЋ¬ Seedance: ${cfg.seedanceDurationSec}СЃРµРє, ${cfg.seedanceAspectRatio}\n` +
-    `рџЋҐ Kling: ${cfg.klingDurationSec}СЃРµРє, ${cfg.klingAspectRatio}\n\n` +
-    `рџ‘Ґ maxWorkers: ${cfg.maxWorkers}\n` +
-    `рџ“… Р”РµРЅРЅРёР№ Р»С–РјС–С‚ Seedance: ${cfg.dailySeedanceLimit} (0=в€ћ)\n` +
-    `рџ“… Р”РµРЅРЅРёР№ Р»С–РјС–С‚ Kling: ${cfg.dailyKlingLimit} (0=в€ћ)\n\n` +
-    `рџ¤– AI РїСЂРѕРјС‚: ${cfg.aiPromptEnabled ? "вњ…" : "вќЊ"}\n` +
-    `рџЋ¬ Р’С–РґРµРѕ: ${cfg.videoEnabled ? "вњ…" : "вќЊ"}\n\n` +
-    `Р РµРґР°РіСѓР№ settings.json РЅР° СЃРµСЂРІРµСЂС– С‚Р° РїРµСЂРµР·Р°РїСѓСЃС‚Рё Р±РѕС‚Р°.`,
+    `?? ??????? ????????????:
+
+` +
+    `📷 Фото rate limit: ${cfg.photoRateLimitMs / 1000}сек\n` +
+    `🎬 Відео rate limit: ${cfg.videoRateLimitMs / 1000}сек\n` +
+    `🤖 AI промт rate limit: ${cfg.aiPromptRateLimitMs / 1000}сек\n\n` +
+    `? Таймаути:\nФото: ${cfg.photoTimeoutMs / 1000}с | Seedance: ${cfg.seedanceTimeoutMs / 1000}с | Kling: ${cfg.klingTimeoutMs / 1000}с\n\n` +
+    `🎬 Seedance: ${cfg.seedanceDurationSec}сек, ${cfg.seedanceAspectRatio}\n` +
+    `🎥 Kling: ${cfg.klingDurationSec}сек, ${cfg.klingAspectRatio}\n\n` +
+    `👥 maxWorkers: ${cfg.maxWorkers}\n` +
+    `📅 Денний ліміт Seedance: ${cfg.dailySeedanceLimit} (0=?)\n` +
+    `📅 Денний ліміт Kling: ${cfg.dailyKlingLimit} (0=?)\n\n` +
+    `🤖 AI промт: ${cfg.aiPromptEnabled ? "✅" : "❌"}\n` +
+    `🎬 Відео: ${cfg.videoEnabled ? "✅" : "❌"}\n\n` +
+    `Редагуй settings.json на сервері та перезапусти бота.`,
     adminMenu()
   );
 });
 
 bot.hears(BTN.ADMIN_ANALYTICS, (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const all = Object.values(users);
   const paid = payments.filter(p => p.status === "credited");
   const packCount = {};
   paid.forEach(p => { packCount[p.packKey] = (packCount[p.packKey] || 0) + 1; });
   const topPacks = Object.entries(packCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
-    .map(([key, cnt]) => `  ${key}: ${cnt} СЂР°Р·С–РІ`).join("\n");
+    .map(([key, cnt]) => `  ${key}: ${cnt} разів`).join("\n");
   const now = Date.now();
   const DAY = 86400000;
   const revenueByDay = {};
@@ -2756,7 +2954,7 @@ bot.hears(BTN.ADMIN_ANALYTICS, (ctx) => {
     if (revenueByDay[d] !== undefined) revenueByDay[d] += Number(p.amount || 0);
   });
   const revenueChart = Object.entries(revenueByDay)
-    .map(([d, amt]) => `  ${d.slice(5)}: ${amt} РіСЂРЅ`).join("\n");
+    .map(([d, amt]) => `  ${d.slice(5)}: ${amt} грн`).join("\n");
   const totalUsers    = all.length;
   const payingUsers   = all.filter(u => (u.totalSpent || 0) > 0).length;
   const activeUsers   = all.filter(u => (u.generations || 0) > 0 || (u.seedanceGenerations || 0) > 0 || (u.klingGenerations || 0) > 0).length;
@@ -2770,50 +2968,52 @@ bot.hears(BTN.ADMIN_ANALYTICS, (ctx) => {
   ).length;
   const repeatBuyers = all.filter(u => paid.filter(p => p.userId == u.id).length > 1).length;
   return ctx.reply(
-    `рџ“Љ РђРЅР°Р»С–С‚РёРєР°\n\n` +
-    `рџ‘Ґ Р®Р·РµСЂРё: ${totalUsers} РІСЃСЊРѕРіРѕ\n` +
-    `  рџ”Ґ РђРєС‚РёРІРЅРёС…: ${activeUsers}\n` +
-    `  рџ’і РџР»Р°С‚РЅРёС…: ${payingUsers}\n` +
-    `  рџ¶ РЎРїСЂРѕР±СѓРІР°Р»Рё С– РїС–С€Р»Рё: ${triedNoPayment}\n\n` +
-    `рџ’° РљРѕРЅРІРµСЂСЃС–СЏ:\n` +
-    `  Р’СЃС–в†’РїР»Р°С‚РЅС–: ${conversion}%\n` +
-    `  РђРєС‚РёРІРЅС–в†’РїР»Р°С‚РЅС–: ${actConversion}%\n\n` +
-    `рџ’µ Р¤С–РЅР°РЅСЃРё:\n` +
-    `  Р’СЃСЊРѕРіРѕ: ${totalRevenue} РіСЂРЅ\n` +
-    `  РЎРµСЂРµРґРЅС–Р№ С‡РµРє: ${avgCheck} РіСЂРЅ\n` +
-    `  РџРѕРІС‚РѕСЂРЅС– РїРѕРєСѓРїРєРё: ${repeatBuyers} СЋР·РµСЂС–РІ\n\n` +
-    `рџ“¦ РўРѕРї РїР°РєРµС‚Рё:\n${topPacks || "  РЅРµРјР°С” РґР°РЅРёС…"}\n\n` +
-    `рџ“… Р’РёСЂСѓС‡РєР° (7 РґРЅС–РІ):\n${revenueChart}`,
+    `📊 Аналітика\n\n` +
+    `👥 Юзери: ${totalUsers} всього\n` +
+    `  🔥 Активних: ${activeUsers}\n` +
+    `  💳 Платних: ${payingUsers}\n` +
+    `  ?? ?????????? ? ?????: ${triedNoPayment}
+
+` +
+    `💰 Конверсія:\n` +
+    `  Всі→платні: ${conversion}%\n` +
+    `  Активні→платні: ${actConversion}%\n\n` +
+    `💵 Фінанси:\n` +
+    `  Всього: ${totalRevenue} грн\n` +
+    `  Середній чек: ${avgCheck} грн\n` +
+    `  Повторні покупки: ${repeatBuyers} юзерів\n\n` +
+    `📦 Топ пакети:\n${topPacks || "  немає даних"}\n\n` +
+    `📅 Виручка (7 днів):\n${revenueChart}`,
     adminMenu()
   );
 });
 
 bot.hears(BTN.ADMIN_PACKAGES, (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.reply("вќЊ");
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   const pkgs = getPackages();
   const text = Object.values(pkgs).map(p =>
-    `${p.key}: ${p.amount} РіСЂРЅ | ${p.promti || p.count || 0} вњЁ | ${p.type}${p.model ? "/" + p.model : ""}`
+    `${p.key}: ${p.amount} грн | ${p.promti || p.count || 0} ✨ | ${p.type}${p.model ? "/" + p.model : ""}`
   ).join("\n");
   return ctx.reply(
-    `рџ“¦ РџР°РєРµС‚Рё:\n\n${text}\n\n` +
-    `Р—РјС–РЅРёС‚Рё С†С–РЅСѓ:\n/setprice promti_pack10 120\n\n` +
-    `Р”РѕРґР°С‚Рё РїР°РєРµС‚:\n/addpackage KEY promti 15 1199 15 Promti\n\n` +
-    `Р”РѕРґР°С‚Рё РїРѕСЃРёР»Р°РЅРЅСЏ:\n/setlink support_link https://t.me/support`,
+    `📦 Пакети:\n\n${text}\n\n` +
+    `Змінити ціну:\n/setprice promti_pack10 120\n\n` +
+    `Додати пакет:\n/addpackage KEY promti 15 1199 15 Promti\n\n` +
+    `Додати посилання:\n/setlink support_link https://t.me/support`,
     adminMenu()
   );
 });
 
-// в”Ђв”Ђв”Ђ РќРђР’Р†Р“РђР¦Р†РЇ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-bot.hears(BTN.BACK,          (ctx) => { touchUser(ctx); resetState(ctx); return ctx.reply("Р“РѕР»РѕРІРЅРµ РјРµРЅСЋ вњЁ", mainMenu()); });
+// ─── НАВІГАЦІЯ ────────────────────────────────────────────────────────────────
+bot.hears(BTN.BACK,          (ctx) => { touchUser(ctx); resetState(ctx); return ctx.reply("Головне меню ✨", mainMenu()); });
 bot.hears(BTN.BACK_PHOTO, (ctx) => {
   touchUser(ctx); resetState(ctx);
   ctx.session.mode = "photo";
   return ctx.reply(
-    "рџ–ј РњРµРЅСЋ С„РѕС‚Рѕ\n\n" +
-    "рџ–ј Р РµРґР°РіСѓРІР°С‚Рё С„РѕС‚Рѕ вЂ” РЅР°РґС–С€Р»Рё СЃРІРѕС” С„РѕС‚Рѕ + РїСЂРѕРјС‚, Р·РјС–РЅРёРјРѕ СЃС‚РёР»СЊ!\n" +
-    "вњЁ РЎС‚РІРѕСЂРёС‚Рё С„РѕС‚Рѕ вЂ” РЅР°РїРёС€Рё РїСЂРѕРјС‚, СЃС‚РІРѕСЂСЋ С„РѕС‚Рѕ Р· РЅСѓР»СЏ\n" +
-    "рџ¤– AI РїСЂРѕРјС‚ вЂ” Р°РЅР°Р»С–Р·СѓСЋ С‚РІРѕС” С„РѕС‚Рѕ С– РїСЂРѕРїРѕРЅСѓСЋ РїСЂРѕРјС‚\n\n" +
-    "рџ’Ў Р†РґРµС—: t.me/promteamai",
+    "🖼 Меню фото\n\n" +
+    "🖼 Редагувати фото — надішли своє фото + промт, змінимо стиль!\n" +
+    "✨ Створити фото — напиши промт, створю фото з нуля\n" +
+    "🤖 AI промт — аналізую твоє фото і пропоную промт\n\n" +
+    "💡 Ідеї: t.me/promteamai",
     photoMenu()
   );
 });
@@ -2821,49 +3021,49 @@ bot.hears(BTN.BACK_VIDEO, (ctx) => {
   touchUser(ctx); resetState(ctx);
   ctx.session.mode = "video";
   return ctx.reply(
-    "рџЋ¬ РњРµРЅСЋ РІС–РґРµРѕ\n\n" +
-    "рџЋ¬ Seedance вЂ” ByteDance РјРѕРґРµР»СЊ, СЂРµР°Р»С–СЃС‚РёС‡РЅР° Р°РЅС–РјР°С†С–СЏ\n" +
-    "рџЋҐ Kling вЂ” РєС–РЅРµРјР°С‚РѕРіСЂР°С„С–С‡РЅР° СЏРєС–СЃС‚СЊ РІС–РґРµРѕ\n\n" +
-    "рџ’Ў Р†РґРµС—: t.me/promteamai",
+    "🎬 Меню відео\n\n" +
+    "🎬 Seedance — ByteDance модель, реалістична анімація\n" +
+    "🎥 Kling — кінематографічна якість відео\n\n" +
+    "💡 Ідеї: t.me/promteamai",
     videoMenu()
   );
 });
 bot.hears(BTN.INFO,     (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.infoText,    content.infoPhoto,    mainMenu()); });
 bot.hears(BTN.HELP,       (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.helpText,    content.helpPhoto,    mainMenu()); });
-bot.hears(BTN.SUPPORT,      (ctx) => { touchUser(ctx); return ctx.reply(content.supportText, mainMenu()); });
-bot.hears(BTN.PRICES,           (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.pricesText || "рџ’° Р¦С–РЅРё С‚РёРјС‡Р°СЃРѕРІРѕ РЅРµРґРѕСЃС‚СѓРїРЅС–", content.pricesPhoto, mainMenu()); });
+    Markup.keyboard([[BTN.BACK]]).resize()
+bot.hears(BTN.PRICES,           (ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.pricesText || "💰 Ціни тимчасово недоступні", content.pricesPhoto, mainMenu()); });
 
 bot.hears(BTN.CUSTOM_AMOUNT, async (ctx) => {
   touchUser(ctx);
-  if (isAdmin(ctx.from.id)) return ctx.reply("вњ… РђРґРјС–РЅ вЂ” Р±РµР·РєРѕС€С‚РѕРІРЅРѕ.", adminMenu());
+  if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
   ctx.session.awaitingCustomAmount = true;
   return ctx.reply(
-    `рџ’¬ Р’РІРµРґРё Р±Р°Р¶Р°РЅСѓ СЃСѓРјСѓ РІ РіСЂРёРІРЅСЏС…\n\n1 Promti вњЁ = 9.9 РіСЂРЅ\nРњС–РЅС–РјСѓРј: 50 РіСЂРЅ\n\nРџСЂРёРєР»Р°Рґ: 200`,
-    Markup.keyboard([["в†©пёЏ РќР°Р·Р°Рґ"]]).resize()
+    `💬 Введи бажану суму в гривнях\n\n1 Promti ✨ = 9.9 грн\nМінімум: 50 грн\n\nПриклад: 200`,
+    Markup.keyboard([[BTN.BACK]]).resize()
   );
 });
 
 bot.hears([BTN.BUY_PROMTI, BTN.BUY_PROMTI_ALT, BTN.BUY_PROMTI_CARD], (ctx) => {
   touchUser(ctx);
-  if (isAdmin(ctx.from.id)) return ctx.reply("вњ… РђРґРјС–РЅ вЂ” Р±РµР·РєРѕС€С‚РѕРІРЅРѕ.", adminMenu());
+  if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
   return ctx.reply(
-    `рџ’Ћ РћР±РµСЂРё РїР°РєРµС‚ Promti вњЁ\n\n` +
-    `рџ“¦ РџР°РєРµС‚Рё:\n` +
-    `10 Promti вњЁ вЂ” 99 РіСЂРЅ (9.9 РіСЂРЅ/вњЁ)\n` +
-    `30 Promti вњЁ вЂ” 249 РіСЂРЅ (8.3 РіСЂРЅ/вњЁ)\n` +
-    `60 Promti вњЁ вЂ” 449 РіСЂРЅ (7.5 РіСЂРЅ/вњЁ)\n` +
-    `150 Promti вњЁ вЂ” 999 РіСЂРЅ (6.7 РіСЂРЅ/вњЁ) рџ”Ґ\n\n` +
-    `рџ’° Р¦С–РЅРё РїРѕСЃР»СѓРі:\n` +
-    `рџ–ј Р¤РѕС‚Рѕ вЂ” 1 Promti вњЁ\n` +
-    `рџЋ¬ Seedance вЂ” 5 Promti вњЁ\n` +
-    `рџЋҐ Kling вЂ” 8 Promti вњЁ\n\n` +
-    `рџЋЃ РџСЂРё СЂРµС”СЃС‚СЂР°С†С–С—: ${START_PROMTI_BONUS} Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ`,
+    `💎 Обери пакет Promti ✨\n\n` +
+    `📦 Пакети:\n` +
+    `10 Promti ✨ — 99 грн (9.9 грн/✨)\n` +
+    `30 Promti ✨ — 249 грн (8.3 грн/✨)\n` +
+    `60 Promti ✨ — 449 грн (7.5 грн/✨)\n` +
+    `150 Promti ✨ — 999 грн (6.7 грн/✨) 🔥\n\n` +
+    `💰 Ціни послуг:\n` +
+    `🖼 Фото — 1 Promti ✨\n` +
+    `🎬 Seedance — 5 Promti ✨\n` +
+    `🎥 Kling — 8 Promti ✨\n\n` +
+    `🎁 При реєстрації: ${START_PROMTI_BONUS} Promti ✨ безкоштовно`,
     Markup.inlineKeyboard([
-      [Markup.button.callback("10 Promti вњЁ вЂ” 99 РіСЂРЅ",  "buy_pack_promti_pack10")],
-      [Markup.button.callback("30 Promti вњЁ вЂ” 249 РіСЂРЅ", "buy_pack_promti_pack30")],
-      [Markup.button.callback("60 Promti вњЁ вЂ” 449 РіСЂРЅ", "buy_pack_promti_pack60")],
-      [Markup.button.callback("150 Promti вњЁ вЂ” 999 РіСЂРЅ рџ”Ґ", "buy_pack_promti_pack150")],
-      [Markup.button.callback("рџ’¬ РЎРІРѕСЏ СЃСѓРјР°", "buy_custom_amount")],
+      [Markup.button.callback("10 Promti ✨ — 99 грн",  "buy_pack_promti_pack10")],
+      [Markup.button.callback("30 Promti ✨ — 249 грн", "buy_pack_promti_pack30")],
+      [Markup.button.callback("60 Promti ✨ — 449 грн", "buy_pack_promti_pack60")],
+      [Markup.button.callback("150 Promti ✨ — 999 грн 🔥", "buy_pack_promti_pack150")],
+      [Markup.button.callback("💬 Своя сума", "buy_custom_amount")],
     ])
   );
 });
@@ -2877,50 +3077,50 @@ bot.hears(BTN.INVITE, async (ctx) => {
   const earned  = user.referralEarned || 0;
   const count   = user.referralCount  || 0;
   return ctx.reply(
-    `рџ‘« Р РµС„РµСЂР°Р»СЊРЅР° РїСЂРѕРіСЂР°РјР°\n\n` +
-    `Р—Р°РїСЂРѕСЃРё РґСЂСѓРіР° вЂ” РѕС‚СЂРёРјР°Р№ Р±РѕРЅСѓСЃ!\n` +
-    `рџЋЃ Р—Р° РєРѕР¶РЅРѕРіРѕ РґСЂСѓРіР° СЏРєРёР№ РѕРїР»Р°С‚РёС‚СЊ: +${REFERRAL_PROMTI_BONUS} Promti вњЁ\n\n` +
-    `рџ“Љ РўРІРѕСЏ СЃС‚Р°С‚РёСЃС‚РёРєР°:\n` +
-    `  Р—Р°РїСЂРѕС€РµРЅРѕ РґСЂСѓР·С–РІ: ${count}\n` +
-    `  Р—Р°СЂРѕР±Р»РµРЅРѕ: +${earned} Promti вњЁ\n\n` +
-    `рџ”— РўРІРѕС” РїРѕСЃРёР»Р°РЅРЅСЏ:\n${refLink}\n\n` +
-    `рџ’Ў РџРѕРґС–Р»РёСЃСЊ Р· РґСЂСѓР·СЏРјРё вЂ” РІРѕРЅРё РѕС‚СЂРёРјР°СЋС‚СЊ ${START_PROMTI_BONUS} Promti вњЁ Р±РµР·РєРѕС€С‚РѕРІРЅРѕ РїСЂРё СЂРµС”СЃС‚СЂР°С†С–С—!`,
+    `👫 Реферальна програма\n\n` +
+    `Запроси друга — отримай бонус!\n` +
+    `🎁 За кожного друга який оплатить: +${REFERRAL_PROMTI_BONUS} Promti ✨\n\n` +
+    `📊 Твоя статистика:\n` +
+    `  Запрошено друзів: ${count}\n` +
+    `  Зароблено: +${earned} Promti ✨\n\n` +
+    `🔗 Твоє посилання:\n${refLink}\n\n` +
+    `💡 Поділись з друзями — вони отримають ${START_PROMTI_BONUS} Promti ✨ безкоштовно при реєстрації!`,
     mainMenu()
   );
 });
 bot.hears(BTN.IDEAS,(ctx) => { touchUser(ctx); return sendWithOptionalPhoto(ctx, content.ideaText, content.ideaPhoto, mainMenu()); });
 
-// в”Ђв”Ђв”Ђ Р‘РђР›РђРќРЎ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── БАЛАНС ───────────────────────────────────────────────────────────────────
 bot.hears(BTN.BALANCE, (ctx) => {
   const user = touchUser(ctx);
-  if (isAdmin(ctx.from.id)) return ctx.reply("рџ“Љ РђРґРјС–РЅ: Р±РµР·Р»С–РјС–С‚ вњ…", adminMenu());
+  if (isAdmin(ctx.from.id)) return ctx.reply("📊 Адмін: безліміт ✅", adminMenu());
   const botUsername = ctx.botInfo?.username || "Promtiai_bot";
   const cfg = loadSettings();
   return ctx.reply(
-    `рџ“Љ РўРІС–Р№ Р±Р°Р»Р°РЅСЃ: ${user.promti || 0} Promti вњЁ\n\n` +
-    `рџ’° Р¦С–РЅРё РїРѕСЃР»СѓРі:\n` +
-    `рџ–ј Р¤РѕС‚Рѕ вЂ” 1 Promti вњЁ\n` +
-    `рџЋ¬ Seedance вЂ” 5 Promti вњЁ\n` +
-    `рџЋҐ Kling вЂ” 8 Promti вњЁ\n\n` +
-    `рџ“… Seedance СЃСЊРѕРіРѕРґРЅС–: ${user.dailySeedanceCount || 0}/${cfg.dailySeedanceLimit}\n` +
-    `рџ“… Kling СЃСЊРѕРіРѕРґРЅС–: ${user.dailyKlingCount || 0}/${cfg.dailyKlingLimit}\n\n` +
-    `рџ‘« Р—Р°РїСЂРѕС€РµРЅРѕ РґСЂСѓР·С–РІ: ${user.referralCount || 0}\n` +
-    `рџ”— https://t.me/${botUsername}?start=ref_${user.id}`,
+    `📊 Твій баланс: ${user.promti || 0} Promti ✨\n\n` +
+    `💰 Ціни послуг:\n` +
+    `🖼 Фото — 1 Promti ✨\n` +
+    `🎬 Seedance — 5 Promti ✨\n` +
+    `🎥 Kling — 8 Promti ✨\n\n` +
+    `📅 Seedance сьогодні: ${user.dailySeedanceCount || 0}/${cfg.dailySeedanceLimit}\n` +
+    `📅 Kling сьогодні: ${user.dailyKlingCount || 0}/${cfg.dailyKlingLimit}\n\n` +
+    `👫 Запрошено друзів: ${user.referralCount || 0}\n` +
+    `🔗 https://t.me/${botUsername}?start=ref_${user.id}`,
     mainMenu()
   );
 });
 
-// в”Ђв”Ђв”Ђ Р РћР—Р”Р†Р›Р в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── РОЗДІЛ�? ──────────────────────────────────────────────────────────────────
 bot.hears(BTN.PHOTO, (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   clearPromptAttribution(ctx);
   ctx.session.mode = "photo";
   return ctx.reply(
-    "рџ–ј РњРµРЅСЋ С„РѕС‚Рѕ\n\n" +
-    "рџ–ј Р РµРґР°РіСѓРІР°С‚Рё С„РѕС‚Рѕ вЂ” РЅР°РґС–С€Р»Рё СЃРІРѕС” С„РѕС‚Рѕ + РїСЂРѕРјС‚, Р·РјС–РЅРёРјРѕ СЃС‚РёР»СЊ!\n" +
-    "вњЁ РЎС‚РІРѕСЂРёС‚Рё С„РѕС‚Рѕ вЂ” РЅР°РїРёС€Рё РїСЂРѕРјС‚, СЃС‚РІРѕСЂСЋ С„РѕС‚Рѕ Р· РЅСѓР»СЏ\n" +
-    "рџ¤– AI РїСЂРѕРјС‚ вЂ” Р°РЅР°Р»С–Р·СѓСЋ С‚РІРѕС” С„РѕС‚Рѕ С– РїСЂРѕРїРѕРЅСѓСЋ РїСЂРѕРјС‚\n\n" +
-    "рџ’Ў Р†РґРµС—: t.me/promteamai",
+    "🖼 Меню фото\n\n" +
+    "🖼 Редагувати фото — надішли своє фото + промт, змінимо стиль!\n" +
+    "✨ Створити фото — напиши промт, створю фото з нуля\n" +
+    "🤖 AI промт — аналізую твоє фото і пропоную промт\n\n" +
+    "💡 Ідеї: t.me/promteamai",
     photoMenu()
   );
 });
@@ -2930,20 +3130,20 @@ bot.hears(BTN.TRENDING, (ctx) => {
 });
 bot.hears(BTN.VIDEO, (ctx) => {
   const cfg = loadSettings();
-  if (!cfg.videoEnabled) return ctx.reply("рџЋ¬ Р’С–РґРµРѕ С‚РёРјС‡Р°СЃРѕРІРѕ РЅРµРґРѕСЃС‚СѓРїРЅРµ. РЎРїСЂРѕР±СѓР№ РїС–Р·РЅС–С€Рµ.", mainMenu());
+  if (!cfg.videoEnabled) return ctx.reply("🎬 Відео тимчасово недоступне. Спробуй пізніше.", mainMenu());
   touchUser(ctx); ensureSession(ctx);
   clearPromptAttribution(ctx);
   ctx.session.mode = "video";
   return ctx.reply(
-    "рџЋ¬ РњРµРЅСЋ РІС–РґРµРѕ\n\n" +
-    "рџЋ¬ Seedance вЂ” ByteDance РјРѕРґРµР»СЊ, СЂРµР°Р»С–СЃС‚РёС‡РЅР° Р°РЅС–РјР°С†С–СЏ\n" +
-    "рџЋҐ Kling вЂ” РєС–РЅРµРјР°С‚РѕРіСЂР°С„С–С‡РЅР° СЏРєС–СЃС‚СЊ РІС–РґРµРѕ\n\n" +
-    "рџ’Ў Р†РґРµС—: t.me/promteamai",
+    "🎬 Меню відео\n\n" +
+    "🎬 Seedance — ByteDance модель, реалістична анімація\n" +
+    "🎥 Kling — кінематографічна якість відео\n\n" +
+    "💡 Ідеї: t.me/promteamai",
     videoMenu()
   );
 });
 
-// в”Ђв”Ђв”Ђ Р¤РћРўРћ Р Р•Р–РРњР в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ФОТО РЕЖ�??? ──────────────────────────────────────────────────────────────
 bot.hears(BTN.EDIT_PHOTO, (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   clearPromptAttribution(ctx);
@@ -2953,7 +3153,7 @@ bot.hears(BTN.EDIT_PHOTO, (ctx) => {
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   return ctx.reply(
-    "вњЏпёЏ Р РµР¶РёРј СЂРµРґР°РіСѓРІР°РЅРЅСЏ С„РѕС‚Рѕ\n\nРќР°РїРёС€Рё РїСЂРѕРјС‚ СЏРє С…РѕС‡РµС€ Р·РјС–РЅРёС‚Рё С„РѕС‚Рѕ, РїРѕС‚С–Рј РЅР°РґС–С€Р»Рё СЃРІРѕС” С„РѕС‚Рѕ.\n\nРџСЂРёРєР»Р°Рґ: \"beauty editorial, glossy skin\"\n\nрџ’Ў Р†РґРµС—: t.me/promteamai",
+    "✏️ Режим редагування фото\n\nНапиши промт як хочеш змінити фото, потім надішли своє фото.\n\nПриклад: \"beauty editorial, glossy skin\"\n\n💡 Ідеї: t.me/promteamai",
     photoMenu()
   );
 });
@@ -2967,16 +3167,16 @@ bot.hears(BTN.CREATE_PHOTO, (ctx) => {
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   return ctx.reply(
-    "вњЁ Р РµР¶РёРј СЃС‚РІРѕСЂРµРЅРЅСЏ С„РѕС‚Рѕ\n\nРќР°РїРёС€Рё С‰Рѕ С…РѕС‡РµС€ Р·РіРµРЅРµСЂСѓРІР°С‚Рё вЂ” С„РѕС‚Рѕ Р±СѓРґРµ СЃС‚РІРѕСЂРµРЅРѕ Р· РЅСѓР»СЏ.\n\nРџСЂРёРєР»Р°Рґ: \"portrait of woman in Renaissance style, cinematic lighting\"\n\nрџ’Ў Р†РґРµС—: t.me/promteamai",
+    "✨ Режим створення фото\n\nНапиши що хочеш згенерувати — фото буде створено з нуля.\n\nПриклад: \"portrait of woman in Renaissance style, cinematic lighting\"\n\n💡 Ідеї: t.me/promteamai",
     photoMenu()
   );
 });
 
-// в”Ђв”Ђв”Ђ Р’Р†Р”Р•Рћ РњРћР”Р•Р›Р† в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ВІДЕО МОДЕЛІ ─────────────────────────────────────────────────────────────
 bot.hears(BTN.SEEDANCE, (ctx) => {
   const cfg = loadSettings();
   if (cfg.seedanceEnabled === false) {
-    return ctx.reply(cfg.seedanceComingSoonText || "рџЋ¬ Seedance С‚РёРјС‡Р°СЃРѕРІРѕ РЅРµРґРѕСЃС‚СѓРїРЅРёР№. РЎРєРѕСЂРѕ РїРѕРІРµСЂРЅРµС‚СЊСЃСЏ! РЎРїСЂРѕР±СѓР№ рџЋҐ Kling.", videoMenu());
+    return ctx.reply(cfg.seedanceComingSoonText || "?? Seedance ????????? ???????????. ????? ???????????! ??????? ?? Kling.", videoMenu());
   }
   touchUser(ctx); ensureSession(ctx);
   clearPromptAttribution(ctx);
@@ -2984,19 +3184,7 @@ bot.hears(BTN.SEEDANCE, (ctx) => {
   ctx.session.customType = null; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   ctx.session.videoInputMode = null;
   return ctx.reply(
-    "рџЋ¬ Seedance 2.0\n\n" +
-    "РЎРїРµС†С–Р°Р»С–Р·СѓС”С‚СЊСЃСЏ РЅР° Р°РЅС–РјР°С†С–С— РѕР±'С”РєС‚С–РІ, РїСЂРёСЂРѕРґРё, РјСѓР»СЊС‚РёРїР»С–РєР°С†С–С— С‚Р° С„Р°РЅС‚Р°СЃС‚РёС‡РЅРёС… СЃС†РµРЅ.\n\n" +
-    "вљЎ РђРІС‚Рѕ Р°РЅС–РјР°С†С–СЏ вЂ” РЅР°РґС–С€Р»Рё С„РѕС‚Рѕ, РѕР¶РёРІР»СЋ Р°РІС‚РѕРјР°С‚РёС‡РЅРѕ\n" +
-    "рџЋ¬ РђРЅС–РјР°С†С–СЏ + РїСЂРѕРјС‚ вЂ” РЅР°РґС–С€Р»Рё С„РѕС‚Рѕ Р·С– СЃРІРѕС—Рј РѕРїРёСЃРѕРј СЂСѓС…Сѓ\n" +
-    "рџЋҐ Р’С–РґРµРѕ Р· С‚РµРєСЃС‚Сѓ вЂ” СЃС‚РІРѕСЂСЋ РІС–РґРµРѕ Р· РЅСѓР»СЏ РїРѕ РѕРїРёСЃСѓ\n\n" +
-    "вњ… РџС–РґС…РѕРґРёС‚СЊ РґР»СЏ:\n" +
-    "вЂў Р›СЏР»СЊРєРё, С–РіСЂР°С€РєРё, С„С–РіСѓСЂРєРё\n" +
-    "вЂў РџСЂРёСЂРѕРґР°, РїРµР№Р·Р°Р¶С–, С‚РІР°СЂРёРЅРё\n" +
-    "вЂў РђСЂС‚, РјСѓР»СЊС‚РёРїР»С–РєР°С†С–СЏ, С„РµРЅС‚РµР·С–\n" +
-    "вЂў РџСЂРѕРґСѓРєС‚Рё, РїСЂРµРґРјРµС‚Рё, Р»РѕРіРѕС‚РёРїРё\n\n" +
-    "в›”пёЏ РќРµ РїС–РґС‚СЂРёРјСѓС” С„РѕС‚Рѕ СЂРµР°Р»СЊРЅРёС… Р»СЋРґРµР№\n" +
-    "рџ‘‰ Р”Р»СЏ Р°РЅС–РјР°С†С–С— Р»СЋРґРµР№ вЂ” РІРёРєРѕСЂРёСЃС‚РѕРІСѓР№ рџЋҐ Kling\n\n" +
-    "рџ’Ў Р†РґРµС—: t.me/promteamai",
+    "?? Seedance 2.0\n\n??????????????? ?? ???????? ??'?????, ???????, ?????????????? ?? ???????????? ????.\n\n? ???? ???????? ? ??????? ????, ?????? ???????????\n?? ???????? + ????? ? ??????? ???? ?? ????? ?????? ????\n?? ????? ? ?????? ? ?????? ????? ? ???? ?? ?????\n\n? ????????? ???:\n? ??????, ???????, ???????\n? ???????, ???????, ???????\n? ???, ??????????????, ???????\n? ????????, ????????, ????????\n\n?? ?? ????????? ???? ???????? ?????\n?? ??? ???????? ????? ? ???????????? ?? Kling\n\n?? ????: t.me/promteamai",
     seedanceMenu()
   );
 });
@@ -3004,7 +3192,7 @@ bot.hears(BTN.SEEDANCE, (ctx) => {
 bot.hears(BTN.AUTO_ANIM, (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
-  if (!style) return ctx.reply("РЎРїРѕС‡Р°С‚РєСѓ РѕР±РµСЂРё РјРѕРґРµР»СЊ: рџЋ¬ Seedance Р°Р±Рѕ рџЋҐ Kling", videoMenu());
+  if (!style) return ctx.reply("???????? ????? ??????: ?? Seedance ??? ?? Kling", videoMenu());
   ctx.session.videoInputMode = "image";
   ctx.session.customType = `custom_video_${style}`;
   ctx.session.awaitingCustomPrompt = false;
@@ -3013,9 +3201,9 @@ bot.hears(BTN.AUTO_ANIM, (ctx) => {
   const defaultPrompt = prompts[style] || "cinematic motion, smooth animation";
   const isSeeedance = style === "seedance";
   return ctx.reply(
-    `вљЎ РђРІС‚Рѕ Р°РЅС–РјР°С†С–СЏ\n\nРќР°РґС–С€Р»Рё С„РѕС‚Рѕ вЂ” РѕР¶РёРІР»СЋ Р· РґРµС„РѕР»С‚РЅРёРј РїСЂРѕРјС‚РѕРј:\nрџ“ќ "${defaultPrompt}"\n\n` +
-    (isSeeedance ? "в›”пёЏ Р›РёС€Рµ РґР»СЏ РѕР±'С”РєС‚С–РІ С‚Р° РїСЂРёСЂРѕРґРё (РЅРµ Р»СЋРґРµР№)\nрџ‘‰ Р”Р»СЏ Р»СЋРґРµР№ вЂ” РІРёРєРѕСЂРёСЃС‚РѕРІСѓР№ Kling\n\n" : "") +
-    `вњЌпёЏ РҐРѕС‡РµС€ СЃРІС–Р№ РїСЂРѕРјС‚? РќР°РїРёС€Рё Р№РѕРіРѕ РїРµСЂРµРґ С„РѕС‚Рѕ.`,
+    "? ???? ????????\n\n??????? ???? ? ?????? ? ????????? ???????:\n" + `?? "${defaultPrompt}"\n\n` +
+    (isSeeedance ? "?? ???? ??? ??'????? ?? ??????? (?? ?????)\n?? ??? ????? ? ???????????? Kling\n\n" : "") +
+    "?? ????? ???? ?????? ?????? ???? ????? ????.",
     menu
   );
 });
@@ -3023,7 +3211,7 @@ bot.hears(BTN.AUTO_ANIM, (ctx) => {
 bot.hears(BTN.ANIM_PROMPT, (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
-  if (!style) return ctx.reply("РЎРїРѕС‡Р°С‚РєСѓ РѕР±РµСЂРё РјРѕРґРµР»СЊ: рџЋ¬ Seedance Р°Р±Рѕ рџЋҐ Kling", videoMenu());
+  if (!style) return ctx.reply("???????? ????? ??????: ?? Seedance ??? ?? Kling", videoMenu());
   ctx.session.videoInputMode = "image";
   ctx.session.customType = `custom_video_${style}`;
   ctx.session.awaitingCustomPrompt = true;
@@ -3031,11 +3219,9 @@ bot.hears(BTN.ANIM_PROMPT, (ctx) => {
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
   const isSeedanceStyle = style === "seedance";
   return ctx.reply(
-    `рџЋ¬ РђРЅС–РјР°С†С–СЏ + РїСЂРѕРјС‚\n\nРќР°РїРёС€Рё РїСЂРѕРјС‚, РїРѕС‚С–Рј РЅР°РґС–С€Р»Рё С„РѕС‚Рѕ.\n\n` +
-    (isSeedanceStyle
-      ? `РџСЂРёРєР»Р°Рґ: "gentle swaying in wind, soft light"\n\nв›”пёЏ Р›РёС€Рµ РґР»СЏ РѕР±'С”РєС‚С–РІ С‚Р° РїСЂРёСЂРѕРґРё вЂ” РЅРµ Р»СЋРґРµР№\nрџ‘‰ Р”Р»СЏ Р°РЅС–РјР°С†С–С— Р»СЋРґРµР№ вЂ” Kling\n\n`
-      : `РџСЂРёРєР»Р°Рґ: "cinematic close-up, eyes slowly opening"\n\n`) +
-    `рџ’Ў t.me/promteamai`,
+    "?? ???????? + ?????\n\n?????? ?????, ????? ??????? ????.\n\n" +
+    (isSeedanceStyle ? "???????: \"gentle swaying in wind, soft light\"\n\n?? ???? ??? ??'????? ?? ??????? ? ?? ?????\n?? ??? ???????? ????? ? Kling\n\n" : "???????: \"cinematic close-up, eyes slowly opening\"\n\n") +
+    "?? t.me/promteamai",
     menu
   );
 });
@@ -3043,14 +3229,14 @@ bot.hears(BTN.ANIM_PROMPT, (ctx) => {
 bot.hears(BTN.VIDEO_FROM_TEXT, (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
-  if (!style) return ctx.reply("РЎРїРѕС‡Р°С‚РєСѓ РѕР±РµСЂРё РјРѕРґРµР»СЊ: рџЋ¬ Seedance Р°Р±Рѕ рџЋҐ Kling", videoMenu());
+  if (!style) return ctx.reply("???????? ????? ??????: ?? Seedance ??? ?? Kling", videoMenu());
   ctx.session.videoInputMode = "text";
   ctx.session.customType = `custom_video_${style}`;
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   const menu = style === "kling" ? klingMenu() : seedanceMenu();
   return ctx.reply(
-    `рџЋҐ Р’С–РґРµРѕ Р· С‚РµРєСЃС‚Сѓ\n\nРќР°РїРёС€Рё РґРµС‚Р°Р»СЊРЅРёР№ РїСЂРѕРјС‚ вЂ” СЃС‚РІРѕСЂСЋ РІС–РґРµРѕ Р· РЅСѓР»СЏ!\n\nРџСЂРёРєР»Р°Рґ: "cinematic portrait of woman, wind in hair, golden hour"\n\nрџ’Ў t.me/promteamai`,
+    "?? ????? ? ??????\n\n?????? ????????? ????? ? ?????? ????? ? ????!\n\n???????: \"cinematic portrait of woman, wind in hair, golden hour\"\n\n?? t.me/promteamai",
     menu
   );
 });
@@ -3062,23 +3248,23 @@ bot.hears(BTN.KLING, (ctx) => {
   ctx.session.customType = null; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   ctx.session.videoInputMode = null;
   return ctx.reply(
-    "рџЋҐ Kling\n\n" +
-    "рџ“ё Р¤РѕС‚Рѕ в†’ Р’С–РґРµРѕ вЂ” РЅР°РґС–С€Р»Рё С„РѕС‚Рѕ + РїСЂРѕРјС‚, РѕР¶РёРІР»СЋ!\n" +
-    "вњЌпёЏ РўРµРєСЃС‚ в†’ Р’С–РґРµРѕ вЂ” РЅР°РїРёС€Рё РїСЂРѕРјС‚, СЃС‚РІРѕСЂСЋ РєС–РЅРµРјР°С‚РѕРіСЂР°С„С–С‡РЅРµ РІС–РґРµРѕ\n\n" +
-    "РџСЂРёРєР»Р°Рґ: \"cinematic close-up, soft bokeh\"\n\n" +
-    "рџ’Ў Р†РґРµС—: t.me/promteamai",
+    "🎥 Kling\n\n" +
+    "📸 Фото ? Відео — надішли фото + промт, оживлю!\n" +
+    "✍️ Текст ? Відео — напиши промт, створю кінематографічне відео\n\n" +
+    "Приклад: \"cinematic close-up, soft bokeh\"\n\n" +
+    "💡 Ідеї: t.me/promteamai",
     klingMenu()
   );
 });
 
-// в”Ђв”Ђв”Ђ AI РџР РћРњРў в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── AI ПРОМТ ─────────────────────────────────────────────────────────────────
 bot.hears(BTN.AI_PHOTO, (ctx) => {
   const cfg  = loadSettings();
   const user = touchUser(ctx);
-  if (!cfg.aiPromptEnabled) return ctx.reply("рџ¤– AI РїСЂРѕРјС‚ С‚РёРјС‡Р°СЃРѕРІРѕ РІРёРјРєРЅРµРЅРѕ.", photoMenu());
+  if (!cfg.aiPromptEnabled) return ctx.reply("🤖 AI промт тимчасово вимкнено.", photoMenu());
   if (!isAdmin(ctx.from.id) && (user.totalSpent || 0) <= 0) {
     return ctx.reply(
-      "рџ”’ AI РїСЂРѕРјС‚ РґРѕСЃС‚СѓРїРЅРёР№ РїС–СЃР»СЏ РїРѕРєСѓРїРєРё Р±СѓРґСЊ-СЏРєРѕРіРѕ РїР°РєРµС‚Сѓ рџ’і\n\nРљСѓРїРё РїР°РєРµС‚ Promti вЂ” С– РѕС‚СЂРёРјР°С”С€ РґРѕСЃС‚СѓРї РґРѕ AI РїСЂРѕРјС‚С–РІ!",
+      "🔒 AI промт доступний після покупки будь-якого пакету 💳\n\nКупи пакет Promti — і отримаєш доступ до AI промтів!",
       photoMenu()
     );
   }
@@ -3086,16 +3272,16 @@ bot.hears(BTN.AI_PHOTO, (ctx) => {
   clearPromptAttribution(ctx);
   ctx.session.mode = "photo"; ctx.session.style = null;
   ctx.session.awaitingAiPrompt = "photo"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
-  return ctx.reply("рџ¤– РќР°РґС–С€Р»Рё С„РѕС‚Рѕ вЂ” СЏ Р·Р°РїСЂРѕРїРѕРЅСѓСЋ РїСЂРѕРјС‚ РґР»СЏ РіРµРЅРµСЂР°С†С–С—.", photoMenu());
+  return ctx.reply("🤖 Надішли фото — я запропоную промт для генерації.", photoMenu());
 });
 
 bot.hears(BTN.AI_VIDEO, (ctx) => {
   const cfg  = loadSettings();
   const user = touchUser(ctx);
-  if (!cfg.aiPromptEnabled) return ctx.reply("рџ¤– AI РїСЂРѕРјС‚ С‚РёРјС‡Р°СЃРѕРІРѕ РІРёРјРєРЅРµРЅРѕ.", videoMenu());
+  if (!cfg.aiPromptEnabled) return ctx.reply("🤖 AI промт тимчасово вимкнено.", videoMenu());
   if (!isAdmin(ctx.from.id) && (user.totalSpent || 0) <= 0) {
     return ctx.reply(
-      "рџ”’ AI РїСЂРѕРјС‚ РґРѕСЃС‚СѓРїРЅРёР№ РїС–СЃР»СЏ РїРѕРєСѓРїРєРё Р±СѓРґСЊ-СЏРєРѕРіРѕ РїР°РєРµС‚Сѓ рџ’і\n\nРљСѓРїРё РїР°РєРµС‚ Promti вЂ” С– РѕС‚СЂРёРјР°С”С€ РґРѕСЃС‚СѓРї РґРѕ AI РїСЂРѕРјС‚С–РІ!",
+      "🔒 AI промт доступний після покупки будь-якого пакету 💳\n\nКупи пакет Promti — і отримаєш доступ до AI промтів!",
       videoMenu()
     );
   }
@@ -3104,36 +3290,36 @@ bot.hears(BTN.AI_VIDEO, (ctx) => {
   ctx.session.mode = "video";
   if (!ctx.session.style) ctx.session.style = "seedance";
   ctx.session.awaitingAiPrompt = "video"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
-  const label = ctx.session.style === "kling" ? "рџЋҐ Kling" : "рџЋ¬ Seedance";
-  return ctx.reply(`рџ¤– AI РїСЂРѕРјС‚ РґР»СЏ РІС–РґРµРѕ (${label})\n\nРќР°РґС–С€Р»Рё:\nрџ“ё Р¤РѕС‚Рѕ вЂ” РѕРїРёС€Сѓ СЂСѓС…\nрџЋ¬ Р’С–РґРµРѕ РґРѕ 10 СЃРµРє вЂ” РїСЂРѕР°РЅР°Р»С–Р·СѓСЋ СЂСѓС…\n\nРџСЂРѕРјС‚: РјР°РєСЃ. 10 СЃР»С–РІ.`, videoMenu());
+  const label = ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance";
+  return ctx.reply(`🤖 AI промт для відео (${label})\n\nНадішли:\n📸 Фото — опишу рух\n🎬 Відео до 10 сек — проаналізую рух\n\nПромт: макс. 10 слів.`, videoMenu());
 });
 
-// в”Ђв”Ђв”Ђ РџРћРљРЈРџРљРђ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ПОКУПКА ──────────────────────────────────────────────────────────────────
 async function sendAutoPayment(ctx, packKey) {
   try {
     const user = touchUser(ctx);
     const pack = getPackages()[packKey];
-    if (!pack) return ctx.reply("вќЊ РџР°РєРµС‚ РЅРµ Р·РЅР°Р№РґРµРЅРѕ.");
+    if (!pack) return ctx.reply("❌ Пакет не знайдено.");
     const { invoiceUrl, orderReference } = await createWayForPayInvoice(ctx.from.id, packKey);
     user.pendingOrderReference = orderReference;
     user.lastPaymentRequest    = { packKey, createdAt: new Date().toISOString() };
     saveUsers();
-    return ctx.reply(`РџР°РєРµС‚: ${pack.title}\nР¦С–РЅР°: ${pack.priceText}`, paymentInlineKeyboard(invoiceUrl, pack));
+    return ctx.reply(`Пакет: ${pack.title}\nЦіна: ${pack.priceText}`, paymentInlineKeyboard(invoiceUrl, pack));
   } catch (e) {
     console.error("PAYMENT ERROR:", e.message);
-    return ctx.reply("вќЊ РќРµ РІРґР°Р»РѕСЃСЏ СЃС‚РІРѕСЂРёС‚Рё СЂР°С…СѓРЅРѕРє. РЎРїСЂРѕР±СѓР№ РїС–Р·РЅС–С€Рµ.");
+    return ctx.reply("❌ Не вдалося створити рахунок. Спробуй пізніше.");
   }
 }
 
-// вњ… Inline callback РѕР±СЂРѕР±РЅРёРєРё РґР»СЏ РїРѕРєСѓРїРєРё РїР°РєРµС‚С–РІ (РЅР°РґС–Р№РЅС–С€Рµ РЅС–Р¶ reply-РєРЅРѕРїРєРё)
+// ✅ Inline callback обробники для покупки пакетів (надійніше ніж reply-кнопки)
 bot.action(/^buy_pack_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
-    const packKey = ctx.match[1];
+      Markup.keyboard([[BTN.BACK]]).resize()
     await sendAutoPayment(ctx, packKey);
   } catch (e) {
     console.error("BUY_PACK CALLBACK ERROR:", e.message);
-    try { await ctx.reply("вќЊ РќРµ РІРґР°Р»РѕСЃСЏ СЃС‚РІРѕСЂРёС‚Рё СЂР°С…СѓРЅРѕРє. РЎРїСЂРѕР±СѓР№ С‰Рµ СЂР°Р·."); } catch {}
+    try { await ctx.reply("❌ Не вдалося створити рахунок. Спробуй ще раз."); } catch {}
   }
 });
 
@@ -3141,32 +3327,32 @@ bot.action("buy_custom_amount", async (ctx) => {
   try {
     await ctx.answerCbQuery();
     touchUser(ctx);
-    if (isAdmin(ctx.from.id)) return ctx.reply("вњ… РђРґРјС–РЅ вЂ” Р±РµР·РєРѕС€С‚РѕРІРЅРѕ.", adminMenu());
+    if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
     ctx.session.awaitingCustomAmount = true;
     return ctx.reply(
-      `рџ’¬ Р’РІРµРґРё Р±Р°Р¶Р°РЅСѓ СЃСѓРјСѓ РІ РіСЂРёРІРЅСЏС…\n\n1 Promti вњЁ = 9.9 РіСЂРЅ\nРњС–РЅС–РјСѓРј: 50 РіСЂРЅ\n\nРџСЂРёРєР»Р°Рґ: 200`,
-      Markup.keyboard([["в†©пёЏ РќР°Р·Р°Рґ"]]).resize()
+      `💬 Введи бажану суму в гривнях\n\n1 Promti ✨ = 9.9 грн\nМінімум: 50 грн\n\nПриклад: 200`,
+      Markup.keyboard([[BTN.BACK]]).resize()
     );
   } catch (e) { console.error("BUY CUSTOM AMOUNT:", e.message); }
 });
 
-// вњ… Р—Р°Р»РёС€Р°СЋ СЃС‚Р°СЂС– reply-hears СЏРє fallback (СЂР°РїС‚РѕРј СЋР·РµСЂ СЏРєРѕСЃСЊ РЅР°С‚РёСЃРЅРµ)
+// ✅ Залишаю старі reply-hears як fallback (раптом юзер якось натисне)
 bot.hears(/^10\s+Promti/i,  (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack10"); });
 bot.hears(/^30\s+Promti/i,  (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack30"); });
 bot.hears(/^60\s+Promti/i,  (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack60"); });
 bot.hears(/^150\s+Promti/i, (ctx) => { touchUser(ctx); sendAutoPayment(ctx, "promti_pack150"); });
 
 bot.action(/^checkpay_(.+)$/, async (ctx) => {
-  try { await ctx.answerCbQuery("РЇРєС‰Рѕ РѕРїР»Р°С‚Р° РїСЂРѕР№С€Р»Р° вЂ” Р±СѓРґРµ Р·Р°СЂР°С…РѕРІР°РЅРѕ Р°РІС‚РѕРјР°С‚РёС‡РЅРѕ вњ…"); }
+  try { await ctx.answerCbQuery("Якщо оплата пройшла — буде зараховано автоматично ✅"); }
   catch (e) { console.error("CHECKPAY:", e.message); }
 });
 
-// в”Ђв”Ђв”Ђ РђРџРЎР•Р› INLINE РљРќРћРџРљР в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── АПСЕЛ INLINE КНОПК�? ─────────────────────────────────────────────────────
 bot.action(/^pay_custom_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
     const tempKey = ctx.match[1];
-    if (!dynamicPackages[tempKey]) return ctx.reply("вќЊ РџР°РєРµС‚ РЅРµ Р·РЅР°Р№РґРµРЅРѕ. РЎРїСЂРѕР±СѓР№ С‰Рµ СЂР°Р·.");
+    if (!dynamicPackages[tempKey]) return ctx.reply("❌ Пакет не знайдено. Спробуй ще раз.");
     await sendAutoPayment(ctx, tempKey);
   } catch (e) { console.error("PAY CUSTOM:", e.message); }
 });
@@ -3175,30 +3361,30 @@ bot.action("upsell_promti", async (ctx) => {
   try {
     await ctx.answerCbQuery();
     touchUser(ctx);
-    if (isAdmin(ctx.from.id)) return ctx.reply("вњ… РђРґРјС–РЅ вЂ” Р±РµР·РєРѕС€С‚РѕРІРЅРѕ.");
+    if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.");
     await ctx.reply(
-      `рџ’Ћ РћР±РµСЂРё РїР°РєРµС‚ Promti вњЁ\n\n` +
-      `рџ“¦ РџР°РєРµС‚Рё:\n` +
-      `10 Promti вњЁ вЂ” 99 РіСЂРЅ\n` +
-      `30 Promti вњЁ вЂ” 249 РіСЂРЅ\n` +
-      `60 Promti вњЁ вЂ” 449 РіСЂРЅ\n` +
-      `150 Promti вњЁ вЂ” 999 РіСЂРЅ рџ”Ґ\n\n` +
-      `рџ’° Р¦С–РЅРё РїРѕСЃР»СѓРі:\n` +
-      `рџ–ј Р¤РѕС‚Рѕ вЂ” 1 Promti вњЁ\n` +
-      `рџЋ¬ Seedance вЂ” 5 Promti вњЁ\n` +
-      `рџЋҐ Kling вЂ” 8 Promti вњЁ`,
+      `💎 Обери пакет Promti ✨\n\n` +
+      `📦 Пакети:\n` +
+      `10 Promti ✨ — 99 грн\n` +
+      `30 Promti ✨ — 249 грн\n` +
+      `60 Promti ✨ — 449 грн\n` +
+      `150 Promti ✨ — 999 грн 🔥\n\n` +
+      `💰 Ціни послуг:\n` +
+      `🖼 Фото — 1 Promti ✨\n` +
+      `🎬 Seedance — 5 Promti ✨\n` +
+      `🎥 Kling — 8 Promti ✨`,
       Markup.inlineKeyboard([
-        [Markup.button.callback("10 Promti вњЁ вЂ” 99 РіСЂРЅ",  "buy_pack_promti_pack10")],
-        [Markup.button.callback("30 Promti вњЁ вЂ” 249 РіСЂРЅ", "buy_pack_promti_pack30")],
-        [Markup.button.callback("60 Promti вњЁ вЂ” 449 РіСЂРЅ", "buy_pack_promti_pack60")],
-        [Markup.button.callback("150 Promti вњЁ вЂ” 999 РіСЂРЅ рџ”Ґ", "buy_pack_promti_pack150")],
-        [Markup.button.callback("рџ’¬ РЎРІРѕСЏ СЃСѓРјР°", "buy_custom_amount")],
+        [Markup.button.callback("10 Promti ✨ — 99 грн",  "buy_pack_promti_pack10")],
+        [Markup.button.callback("30 Promti ✨ — 249 грн", "buy_pack_promti_pack30")],
+        [Markup.button.callback("60 Promti ✨ — 449 грн", "buy_pack_promti_pack60")],
+        [Markup.button.callback("150 Promti ✨ — 999 грн 🔥", "buy_pack_promti_pack150")],
+        [Markup.button.callback("💬 Своя сума", "buy_custom_amount")],
       ])
     );
   } catch (e) { console.error("UPSELL PROMTI:", e.message); }
 });
 
-// в”Ђв”Ђв”Ђ AI РџР РћРњРў INLINE РљРќРћРџРљР в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── AI ПРОМТ INLINE КНОПК�? ───────────────────────────────────────────────────
 bot.action(/^promptlib_page_(\d+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -3344,10 +3530,10 @@ bot.action("stylewizard_save", async (ctx) => {
     await ctx.answerCbQuery();
     if (!isAdmin(ctx.from.id)) return;
     const style = saveWizardStyle(ctx);
-    if (!style) return ctx.reply("вќЊ РќРµ РІРґР°Р»РѕСЃСЏ Р·Р±РµСЂРµРіС‚Рё СЃС‚РёР»СЊ.", adminMenu());
+    if (!style) return ctx.reply("❌ Не вдалося зберегти стиль.", adminMenu());
     const botUsername = await resolveBotUsername(ctx);
     return ctx.reply(
-      `вњ… РЎС‚РёР»СЊ Р·Р±РµСЂРµР¶РµРЅРѕ\n\nKEY: ${style.key}\nType: ${style.type}\nDeep-link: ${getStyleDeepLink(botUsername, style.key)}`,
+      `✅ Стиль збережено\n\nKEY: ${style.key}\nType: ${style.type}\nDeep-link: ${getStyleDeepLink(botUsername, style.key)}`,
       adminMenu()
     );
   } catch (e) { console.error("STYLEWIZARD SAVE:", e.message); }
@@ -3358,7 +3544,7 @@ bot.action("stylewizard_cancel", async (ctx) => {
     await ctx.answerCbQuery();
     if (!isAdmin(ctx.from.id)) return;
     ctx.session.styleWizard = null;
-    return ctx.reply("Wizard СЃРєР°СЃРѕРІР°РЅРѕ.", adminMenu());
+    return ctx.reply("Wizard скасовано.", adminMenu());
   } catch (e) { console.error("STYLEWIZARD CANCEL:", e.message); }
 });
 
@@ -3369,7 +3555,7 @@ bot.action(/^admin_promptlib_trend_(.+)_(on|off)$/, async (ctx) => {
     const key = normalizePromptKey(ctx.match[1]);
     const mode = ctx.match[2];
     const style = getPromptStyle(key);
-    if (!style) return ctx.reply("вќЊ РЎС‚РёР»СЊ РЅРµ Р·РЅР°Р№РґРµРЅРѕ.");
+    if (!style) return ctx.reply("❌ Стиль не знайдено.");
     style.isTrending = mode === "on";
     content.promptLibrary[key] = style;
     saveContent();
@@ -3379,13 +3565,13 @@ bot.action(/^admin_promptlib_trend_(.+)_(on|off)$/, async (ctx) => {
 
 bot.action(/^admin_promptlib_preview_(.+)$/, async (ctx) => {
   try {
-    await ctx.answerCbQuery("РќР°РґС–С€Р»Рё preview-С„РѕС‚Рѕ");
+    await ctx.answerCbQuery("Надішли preview-фото");
     if (!isAdmin(ctx.from.id)) return;
     const key = normalizePromptKey(ctx.match[1]);
     const style = getPromptStyle(key);
-    if (!style) return ctx.reply("вќЊ РЎС‚РёР»СЊ РЅРµ Р·РЅР°Р№РґРµРЅРѕ.");
+    if (!style) return ctx.reply("❌ Стиль не знайдено.");
     ctx.session.awaitingPromptPreviewKey = key;
-    return ctx.reply(`рџ–ј РќР°РґС–С€Р»Рё preview-С„РѕС‚Рѕ РґР»СЏ СЃС‚РёР»СЋ "${key}" Р°Р±Рѕ РЅР°РїРёС€Рё "РІРёРґР°Р»РёС‚Рё".`, adminMenu());
+    return ctx.reply(`🖼 Надішли preview-фото для стилю "${key}" або напиши "видалити".`, adminMenu());
   } catch (e) { console.error("ADMIN PROMPTLIB PREVIEW:", e.message); }
 });
 
@@ -3395,11 +3581,11 @@ bot.action(/^admin_promptlib_examples_(.+)$/, async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
     const key = normalizePromptKey(ctx.match[1]);
     const style = getPromptStyle(key);
-    if (!style) return ctx.reply("вќЊ РЎС‚РёР»СЊ РЅРµ Р·РЅР°Р№РґРµРЅРѕ.");
+    if (!style) return ctx.reply("❌ Стиль не знайдено.");
     ctx.session.awaitingPromptExamplesKey = key;
     return ctx.reply(
-      `РќР°РґС–С€Р»Рё РґРѕ ${MAX_PROMPT_EXAMPLE_PHOTOS} С„РѕС‚Рѕ РґР»СЏ СЃС‚РёР»СЋ "${key}".\n` +
-      `РќР°РїРёС€Рё "РіРѕС‚РѕРІРѕ" С‰РѕР± Р·Р°РІРµСЂС€РёС‚Рё Р°Р±Рѕ "РІРёРґР°Р»РёС‚Рё" С‰РѕР± РѕС‡РёСЃС‚РёС‚Рё РІСЃС– РїСЂРёРєР»Р°РґРё.`,
+      `Надішли до ${MAX_PROMPT_EXAMPLE_PHOTOS} фото для стилю "${key}".\n` +
+      `Напиши "готово" щоб завершити або "видалити" щоб очистити всі приклади.`,
       adminMenu()
     );
   } catch (e) { console.error("ADMIN PROMPTLIB EXAMPLES:", e.message); }
@@ -3410,10 +3596,10 @@ bot.action(/^admin_promptlib_delete_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery();
     if (!isAdmin(ctx.from.id)) return;
     const key = normalizePromptKey(ctx.match[1]);
-    if (!getPromptStyle(key)) return ctx.reply("вќЊ РЎС‚РёР»СЊ РЅРµ Р·РЅР°Р№РґРµРЅРѕ.");
+    if (!getPromptStyle(key)) return ctx.reply("❌ Стиль не знайдено.");
     delete content.promptLibrary[key];
     saveContent();
-    return ctx.reply(`вњ… РЎС‚РёР»СЊ "${key}" РІРёРґР°Р»РµРЅРѕ.`, adminMenu());
+    return ctx.reply(`✅ Стиль "${key}" видалено.`, adminMenu());
   } catch (e) { console.error("ADMIN PROMPTLIB DELETE:", e.message); }
 });
 
@@ -3427,10 +3613,10 @@ bot.action("admin_promptlib_noop", async (ctx) => {
 
 bot.action(/^apply_ai_prompt_(photo|video)$/, async (ctx) => {
   try {
-    await ctx.answerCbQuery("вњ… РџСЂРѕРјС‚ Р·Р°СЃС‚РѕСЃРѕРІР°РЅРѕ! РќР°РґС–С€Р»Рё С„РѕС‚Рѕ.");
+    await ctx.answerCbQuery("✅ Промт застосовано! Надішли фото.");
     const aiMode = ctx.match[1];
     await ctx.reply(
-      `вњ… РџСЂРѕРјС‚ Р·Р±РµСЂРµР¶РµРЅРѕ:\n\nрџ“ќ <code>${escapeHtml(ctx.session.customPrompt || "-")}</code>\n\nРќР°РґС–С€Р»Рё С„РѕС‚Рѕ рџ“ё`,
+      `✅ Промт збережено:\n\n📝 <code>${escapeHtml(ctx.session.customPrompt || "-")}</code>\n\nНадішли фото 📸`,
       { parse_mode: "HTML", ...(aiMode === "video" ? videoMenu() : photoMenu()) }
     );
   } catch (e) { console.error("APPLY AI PROMPT:", e.message); }
@@ -3438,14 +3624,14 @@ bot.action(/^apply_ai_prompt_(photo|video)$/, async (ctx) => {
 
 bot.action(/^regen_ai_prompt_(photo|video)$/, async (ctx) => {
   try {
-    await ctx.answerCbQuery("рџ”„ РќР°РґС–С€Р»Рё С„РѕС‚Рѕ С‰Рµ СЂР°Р·");
+    await ctx.answerCbQuery("🔄 Надішли фото ще раз");
     const aiMode = ctx.match[1];
     ctx.session.awaitingAiPrompt = aiMode; ctx.session.customPrompt = null;
-    await ctx.reply("рџ”„ РќР°РґС–С€Р»Рё С„РѕС‚Рѕ вЂ” Р·РіРµРЅРµСЂСѓСЋ РЅРѕРІРёР№ РІР°СЂС–Р°РЅС‚.", aiMode === "video" ? videoMenu() : photoMenu());
+    await ctx.reply("🔄 Надішли фото — згенерую новий варіант.", aiMode === "video" ? videoMenu() : photoMenu());
   } catch (e) { console.error("REGEN AI PROMPT:", e.message); }
 });
 
-// в”Ђв”Ђв”Ђ РўР•РљРЎРўРћР’РР™ РҐР•РќР”Р›Р•Р  в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ТЕКСТОВ�?Й ХЕНДЛЕР ────────────────────────────────────────────────────────
 const ALL_BUTTONS = [
   BTN.PHOTO, BTN.VIDEO, BTN.TRENDING, BTN.BALANCE, BTN.IDEAS, BTN.INFO, BTN.HELP, BTN.SUPPORT, BTN.PRICES,
   BTN.INVITE,
@@ -3464,9 +3650,9 @@ const ALL_BUTTONS = [
 bot.on("text", async (ctx, next) => {
   try {
     ensureSession(ctx); touchUser(ctx);
-    if (users[ctx.from.id]?.banned) return ctx.reply("рџљ« Р’Р°С€ Р°РєР°СѓРЅС‚ Р·Р°Р±Р»РѕРєРѕРІР°РЅРёР№. РќР°РїРёС€С–С‚СЊ РІ РїС–РґС‚СЂРёРјРєСѓ.");
+    if (users[ctx.from.id]?.banned) return ctx.reply("🚫 Ваш акаунт заблокований. Напишіть в підтримку.");
     const text = ctx.message.text;
-    // вњ… РџРµСЂРµРІС–СЂСЏС”РјРѕ С‚Р°РєРѕР¶ СЂСЏРґРєРё С‰Рѕ РїРѕС‡РёРЅР°СЋС‚СЊСЃСЏ Р· "N Promti" вЂ” С†Рµ РїР°РєРµС‚Рё, С—С… Р»РѕРІР»СЏС‚СЊ regex bot.hears
+    // ✅ Перевіряємо також рядки що починаються з "N Promti" — це пакети, їх ловлять regex bot.hears
     const isPackButton = /^\d+\s+Promti/i.test(text);
     if (ALL_BUTTONS.includes(text) || text.startsWith("/") || isPackButton) return next();
 
@@ -3474,8 +3660,8 @@ bot.on("text", async (ctx, next) => {
       const wizard = ctx.session.styleWizard;
       if (wizard.step === "key") {
         const key = normalizePromptKey(text);
-        if (!key) return ctx.reply("вќЊ РќРµРєРѕСЂРµРєС‚РЅРёР№ key. Р’РёРєРѕСЂРёСЃС‚РѕРІСѓР№ a-z, 0-9, _ С‚Р° -");
-        if (getStyle(key)) return ctx.reply(`вќЊ РЎС‚РёР»СЊ "${key}" РІР¶Рµ С–СЃРЅСѓС”.`);
+        if (!key) return ctx.reply("❌ Некоректний key. Використовуй a-z, 0-9, _ та -");
+        if (getStyle(key)) return ctx.reply(`❌ Стиль "${key}" вже існує.`);
         wizard.style.key = key;
         wizard.step = "category";
         return promptStyleWizardStep(ctx);
@@ -3502,7 +3688,7 @@ bot.on("text", async (ctx, next) => {
       }
       if (wizard.step === "selector_key") {
         const selectorKey = normalizePromptKey(text);
-        if (!selectorKey) return ctx.reply("вќЊ РќРµРєРѕСЂРµРєС‚РЅРёР№ selector key.");
+        if (!selectorKey) return ctx.reply("❌ Некоректний selector key.");
         wizard.currentSelector = { key: selectorKey, label: "", type: "inline", options: {} };
         wizard.step = "selector_label";
         return promptStyleWizardStep(ctx);
@@ -3515,7 +3701,7 @@ bot.on("text", async (ctx, next) => {
       }
       if (wizard.step === "option_key") {
         const optionKey = normalizePromptKey(text);
-        if (!optionKey) return ctx.reply("вќЊ РќРµРєРѕСЂРµРєС‚РЅРёР№ option key.");
+        if (!optionKey) return ctx.reply("❌ Некоректний option key.");
         wizard.currentOption = { key: optionKey, label: "", variables: {} };
         wizard.step = "option_label";
         return promptStyleWizardStep(ctx);
@@ -3535,7 +3721,7 @@ bot.on("text", async (ctx, next) => {
           wizard.step = "selector_continue";
           return promptStyleWizardStep(ctx);
         } catch {
-          return ctx.reply("вќЊ Variables РјР°СЋС‚СЊ Р±СѓС‚Рё РІР°Р»С–РґРЅРёРј JSON.");
+          return ctx.reply("❌ Variables мають бути валідним JSON.");
         }
       }
     }
@@ -3543,12 +3729,12 @@ bot.on("text", async (ctx, next) => {
     if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptEditKey) {
       const key = ctx.session.awaitingPromptEditKey; prompts[key] = text; savePrompts();
       ctx.session.awaitingPromptEditKey = null;
-      return ctx.reply(`вњ… РџСЂРѕРјС‚ "${key}" РѕРЅРѕРІР»РµРЅРѕ.`, adminMenu());
+      return ctx.reply(`✅ Промт "${key}" оновлено.`, adminMenu());
     }
     if (isAdmin(ctx.from.id) && ctx.session.awaitingTextEditKey) {
       const key = ctx.session.awaitingTextEditKey; content[key] = text; saveContent();
       ctx.session.awaitingTextEditKey = null;
-      return ctx.reply(`вњ… РўРµРєСЃС‚ "${key}" РѕРЅРѕРІР»РµРЅРѕ.`, adminMenu());
+      return ctx.reply(`✅ Текст "${key}" оновлено.`, adminMenu());
     }
 
     if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptExamplesKey) {
@@ -3556,41 +3742,41 @@ bot.on("text", async (ctx, next) => {
       const key = ctx.session.awaitingPromptExamplesKey;
       const style = getPromptStyle(key);
 
-      if (lower === "РіРѕС‚РѕРІРѕ") {
+      if (lower === "готово") {
         ctx.session.awaitingPromptExamplesKey = null;
         const count = style ? getPromptExamplePhotos(style).length : 0;
-        return ctx.reply(`вњ… Р¤РѕС‚Рѕ-РїСЂРёРєР»Р°РґРё РґР»СЏ "${key}" Р·Р±РµСЂРµР¶РµРЅРѕ: ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS}.`, adminMenu());
+        return ctx.reply(`✅ Фото-приклади для "${key}" збережено: ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS}.`, adminMenu());
       }
 
-      if (lower === "РІРёРґР°Р»РёС‚Рё") {
+      if (lower === "видалити") {
         ctx.session.awaitingPromptExamplesKey = null;
-        if (!style) return ctx.reply(`вќЊ РЎС‚РёР»СЊ "${key}" РЅРµ Р·РЅР°Р№РґРµРЅРѕ.`, adminMenu());
+        if (!style) return ctx.reply(`❌ Стиль "${key}" не знайдено.`, adminMenu());
         style.examplePhotos = [];
         style.previewPhoto = null;
         content.promptLibrary[key] = style;
         saveContent();
-        return ctx.reply(`вњ… РЈСЃС– С„РѕС‚Рѕ-РїСЂРёРєР»Р°РґРё РґР»СЏ "${key}" РІРёРґР°Р»РµРЅРѕ.`, adminMenu());
+        return ctx.reply(`✅ Усі фото-приклади для "${key}" видалено.`, adminMenu());
       }
     }
 
-    if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptPreviewKey && text.toLowerCase().trim() === "РІРёРґР°Р»РёС‚Рё") {
+    if (isAdmin(ctx.from.id) && ctx.session.awaitingPromptPreviewKey && text.toLowerCase().trim() === "видалити") {
       const key = ctx.session.awaitingPromptPreviewKey;
       const style = getPromptStyle(key);
       ctx.session.awaitingPromptPreviewKey = null;
-      if (!style) return ctx.reply(`вќЊ РЎС‚РёР»СЊ "${key}" РЅРµ Р·РЅР°Р№РґРµРЅРѕ.`, adminMenu());
+      if (!style) return ctx.reply(`❌ Стиль "${key}" не знайдено.`, adminMenu());
       style.previewPhoto = null;
       content.promptLibrary[key] = style;
       saveContent();
-      return ctx.reply(`вњ… Preview-С„РѕС‚Рѕ РґР»СЏ "${key}" РІРёРґР°Р»РµРЅРѕ.`, adminMenu());
+      return ctx.reply(`✅ Preview-фото для "${key}" видалено.`, adminMenu());
     }
 
-    // вњ… РђРґРјС–РЅ РЅР°РїРёСЃР°РІ "РІРёРґР°Р»РёС‚Рё" С‰РѕР± РїСЂРёР±СЂР°С‚Рё С„РѕС‚Рѕ
-    if (isAdmin(ctx.from.id) && ctx.session.awaitingPhotoForKey && text.toLowerCase().trim() === "РІРёРґР°Р»РёС‚Рё") {
+    // ✅ Адмін написав "видалити" щоб прибрати фото
+    if (isAdmin(ctx.from.id) && ctx.session.awaitingPhotoForKey && text.toLowerCase().trim() === "видалити") {
       const key = ctx.session.awaitingPhotoForKey;
       ctx.session.awaitingPhotoForKey = null;
       delete content[key];
       saveContent();
-      return ctx.reply(`вњ… Р¤РѕС‚Рѕ "${key}" РІРёРґР°Р»РµРЅРѕ.`, adminMenu());
+      return ctx.reply(`✅ Фото "${key}" видалено.`, adminMenu());
     }
 
     if ((ctx.session.customType === "custom_photo" || ctx.session.customType === "create_photo") && ctx.session.awaitingCustomPrompt) {
@@ -3600,43 +3786,43 @@ bot.on("text", async (ctx, next) => {
 
       if (ctx.session.customType === "create_photo") {
         const user = getUser(ctx.from.id);
-        if (userGenerating.has(ctx.from.id)) return ctx.reply("вЏі Р—Р°С‡РµРєР°Р№, С‰Рµ РѕР±СЂРѕР±Р»СЏС”С‚СЊСЃСЏ...");
+        return ctx.reply("? ?????????? ???? 50 ???. ????? ?????:", Markup.keyboard([[BTN.BACK]]).resize());
         userGenerating.add(ctx.from.id);
         enqueueGeneration(ctx.from.id, () => _processGeneration(ctx, user, ctx.from.id, "photo", null), "photo", ctx)
           .catch(e => {
-            userGenerating.delete(ctx.from.id);
+        return ctx.reply("? ??????? 50 ??? (5 Promti ?). ????? ?????? ????:", Markup.keyboard([[BTN.BACK]]).resize());
             console.error("CREATE PHOTO ENQUEUE ERROR:", e.message);
-            ctx.reply("вќЊ РЎС‚Р°Р»Р°СЃСЏ РїРѕРјРёР»РєР°. РЎРїСЂРѕР±СѓР№ С‰Рµ СЂР°Р·.").catch(() => {});
+            ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
           });
         return;
       }
-      return ctx.reply("РџСЂРѕРјС‚ Р·Р±РµСЂРµР¶РµРЅРѕ вњ…\nРќР°РґС–С€Р»Рё СЃРІРѕС” С„РѕС‚Рѕ рџ“ё", photoMenu());
+      return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", photoMenu());
     }
 
     if (ctx.session.awaitingCustomAmount) {
       const amount = parseInt(text);
       if (isNaN(amount) || amount < 50) {
-        return ctx.reply("вќЊ РњС–РЅС–РјР°Р»СЊРЅР° СЃСѓРјР° 50 РіСЂРЅ. Р’РІРµРґРё С‡РёСЃР»Рѕ:", Markup.keyboard([["в†©пёЏ РќР°Р·Р°Рґ"]]).resize());
+        return ctx.reply("? ?????????? ???? 50 ???. ????? ?????:", Markup.keyboard([[BTN.BACK]]).resize());
       }
       const promtiCount = Math.floor(amount / 9.9);
       if (promtiCount < 5) {
-        return ctx.reply("вќЊ РњС–РЅС–РјСѓРј 50 РіСЂРЅ (5 Promti вњЁ). Р’РІРµРґРё Р±С–Р»СЊС€Сѓ СЃСѓРјСѓ:", Markup.keyboard([["в†©пёЏ РќР°Р·Р°Рґ"]]).resize());
+        return ctx.reply("? ??????? 50 ??? (5 Promti ?). ????? ?????? ????:", Markup.keyboard([[BTN.BACK]]).resize());
       }
       ctx.session.awaitingCustomAmount = false;
       const tempKey = `custom_${Date.now()}`;
       dynamicPackages[tempKey] = {
         key: tempKey,
         type: "promti",
-        title: `${promtiCount} Promti вњЁ`,
+        title: `${promtiCount} Promti ✨`,
         promti: promtiCount,
         amount: amount,
-        priceText: `${amount} РіСЂРЅ`,
+        priceText: `${amount} грн`,
         temporary: true,
       };
-      saveDynamicPackages(); // вњ… Р·Р±РµСЂС–РіР°С”РјРѕ РЅР° РґРёСЃРє С‰РѕР± callback РјС–Рі Р·РЅР°Р№С‚Рё РїР°РєРµС‚ РЅР°РІС–С‚СЊ РїС–СЃР»СЏ СЂРµСЃС‚Р°СЂС‚Сѓ
+      saveDynamicPackages(); // ✅ зберігаємо на диск щоб callback міг знайти пакет навіть після рестарту
       await ctx.reply(
-        `рџ’Ћ РўРІС–Р№ РїР°РєРµС‚:\n${promtiCount} Promti вњЁ вЂ” ${amount} РіСЂРЅ\n\nРџРµСЂРµР№С‚Рё РґРѕ РѕРїР»Р°С‚Рё?`,
-        Markup.inlineKeyboard([[Markup.button.callback("рџ’і РћРїР»Р°С‚РёС‚Рё", `pay_custom_${tempKey}`)]])
+        `💎 Твій пакет:\n${promtiCount} Promti ✨ — ${amount} грн\n\nПерейти до оплати?`,
+        Markup.inlineKeyboard([[Markup.button.callback("💳 Оплатити", `pay_custom_${tempKey}`)]])
       );
       return;
     }
@@ -3646,7 +3832,7 @@ bot.on("text", async (ctx, next) => {
       ctx.session.customPrompt = text;
       const style = ctx.session.style;
       const menu = style === "kling" ? klingMenu() : seedanceMenu();
-      return ctx.reply(`вњ… РџСЂРѕРјС‚ Р·Р±РµСЂРµР¶РµРЅРѕ: "${text}"\nРўРµРїРµСЂ РЅР°РґС–С€Р»Рё С„РѕС‚Рѕ рџ“ё`, menu);
+      return ctx.reply(`✅ Промт збережено: "${text}"\nТепер надішли фото 📸`, menu);
     }
 
     if (ctx.session.mode === "video" && ctx.session.awaitingCustomPrompt) {
@@ -3659,29 +3845,29 @@ bot.on("text", async (ctx, next) => {
 
       if (videoInputMode === "text") {
         const user = getUser(ctx.from.id);
-        if (userGenerating.has(ctx.from.id)) return ctx.reply("вЏі Р—Р°С‡РµРєР°Р№, С‰Рµ РѕР±СЂРѕР±Р»СЏС”С‚СЊСЃСЏ...");
+        if (userGenerating.has(ctx.from.id)) return ctx.reply("? Зачекай, ще обробляється...");
         userGenerating.add(ctx.from.id);
         enqueueGeneration(ctx.from.id, () => _processGeneration(ctx, user, ctx.from.id, "video", null), "video", ctx)
           .catch(e => {
             userGenerating.delete(ctx.from.id);
             console.error("TEXT-TO-VIDEO ENQUEUE ERROR:", e.message);
-            ctx.reply("вќЊ РЎС‚Р°Р»Р°СЃСЏ РїРѕРјРёР»РєР°. РЎРїСЂРѕР±СѓР№ С‰Рµ СЂР°Р·.").catch(() => {});
+            ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
           });
         return;
       }
-      return ctx.reply("РџСЂРѕРјС‚ Р·Р±РµСЂРµР¶РµРЅРѕ вњ…\nРќР°РґС–С€Р»Рё СЃРІРѕС” С„РѕС‚Рѕ рџ“ё", menu);
+      return ctx.reply("Промт збережено ✅\nНадішли своє фото 📸", menu);
     }
-    return ctx.reply("РћР±РµСЂРё СЂРѕР·РґС–Р» С‡РµСЂРµР· РјРµРЅСЋ Р°Р±Рѕ /start", mainMenu());
-  } catch (e) { console.error("TEXT HANDLER:", e.message); return ctx.reply("РџРѕРјРёР»РєР° рџў", mainMenu()); }
+    return ctx.reply("Обери розділ через меню або /start", mainMenu());
+  } catch (e) { console.error("TEXT HANDLER:", e.message); return ctx.reply("??????? ??", mainMenu()); }
 });
 
-// в”Ђв”Ђв”Ђ РҐР•РќР”Р›Р•Р  Р¤РћРўРћ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ХЕНДЛЕР ФОТО ────────────────────────────────────────────────────────────
 bot.on("photo", async (ctx) => {
   ensureSession(ctx);
   const user   = touchUser(ctx);
   const userId = ctx.from.id;
 
-  if (user.banned) return ctx.reply("рџљ« Р’Р°С€ Р°РєР°СѓРЅС‚ Р·Р°Р±Р»РѕРєРѕРІР°РЅРёР№.");
+  if (user.banned) return ctx.reply("🚫 Ваш акаунт заблокований.");
 
   const photo         = ctx.message.photo[ctx.message.photo.length - 1];
 
@@ -3702,7 +3888,7 @@ bot.on("photo", async (ctx) => {
         return promptStyleWizardStep(ctx);
       }
       return ctx.reply(
-        `вњ… Р”РѕРґР°РЅРѕ РїСЂРёРєР»Р°Рґ ${wizard.style.examplePhotos.length}/${MAX_PROMPT_EXAMPLE_PHOTOS}. РќР°РґС–С€Р»Рё С‰Рµ С„РѕС‚Рѕ Р°Р±Рѕ РЅР°С‚РёСЃРЅРё done.`,
+        `✅ Додано приклад ${wizard.style.examplePhotos.length}/${MAX_PROMPT_EXAMPLE_PHOTOS}. Надішли ще фото або натисни done.`,
         Markup.inlineKeyboard([
           [Markup.button.callback("Done examples", "stylewizard_done_examples")],
           [Markup.button.callback("Skip examples", "stylewizard_skip_examples")],
@@ -3711,24 +3897,24 @@ bot.on("photo", async (ctx) => {
     }
   }
 
-  // вњ… РђРґРјС–РЅ РїСЂРёРєСЂС–РїР»СЏС” С„РѕС‚Рѕ РґРѕ С‚РµРєСЃС‚РѕРІРѕРіРѕ РєР»СЋС‡Р° (welcomePhoto/infoPhoto С‚РѕС‰Рѕ)
+  // ✅ Адмін прикріпляє фото до текстового ключа (welcomePhoto/infoPhoto тощо)
   if (isAdmin(userId) && ctx.session.awaitingPhotoForKey) {
     const key = ctx.session.awaitingPhotoForKey;
     ctx.session.awaitingPhotoForKey = null;
     content[key] = photo.file_id;
     saveContent();
-    return ctx.reply(`вњ… Р¤РѕС‚Рѕ РїСЂРёРєСЂС–РїР»РµРЅРѕ РґРѕ "${key}".\n\nРџРµСЂРµРІС–СЂ СЏРє РІРёРіР»СЏРґР°С” вЂ” РЅР°С‚РёСЃРЅРё РІС–РґРїРѕРІС–РґРЅСѓ РєРЅРѕРїРєСѓ РІ РіРѕР»РѕРІРЅРѕРјСѓ РјРµРЅСЋ.`, adminMenu());
+    return ctx.reply(`✅ Фото прикріплено до "${key}".\n\nПеревір як виглядає — натисни відповідну кнопку в головному меню.`, adminMenu());
   }
 
   if (isAdmin(userId) && ctx.session.awaitingPromptPreviewKey) {
     const key = ctx.session.awaitingPromptPreviewKey;
     const style = getPromptStyle(key);
     ctx.session.awaitingPromptPreviewKey = null;
-    if (!style) return ctx.reply(`вќЊ РЎС‚РёР»СЊ "${key}" РЅРµ Р·РЅР°Р№РґРµРЅРѕ.`, adminMenu());
+    if (!style) return ctx.reply(`❌ Стиль "${key}" не знайдено.`, adminMenu());
     style.previewPhoto = photo.file_id;
     content.promptLibrary[key] = style;
     saveContent();
-    return ctx.reply(`вњ… Preview-С„РѕС‚Рѕ РґР»СЏ СЃС‚РёР»СЋ "${key}" Р·Р±РµСЂРµР¶РµРЅРѕ.`, adminMenu());
+    return ctx.reply(`✅ Preview-фото для стилю "${key}" збережено.`, adminMenu());
   }
 
   if (isAdmin(userId) && ctx.session.awaitingPromptExamplesKey) {
@@ -3736,13 +3922,13 @@ bot.on("photo", async (ctx) => {
     const style = getPromptStyle(key);
     if (!style) {
       ctx.session.awaitingPromptExamplesKey = null;
-      return ctx.reply(`вќЊ РЎС‚РёР»СЊ "${key}" РЅРµ Р·РЅР°Р№РґРµРЅРѕ.`, adminMenu());
+      return ctx.reply(`❌ Стиль "${key}" не знайдено.`, adminMenu());
     }
 
     const examples = getPromptExamplePhotos(style);
     if (examples.length >= MAX_PROMPT_EXAMPLE_PHOTOS) {
       ctx.session.awaitingPromptExamplesKey = null;
-      return ctx.reply(`Р›С–РјС–С‚ РґРѕСЃСЏРіРЅСѓС‚Рѕ: ${MAX_PROMPT_EXAMPLE_PHOTOS}/${MAX_PROMPT_EXAMPLE_PHOTOS}.`, adminMenu());
+      return ctx.reply(`Ліміт досягнуто: ${MAX_PROMPT_EXAMPLE_PHOTOS}/${MAX_PROMPT_EXAMPLE_PHOTOS}.`, adminMenu());
     }
 
     style.examplePhotos = [...examples, photo.file_id].slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
@@ -3753,60 +3939,60 @@ bot.on("photo", async (ctx) => {
     const count = style.examplePhotos.length;
     if (count >= MAX_PROMPT_EXAMPLE_PHOTOS) {
       ctx.session.awaitingPromptExamplesKey = null;
-      return ctx.reply(`вњ… Р”РѕРґР°РЅРѕ С„РѕС‚Рѕ ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS}. Р›С–РјС–С‚ Р·Р°РїРѕРІРЅРµРЅРѕ.`, adminMenu());
+      return ctx.reply(`✅ Додано фото ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS}. Ліміт заповнено.`, adminMenu());
     }
 
-    return ctx.reply(`вњ… Р”РѕРґР°РЅРѕ С„РѕС‚Рѕ ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS} РґР»СЏ СЃС‚РёР»СЋ "${key}". РќР°РґС–С€Р»Рё С‰Рµ Р°Р±Рѕ РЅР°РїРёС€Рё "РіРѕС‚РѕРІРѕ".`, adminMenu());
+    return ctx.reply(`✅ Додано фото ${count}/${MAX_PROMPT_EXAMPLE_PHOTOS} для стилю "${key}". Надішли ще або напиши "готово".`, adminMenu());
   }
 
   const validationErr = validatePhoto(photo);
   if (validationErr) return ctx.reply(validationErr);
 
   if (!isAdmin(userId) && checkPhotoSpam(userId)) {
-    return ctx.reply("вљ пёЏ РќР°РґС‚Рѕ Р±Р°РіР°С‚Рѕ С„РѕС‚Рѕ РїС–РґСЂСЏРґ. Р—Р°С‡РµРєР°Р№ РєС–Р»СЊРєР° СЃРµРєСѓРЅРґ.");
+    return ctx.reply("?? ????? ?????? ???? ??????. ??????? ?????? ??????.");
   }
 
   if (ctx.session.awaitingAiPrompt) {
     const aiMode = ctx.session.awaitingAiPrompt;
     if (!isAdmin(userId)) {
       const secs = checkRateLimit(userId, "ai");
-      if (secs > 0) return ctx.reply(`вЏі Р—Р°С‡РµРєР°Р№ ${secs} СЃРµРє. РїРµСЂРµРґ РЅР°СЃС‚СѓРїРЅРёРј AI-РїСЂРѕРјС‚РѕРј.`);
+      if (secs > 0) return ctx.reply(`? Зачекай ${secs} сек. перед наступним AI-промтом.`);
       const aiDailyErr = checkDailyAiLimit(user);
       if (aiDailyErr) return ctx.reply(aiDailyErr, ctx.session.mode === "video" ? videoMenu() : photoMenu());
       incrementDailyAi(user); saveUsers();
     }
     touchRateLimit(userId, "ai");
     ctx.session.awaitingAiPrompt = null;
-    await ctx.reply("рџ¤– РђРЅР°Р»С–Р·СѓСЋ С„РѕС‚Рѕ...");
+    await ctx.reply("🤖 Аналізую фото...");
     try {
       const image     = await getImage(ctx, photo.file_id);
       const suggested = await generateAiPrompt(image, aiMode);
-      if (!suggested) return ctx.reply("вќЊ РќРµ РІРґР°Р»РѕСЃСЏ Р·РіРµРЅРµСЂСѓРІР°С‚Рё РїСЂРѕРјС‚. РЎРїСЂРѕР±СѓР№ вњЌпёЏ РЎРІС–Р№ РїСЂРѕРјС‚.", aiMode === "video" ? videoMenu() : photoMenu());
+      if (!suggested) return ctx.reply("❌ Не вдалося згенерувати промт. Спробуй ✍️ Свій промт.", aiMode === "video" ? videoMenu() : photoMenu());
       ctx.session.customPrompt     = suggested;
       ctx.session.customType       = aiMode === "video" ? `custom_video_${ctx.session.style || "seedance"}` : "custom_photo";
       ctx.session.awaitingCustomPrompt = false;
-      const label = aiMode === "video" ? (ctx.session.style === "kling" ? "рџЋҐ Kling" : "рџЋ¬ Seedance") : "рџ–ј Р¤РѕС‚Рѕ";
+      const label = aiMode === "video" ? (ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance") : "🖼 Фото";
       return ctx.reply(
-        `рџ¤– AI РїСЂРѕРјС‚ РґР»СЏ ${label}:\n\nрџ“ќ <code>${escapeHtml(suggested)}</code>\n\nРќР°РґС–С€Р»Рё С„РѕС‚Рѕ С‰Рµ СЂР°Р· вЂ” РїСЂРѕРјС‚ Р±СѓРґРµ Р·Р°СЃС‚РѕСЃРѕРІР°РЅРѕ.`,
-        { parse_mode: "HTML", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("вњ… Р—Р°СЃС‚РѕСЃСѓРІР°С‚Рё", `apply_ai_prompt_${aiMode}`)], [Markup.button.callback("рџ”„ РќРѕРІРёР№ РІР°СЂС–Р°РЅС‚", `regen_ai_prompt_${aiMode}`)]]).reply_markup }
+        `🤖 AI промт для ${label}:\n\n📝 <code>${escapeHtml(suggested)}</code>\n\nНадішли фото ще раз — промт буде застосовано.`,
+        { parse_mode: "HTML", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("✅ Застосувати", `apply_ai_prompt_${aiMode}`)], [Markup.button.callback("🔄 Новий варіант", `regen_ai_prompt_${aiMode}`)]]).reply_markup }
       );
     } catch (e) {
       console.error("AI PROMPT HANDLER:", e.message);
-      return ctx.reply("вќЊ РџРѕРјРёР»РєР° Р°РЅР°Р»С–Р·Сѓ. РЎРїСЂРѕР±СѓР№ С‰Рµ СЂР°Р·.", aiMode === "video" ? videoMenu() : photoMenu());
+      return ctx.reply("❌ Помилка аналізу. Спробуй ще раз.", aiMode === "video" ? videoMenu() : photoMenu());
     }
   }
 
-  if (userGenerating.has(userId)) return ctx.reply("вЏі Р—Р°С‡РµРєР°Р№, С‚РІРѕС” С„РѕС‚Рѕ С‰Рµ РѕР±СЂРѕР±Р»СЏС”С‚СЊСЃСЏ...");
+  if (userGenerating.has(userId)) return ctx.reply("? Зачекай, твоє фото ще обробляється...");
 
   if (!isAdmin(userId)) {
     const mode = ctx.session.mode;
     const secs = checkRateLimit(userId, mode === "video" ? "video" : "photo");
-    if (secs > 0) return ctx.reply(`вЏі Р—Р°С‡РµРєР°Р№ С‰Рµ ${secs} СЃРµРє.`);
+    if (secs > 0) return ctx.reply(`? Зачекай ще ${secs} сек.`);
   }
 
   const MAX_QUEUE = 50;
   const currentQueue = ctx.session.mode === "video" ? videoQueue : photoQueue;
-  if (currentQueue.length >= MAX_QUEUE) return ctx.reply("вљ пёЏ РЎРµСЂРІС–СЃ Р·Р°СЂР°Р· РїРµСЂРµРІР°РЅС‚Р°Р¶РµРЅРёР№. РЎРїСЂРѕР±СѓР№ С‡РµСЂРµР· РєС–Р»СЊРєР° С…РІРёР»РёРЅ.");
+  if (currentQueue.length >= MAX_QUEUE) return ctx.reply("?? ?????? ????? ??????????????. ??????? ????? ?????? ??????.");
 
   userGenerating.add(userId);
 
@@ -3815,11 +4001,11 @@ bot.on("photo", async (ctx) => {
     .catch(e => {
       userGenerating.delete(userId);
       console.error("ENQUEUE ERROR:", e.message);
-      ctx.reply("вќЊ РЎС‚Р°Р»Р°СЃСЏ РїРѕРјРёР»РєР°. РЎРїСЂРѕР±СѓР№ С‰Рµ СЂР°Р·.").catch(() => {});
+      ctx.reply("❌ Сталася помилка. Спробуй ще раз.").catch(() => {});
     });
 });
 
-// в”Ђв”Ђв”Ђ РџР РћР¦Р•РЎРРќР“ Р“Р•РќР•Р РђР¦Р†Р‡ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ПРОЦЕС�?НГ ГЕНЕРАЦІЇ ─────────────────────────────────────────────────────
 async function _processGeneration(ctx, user, userId, mode, photo) {
   const cfg = loadSettings();
   let chargedFromBalance = false;
@@ -3828,11 +4014,11 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
   try {
     touchRateLimit(userId, mode === "video" ? "video" : "photo");
 
-    // в•ђв•ђ Р’Р†Р”Р•Рћ в•ђв•ђ
+    // ══ ВІДЕО ══
     if (mode === "video") {
       const videoStyle = ctx.session.style;
-      if (!videoStyle) { userGenerating.delete(userId); return ctx.reply("РћР±РµСЂРё РјРѕРґРµР»СЊ: рџЋ¬ Seedance Р°Р±Рѕ рџЋҐ Kling", videoMenu()); }
-      if (ctx.session.awaitingCustomPrompt) { userGenerating.delete(userId); return ctx.reply("РЎРїРѕС‡Р°С‚РєСѓ РЅР°РїРёС€Рё РїСЂРѕРјС‚ С‚РµРєСЃС‚РѕРј.", videoMenu()); }
+      if (!videoStyle) { userGenerating.delete(userId); return ctx.reply("Обери модель: 🎬 Seedance або 🎥 Kling", videoMenu()); }
+      if (ctx.session.awaitingCustomPrompt) { userGenerating.delete(userId); return ctx.reply("Спочатку напиши промт текстом.", videoMenu()); }
 
       if (!isAdmin(userId)) {
         const dailyErr = checkDailyVideoLimit(user, videoStyle);
@@ -3841,7 +4027,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         if ((user.promti || 0) < videoCost) {
           userGenerating.delete(userId);
           return ctx.reply(
-            `вќЊ РќРµРґРѕСЃС‚Р°С‚РЅСЊРѕ Promti вњЁ\n\nРџРѕС‚СЂС–Р±РЅРѕ: ${videoCost} Promti вњЁ\nР‘Р°Р»Р°РЅСЃ: ${user.promti || 0} Promti вњЁ\n\nрџ’і РљСѓРїРё РїР°РєРµС‚ Promti`,
+            `❌ Недостатньо Promti ✨\n\nПотрібно: ${videoCost} Promti ✨\nБаланс: ${user.promti || 0} Promti ✨\n\n💳 Купи пакет Promti`,
             videoStyle === "kling" ? klingMenu() : seedanceMenu()
           );
         }
@@ -3851,8 +4037,9 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       const prompt       = ctx.session.customPrompt || prompts[videoStyle];
       const videoInputMode = ctx.session.videoInputMode || "image";
       const stopProgress = startVideoProgress(ctx);
-      const modeLabel = videoInputMode === "text" ? "Р· С‚РµРєСЃС‚Сѓ" : "Р· С„РѕС‚Рѕ";
-      await ctx.reply(`вЏі Р“РµРЅРµСЂСѓСЋ ${videoStyle === "seedance" ? "Seedance" : "Kling"} РІС–РґРµРѕ ${modeLabel}...\nР¦Рµ Р·Р°Р№РјРµ 1-8 С…РІ вЊ›`);
+      const modeLabel = videoInputMode === "text" ? "з тексту" : "з фото";
+      await ctx.reply(`? ??????? ${videoStyle === "seedance" ? "Seedance" : "Kling"} ????? ${modeLabel}...
+?? ????? 1-8 ?? ?`);
 
       const image = videoInputMode === "text" ? null : await getImage(ctx, photo.file_id);
 
@@ -3870,7 +4057,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
             const imageUrl = await uploadImageToFal(image);
             console.log("SEEDANCE INPUT:", { prompt: prompt?.slice(0, 50), image_url: imageUrl });
             if (!imageUrl || imageUrl.startsWith("data:")) {
-              throw new Error("imageUrl invalid or fallback base64 вЂ” upload failed");
+              throw new Error("imageUrl invalid or fallback base64 — upload failed");
             }
             const result = await falWithRetry(
               "bytedance/seedance-2.0/fast/image-to-video",
@@ -3917,7 +4104,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         }
 
         stopProgress();
-        if (!videoUrl) throw new Error("fal РЅРµ РїРѕРІРµСЂРЅСѓРІ РІС–РґРµРѕ");
+        if (!videoUrl) throw new Error("fal не повернув відео");
 
         if (!isAdmin(userId)) incrementDailyVideo(user, videoStyle);
         if (videoStyle === "seedance") user.seedanceGenerations = (user.seedanceGenerations || 0) + 1;
@@ -3929,15 +4116,15 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         appendLog({ type: "video", model: videoStyle, userId, prompt, success: true, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
 
         const caption = isAdmin(userId)
-          ? `рџЋ¬ Р’С–РґРµРѕ РіРѕС‚РѕРІРµ вњЁ\nРњРѕРґРµР»СЊ: ${videoStyle}\nРђРґРјС–РЅ: Р±РµР·Р»С–РјС–С‚ вњ…`
-          : `рџЋ¬ Р’С–РґРµРѕ РіРѕС‚РѕРІРµ вњЁ\nР—Р°Р»РёС€РёР»РѕСЃСЊ: ${user.promti || 0} Promti вњЁ`;
+          ? `🎬 Відео готове ✨\nМодель: ${videoStyle}\nАдмін: безліміт ✅`
+          : `🎬 Відео готове ✨\nЗалишилось: ${user.promti || 0} Promti ✨`;
 
         await tgSendWithRetry(() => ctx.replyWithVideo({ url: videoUrl }, { caption }));
 
         if (!isAdmin(userId) && (user.promti || 0) <= 5) {
           await ctx.reply(
-            `рџ’Ў Р—Р°Р»РёС€РёР»РѕСЃСЊ ${user.promti || 0} Promti вњЁ. РџРѕРїРѕРІРЅРё Р±Р°Р»Р°РЅСЃ!`,
-            Markup.inlineKeyboard([[Markup.button.callback("рџ’Ћ РљСѓРїРёС‚Рё Promti вњЁ", "upsell_promti")]])
+            `💡 Залишилось ${user.promti || 0} Promti ✨. Поповни баланс!`,
+            Markup.inlineKeyboard([[Markup.button.callback("💎 Купити Promti ✨", "upsell_promti")]])
           );
         }
         return;
@@ -3952,14 +4139,14 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       }
     }
 
-    // в•ђв•ђ Р¤РћРўРћ в•ђв•ђ
+    // ══ ФОТО ══
     const customType = ctx.session.customType;
     const photoMode  = ctx.session.photoMode || "edit";
     let prompt = "";
     let promptKeyForStats = null;
 
     if (customType === "custom_photo" || customType === "create_photo") {
-      if (!ctx.session.customPrompt) { userGenerating.delete(userId); return ctx.reply("РЎРїРѕС‡Р°С‚РєСѓ РЅР°РїРёС€Рё РїСЂРѕРјС‚ С‚РµРєСЃС‚РѕРј.", photoMenu()); }
+      if (!ctx.session.customPrompt) { userGenerating.delete(userId); return ctx.reply("Спочатку напиши промт текстом.", photoMenu()); }
       prompt = ctx.session.customPrompt;
       const selectedStyleKey =
         ctx.session.currentStyleKey ||
@@ -3984,7 +4171,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       }
     } else {
       userGenerating.delete(userId);
-      return ctx.reply("РћР±РµСЂРё СЂРµР¶РёРј: рџ–ј Р РµРґР°РіСѓРІР°С‚Рё С„РѕС‚Рѕ Р°Р±Рѕ вњЁ РЎС‚РІРѕСЂРёС‚Рё С„РѕС‚Рѕ", photoMenu());
+      return ctx.reply("Обери режим: 🖼 Редагувати фото або ✨ Створити фото", photoMenu());
     }
 
     if (!isAdmin(userId)) {
@@ -3992,7 +4179,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       if ((user.promti || 0) < photoCost) {
         userGenerating.delete(userId);
         return ctx.reply(
-          `вќЊ РќРµРґРѕСЃС‚Р°С‚РЅСЊРѕ Promti вњЁ\n\nРџРѕС‚СЂС–Р±РЅРѕ: ${photoCost} Promti вњЁ\nР‘Р°Р»Р°РЅСЃ: ${user.promti || 0} Promti вњЁ\n\nрџ’і РљСѓРїРё РїР°РєРµС‚ Promti`,
+          `❌ Недостатньо Promti ✨\n\nПотрібно: ${photoCost} Promti ✨\nБаланс: ${user.promti || 0} Promti ✨\n\n💳 Купи пакет Promti`,
           photoMenu()
         );
       }
@@ -4004,7 +4191,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     let url = null;
 
     if (photoMode === "create") {
-      await ctx.reply("вЏі РЎС‚РІРѕСЂСЋСЋ С„РѕС‚Рѕ Р· РЅСѓР»СЏ... (~45 СЃРµРє)");
+      await ctx.reply("? ??????? ???? ? ????... (~45 ???)");
       const result = await falWithRetry(
         "fal-ai/nano-banana-2",
         {
@@ -4019,7 +4206,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       );
       url = result?.data?.images?.[0]?.url;
     } else {
-      await ctx.reply("вЏі Р РµРґР°РіСѓСЋ С„РѕС‚Рѕ... (~45 СЃРµРє)");
+      await ctx.reply("? ??????? ????... (~45 ???)");
       const image  = await getImage(ctx, photo.file_id);
       const result = await falWithRetry(
         "fal-ai/nano-banana-2/edit",
@@ -4037,7 +4224,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       url = result?.data?.images?.[0]?.url;
     }
 
-    if (!url) throw new Error("fal РЅРµ РїРѕРІРµСЂРЅСѓРІ Р·РѕР±СЂР°Р¶РµРЅРЅСЏ");
+    if (!url) throw new Error("fal не повернув зображення");
 
     user.generations = (user.generations || 0) + 1;
     if (promptKeyForStats) markPromptGeneration(user, promptKeyForStats, ctx.session.currentDynamicSelections || ctx.session.sourceDynamicSelections || user.sourceDynamicSelections || null);
@@ -4046,7 +4233,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     log("PHOTO_OK", userId, `dur:${Date.now()-startMs}ms`);
     appendLog({ type: "photo", model: customType || "custom", userId, prompt, success: true, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
 
-    const caption = isAdmin(userId) ? "Р“РѕС‚РѕРІРѕ вњЁ\nРђРґРјС–РЅ: Р±РµР·Р»С–РјС–С‚ вњ…" : `Р“РѕС‚РѕРІРѕ вњЁ\nР—Р°Р»РёС€РёР»РѕСЃСЊ: ${user.promti || 0} Promti вњЁ`;
+    const caption = isAdmin(userId) ? "Готово ✨\nАдмін: безліміт ✅" : `Готово ✨\nЗалишилось: ${user.promti || 0} Promti ✨`;
     await tgSendWithRetry(() => sendPhotoWithSafeCaption({
       photo: { url },
       text: caption,
@@ -4057,8 +4244,8 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
 
     if (!isAdmin(userId) && user.generations % 3 === 0) {
       await ctx.reply(
-        "рџ’Ў РҐРѕС‡РµС€ РѕР¶РёРІРёС‚Рё С†Рµ С„РѕС‚Рѕ? РЎРїСЂРѕР±СѓР№ РІС–РґРµРѕ-РіРµРЅРµСЂР°С†С–СЋ!",
-        Markup.inlineKeyboard([[Markup.button.callback("рџЋ¬ Seedance", "upsell_promti"), Markup.button.callback("рџЋҐ Kling", "upsell_promti")]])
+        "💡 Хочеш оживити це фото? Спробуй відео-генерацію!",
+        Markup.inlineKeyboard([[Markup.button.callback("🎬 Seedance", "upsell_promti"), Markup.button.callback("🎥 Kling", "upsell_promti")]])
       );
     }
     return;
@@ -4078,21 +4265,21 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       }
     }
     notifyAdminsError(`${mode === "video" ? "VIDEO" : "PHOTO"} ERROR: user ${userId}\n${e.message}`).catch(() => {});
-    if (e.message === "FAL_TIMEOUT") return ctx.reply("вЏ± Р—Р°РЅР°РґС‚Рѕ РґРѕРІРіРѕ. РЎРїСЂРѕР±СѓР№ С‰Рµ СЂР°Р·.");
-    return ctx.reply("вќЊ РџРѕРјРёР»РєР° РіРµРЅРµСЂР°С†С–С—. РЎРїСЂРѕР±СѓР№ С‰Рµ СЂР°Р·.");
+    if (e.message === "FAL_TIMEOUT") return ctx.reply("? Занадто довго. Спробуй ще раз.");
+    return ctx.reply("❌ Помилка генерації. Спробуй ще раз.");
   }
 }
 
-// в”Ђв”Ђв”Ђ РҐР•РќР”Р›Р•Р  Р’Р†Р”Р•Рћ (РґР»СЏ AI-РїСЂРѕРјС‚Сѓ) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ХЕНДЛЕР ВІДЕО (для AI-промту) ───────────────────────────────────────────
 bot.on(["video", "video_note"], async (ctx) => {
   ensureSession(ctx); touchUser(ctx);
   if (ctx.session.awaitingAiPrompt !== "video") {
-    return ctx.reply("рџЋ¬ Р”Р»СЏ РіРµРЅРµСЂР°С†С–С— РїСЂРѕРјС‚Сѓ вЂ” РЅР°С‚РёСЃРЅРё рџ¤– AI РїСЂРѕРјС‚ РґР»СЏ РІС–РґРµРѕ\nР”Р»СЏ РіРµРЅРµСЂР°С†С–С— вЂ” РЅР°РґС–С€Р»Рё С„РѕС‚Рѕ.", videoMenu());
+    return ctx.reply("🎬 Для генерації промту — натисни 🤖 AI промт для відео\nДля генерації — надішли фото.", videoMenu());
   }
   const videoObj = ctx.message.video || ctx.message.video_note;
-  if ((videoObj.duration || 0) > 10) return ctx.reply("вќЊ Р’С–РґРµРѕ РґРѕ 10 СЃРµРє. РђР±Рѕ РЅР°РґС–С€Р»Рё С„РѕС‚Рѕ.", videoMenu());
+  if ((videoObj.duration || 0) > 10) return ctx.reply("❌ Відео до 10 сек. Або надішли фото.", videoMenu());
   ctx.session.awaitingAiPrompt = null;
-  await ctx.reply("рџЋ¬ РђРЅР°Р»С–Р·СѓСЋ РІС–РґРµРѕ...");
+  await ctx.reply("🎬 Аналізую відео...");
   try {
     const file     = await ctx.telegram.getFile(videoObj.file_id);
     const videoUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
@@ -4105,27 +4292,27 @@ bot.on(["video", "video_note"], async (ctx) => {
     } catch (ffmpegErr) {
       try { fs.unlinkSync(tmpVideo); } catch {}
       console.error("FFMPEG ERROR:", ffmpegErr.message);
-      return ctx.reply("вќЊ ffmpeg РЅРµРґРѕСЃС‚СѓРїРЅРёР№. РќР°РґС–С€Р»Рё С„РѕС‚Рѕ Р·Р°РјС–СЃС‚СЊ РІС–РґРµРѕ рџ“ё", videoMenu());
+      return ctx.reply("❌ ffmpeg недоступний. Надішли фото замість відео 📸", videoMenu());
     }
     const frameBase64 = `data:image/jpeg;base64,${fs.readFileSync(tmpFrame).toString("base64")}`;
     try { fs.unlinkSync(tmpVideo); fs.unlinkSync(tmpFrame); } catch {}
     const suggested = await generateAiPrompt(frameBase64, "video");
-    if (!suggested) return ctx.reply("вќЊ РќРµ РІРґР°Р»РѕСЃСЏ Р·РіРµРЅРµСЂСѓРІР°С‚Рё РїСЂРѕРјС‚. РЎРїСЂРѕР±СѓР№ РЅР°РґС–СЃР»Р°С‚Рё С„РѕС‚Рѕ.", videoMenu());
+    if (!suggested) return ctx.reply("❌ Не вдалося згенерувати промт. Спробуй надіслати фото.", videoMenu());
     ctx.session.customPrompt     = suggested;
     ctx.session.customType       = `custom_video_${ctx.session.style || "seedance"}`;
     ctx.session.awaitingCustomPrompt = false;
-    const label = ctx.session.style === "kling" ? "рџЋҐ Kling" : "рџЋ¬ Seedance";
+    const label = ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance";
     return ctx.reply(
-      `рџ¤– AI РїСЂРѕРјС‚ РґР»СЏ ${label}:\n\nрџ“ќ <code>${escapeHtml(suggested)}</code>\n\nвњ… РџСЂРѕРјС‚ Р·Р±РµСЂРµР¶РµРЅРѕ. РќР°РґС–С€Р»Рё С„РѕС‚Рѕ РґР»СЏ РіРµРЅРµСЂР°С†С–С— РІС–РґРµРѕ рџ“ё`,
-      { parse_mode: "HTML", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("вњ… Р—Р°СЃС‚РѕСЃСѓРІР°С‚Рё", "apply_ai_prompt_video")], [Markup.button.callback("рџ”„ РќРѕРІРёР№ РІР°СЂС–Р°РЅС‚", "regen_ai_prompt_video")]]).reply_markup }
+      `🤖 AI промт для ${label}:\n\n📝 <code>${escapeHtml(suggested)}</code>\n\n✅ Промт збережено. Надішли фото для генерації відео 📸`,
+      { parse_mode: "HTML", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("✅ Застосувати", "apply_ai_prompt_video")], [Markup.button.callback("🔄 Новий варіант", "regen_ai_prompt_video")]]).reply_markup }
     );
   } catch (e) {
     console.error("VIDEO AI PROMPT ERROR:", e.message);
-    return ctx.reply("вќЊ РџРѕРјРёР»РєР° РѕР±СЂРѕР±РєРё РІС–РґРµРѕ. РЎРїСЂРѕР±СѓР№ РЅР°РґС–СЃР»Р°С‚Рё С„РѕС‚Рѕ.", videoMenu());
+    return ctx.reply("❌ Помилка обробки відео. Спробуй надіслати фото.", videoMenu());
   }
 });
 
-// в”Ђв”Ђв”Ђ EXPRESS / HTTP в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── EXPRESS / HTTP ───────────────────────────────────────────────────────────
 const app = express();
 app.set("trust proxy", 1);
 app.use((req, res, next) => {
@@ -4195,7 +4382,7 @@ app.get("/health", (_, res) => {
   });
 });
 
-// в”Ђв”Ђв”Ђ WAYFORPAY CALLBACK в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── WAYFORPAY CALLBACK ───────────────────────────────────────────────────────
 app.post("/payment",
   express.text({ type: "*/*" }),
   express.json({ type: "application/json", limit: "1mb" }),
@@ -4267,8 +4454,8 @@ app.post("/payment",
       markPromptPurchase(user, data.orderReference);
       saveUsersSync(); savePayments();
 
-      log("CREDITED", userId, `pack:${packKey} +${promtiAmount} amount:${data.amount}РіСЂРЅ`);
-      console.log(`вњ… CREDITED: user ${userId}, pack ${packKey}, +${promtiAmount}`);
+      log("CREDITED", userId, `pack:${packKey} +${promtiAmount} amount:${data.amount}грн`);
+      console.log(`✅ CREDITED: user ${userId}, pack ${packKey}, +${promtiAmount}`);
 
       if (user.referredBy && !user.refPaid) {
         const referrer = getUser(user.referredBy);
@@ -4280,17 +4467,17 @@ app.post("/payment",
           try {
             await bot.telegram.sendMessage(
               user.referredBy,
-              `рџЋ‰ РўРІС–Р№ РґСЂСѓРі Р·СЂРѕР±РёРІ РїРµСЂС€Сѓ РѕРїР»Р°С‚Сѓ!\n+${REFERRAL_PROMTI_BONUS} Promti вњЁ РЅР°СЂР°С…РѕРІР°РЅРѕ\nР‘Р°Р»Р°РЅСЃ: ${referrer.promti} Promti вњЁ`
+              `🎉 Твій друг зробив першу оплату!\n+${REFERRAL_PROMTI_BONUS} Promti ✨ нараховано\nБаланс: ${referrer.promti} Promti ✨`
             );
           } catch (e) { console.error("REFERRAL BONUS NOTIFY:", e.message); }
-          log("REFERRAL_BONUS", user.referredBy, `from user:${userId} +${REFERRAL_PROMTI_BONUS} вњЁ`);
+          log("REFERRAL_BONUS", user.referredBy, `from user:${userId} +${REFERRAL_PROMTI_BONUS} ✨`);
         }
       }
 
       try {
         await bot.telegram.sendMessage(
           userId,
-          `вњ… РћРїР»Р°С‚Сѓ РїС–РґС‚РІРµСЂРґР¶РµРЅРѕ!\n\nвњЁ ${pack.title}\nРќР°СЂР°С…РѕРІР°РЅРѕ: +${promtiAmount} Promti вњЁ\nР‘Р°Р»Р°РЅСЃ: ${user.promti} Promti вњЁ`,
+          `✅ Оплату підтверджено!\n\n✨ ${pack.title}\nНараховано: +${promtiAmount} Promti ✨\nБаланс: ${user.promti} Promti ✨`,
           mainMenu()
         );
       } catch (e) { console.error("SEND USER MSG:", e.message); }
@@ -4299,7 +4486,7 @@ app.post("/payment",
         try {
           await bot.telegram.sendMessage(
             adminId,
-            `вњ… РћРїР»Р°С‚Р°!\nUser: ${userId} @${user.username || "-"}\n${pack.title} | ${data.amount} РіСЂРЅ\n${data.orderReference}`
+            `✅ Оплата!\nUser: ${userId} @${user.username || "-"}\n${pack.title} | ${data.amount} грн\n${data.orderReference}`
           );
         } catch (e) { console.error("SEND ADMIN MSG:", e.message); }
       }
@@ -4315,18 +4502,18 @@ app.post("/payment",
   }
 });
 
-// в”Ђв”Ђв”Ђ Р—РђРџРЈРЎРљ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── ЗАПУСК ───────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, "0.0.0.0", () => {
   const cfg = loadSettings();
-  console.log(`рџЊђ HTTP on port ${PORT}`);
-  console.log(`рџ“Ў WFP Callback: ${WAYFORPAY.serviceUrl || "РќР• Р—РђР”РђРќРћ!"}`);
-  console.log(`вљ™пёЏ  maxWorkers: ${cfg.maxWorkers} | photoRL: ${cfg.photoRateLimitMs}ms | videoRL: ${cfg.videoRateLimitMs}ms`);
-  console.log(`рџ“… Seedance limit/day: ${cfg.dailySeedanceLimit} | Kling: ${cfg.dailyKlingLimit}`);
-  console.log(`рџ¤– AI РїСЂРѕРјС‚: ${cfg.aiPromptEnabled ? "вњ…" : "вќЊ"} | Anthropic key: ${process.env.ANTHROPIC_API_KEY ? "вњ…" : "вќЊ"}`);
+  console.log(`🌐 HTTP on port ${PORT}`);
+  console.log(`📡 WFP Callback: ${WAYFORPAY.serviceUrl || "НЕ ЗАДАНО!"}`);
+  console.log(`??  maxWorkers: ${cfg.maxWorkers} | photoRL: ${cfg.photoRateLimitMs}ms | videoRL: ${cfg.videoRateLimitMs}ms`);
+  console.log(`📅 Seedance limit/day: ${cfg.dailySeedanceLimit} | Kling: ${cfg.dailyKlingLimit}`);
+  console.log(`🤖 AI промт: ${cfg.aiPromptEnabled ? "✅" : "❌"} | Anthropic key: ${process.env.ANTHROPIC_API_KEY ? "✅" : "❌"}`);
 });
 
-// в”Ђв”Ђв”Ђ BACKUP РљРћР–РќР† 6 Р“РћР”РРќ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── BACKUP КОЖНІ 6 ГОД�?Н ────────────────────────────────────────────────────
 const BACKUP_DIR   = path.join(DATA_DIR, "backups");
 const BACKUP_FILES = [USERS_PATH, PAYMENTS_PATH, PAYMENT_LOCK_PATH, PACKAGES_PATH];
 
@@ -4345,7 +4532,7 @@ function runBackup() {
       const full = path.join(BACKUP_DIR, f);
       if (fs.statSync(full).mtimeMs < cutoff) fs.unlinkSync(full);
     }
-    console.log(`рџ’ѕ Backup done: ${ts}`);
+    console.log(`💾 Backup done: ${ts}`);
   } catch (e) { console.error("BACKUP ERROR:", e.message); }
 }
 
@@ -4356,53 +4543,54 @@ bot.launch({
   allowedUpdates: ["message", "callback_query"],
 })
   .then(() => {
-    console.log("рџ”Ґ Р‘РѕС‚ Р·Р°РїСѓС‰РµРЅРёР№ (v5 fixed)");
+    console.log("🔥 Бот запущений (v5 fixed)");
     runBackup();
   })
   .catch(err => {
     console.error("BOT LAUNCH ERROR:", err.message);
     if (err.message && err.message.includes("timed out")) {
-      console.log("рџ”„ Retrying bot launch in 5s...");
+      console.log("🔄 Retrying bot launch in 5s...");
       setTimeout(() => {
         bot.launch({ dropPendingUpdates: true })
-          .then(() => console.log("рџ”Ґ Р‘РѕС‚ Р·Р°РїСѓС‰РµРЅРёР№ РїС–СЃР»СЏ retry"))
+          .then(() => console.log("🔥 Бот запущений після retry"))
           .catch(e => console.error("BOT RETRY ERROR:", e.message));
       }, 5000);
     }
   });
 
-// в”Ђв”Ђв”Ђ GRACEFUL SHUTDOWN в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ─── GRACEFUL SHUTDOWN ───────────────────────────────────────────────────────
 async function gracefulShutdown(signal) {
-  console.log(`вЏі ${signal} вЂ” С‡РµРєР°С”РјРѕ Р·Р°РІРµСЂС€РµРЅРЅСЏ РіРµРЅРµСЂР°С†С–Р№...`);
+  console.log(`? ${signal} — чекаємо завершення генерацій...`);
 
   for (const adminId of ADMINS) {
-    bot.telegram.sendMessage(adminId, `вљ пёЏ Р‘РѕС‚ РїРµСЂРµР·Р°РїСѓСЃРєР°С”С‚СЊСЃСЏ (${signal})\nРђРєС‚РёРІРЅРёС… РіРµРЅРµСЂР°С†С–Р№: ${activeWorkers}`).catch(() => {});
+    bot.telegram.sendMessage(adminId, `?? ??? ???????????????? (${signal})
+???????? ?????????: ${activeWorkers}`).catch(() => {});
   }
 
   const maxWait = 5 * 60 * 1000;
   const start   = Date.now();
 
   while (activeWorkers > 0 && Date.now() - start < maxWait) {
-    console.log(`вЏі РђРєС‚РёРІРЅРёС… РіРµРЅРµСЂР°С†С–Р№: ${activeWorkers}, С‡РµРєР°С”РјРѕ...`);
+    console.log(`? Активних генерацій: ${activeWorkers}, чекаємо...`);
     await new Promise(r => setTimeout(r, 3000));
   }
 
   if (activeWorkers > 0) {
-    console.log(`вљ пёЏ РўР°Р№РјР°СѓС‚ РѕС‡С–РєСѓРІР°РЅРЅСЏ вЂ” Р·СѓРїРёРЅСЏС”РјРѕСЃСЊ Р· ${activeWorkers} Р°РєС‚РёРІРЅРёРјРё РіРµРЅРµСЂР°С†С–СЏРјРё`);
+    console.log(`?? ??????? ?????????? ? ??????????? ? ${activeWorkers} ????????? ???????????`);
     for (const userId of userGenerating) {
       const user = users[userId];
       if (user) {
         bot.telegram.sendMessage(
           userId,
-          "вљ пёЏ Р“РµРЅРµСЂР°С†С–СЋ РїРµСЂРµСЂРІР°РЅРѕ С‡РµСЂРµР· РѕРЅРѕРІР»РµРЅРЅСЏ Р±РѕС‚Р°.\nР‘Р°Р»Р°РЅСЃ Р·Р±РµСЂРµР¶РµРЅРѕ вЂ” СЃРїСЂРѕР±СѓР№ С‰Рµ СЂР°Р·!"
+          "?? ????????? ????????? ????? ????????? ????.\n?????? ????????? ? ??????? ?? ???!"
         ).catch(() => {});
       }
     }
     saveUsersSync();
   }
 
-  console.log("вњ… Р—Р°РІРµСЂС€РµРЅРѕ вЂ” Р·СѓРїРёРЅСЏС”РјРѕСЃСЊ.");
-  bot.stop(signal);
+  console.log("✅ Завершено — зупиняємось.");
+  console.log("? ????????? ? ???????????.");
   process.exit(0);
 }
 

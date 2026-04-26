@@ -224,6 +224,39 @@
       color: var(--text);
       box-shadow: var(--shadow);
     }
+    .brand-preview {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.86);
+    }
+    .brand-preview-mark {
+      width: 56px;
+      height: 56px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      background: var(--gradient);
+      color: #fff;
+      font-weight: 800;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      flex-shrink: 0;
+    }
+    .brand-preview-mark img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #fff;
+      padding: 4px;
+    }
+    .upload-inline {
+      display: grid;
+      gap: 10px;
+    }
     @media (min-width: 900px) {
       .editor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -306,6 +339,43 @@
               <label>Посилання на бота<input data-root-path="botLink"></label>
             </div>
           </section>
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h3>???????? ? ???????</h3>
+                <p>???????, ????? ????? ?? ??????? ??????????.</p>
+              </div>
+            </div>
+            <div class="field-grid">
+              <div id="brandPreview" class="brand-preview">
+                <div id="brandPreviewMark" class="brand-preview-mark">AI</div>
+                <div>
+                  <strong id="brandPreviewName">PROMTI AI</strong>
+                  <p id="brandPreviewTagline">AI photoshoot in Telegram</p>
+                </div>
+              </div>
+              <label>URL ????????<input data-root-path="theme.logoUrl" data-brand-refresh="true"></label>
+              <label>Alt ????????<input data-root-path="theme.logoAlt"></label>
+              <div class="upload-inline">
+                <input id="themeLogoFile" type="file" accept="image/*">
+                <button id="uploadThemeLogoButton" class="button button-secondary button-small" type="button">??????????? ???????</button>
+              </div>
+              <label>Theme color<input data-root-path="theme.palette.themeColor"></label>
+              <label>??? ?????<input data-root-path="theme.palette.bg"></label>
+              <label>???????? ?????<input data-root-path="theme.palette.text"></label>
+              <label>??????????? ?????<input data-root-path="theme.palette.muted"></label>
+              <label>????? / border<input data-root-path="theme.palette.line"></label>
+              <label>Surface ??????<input data-root-path="theme.palette.surface"></label>
+              <label>????????: ?????<input data-root-path="theme.palette.primaryStart"></label>
+              <label>????????: mid<input data-root-path="theme.palette.primaryMid"></label>
+              <label>????????: accent<input data-root-path="theme.palette.primaryAccent"></label>
+              <label>????????: end<input data-root-path="theme.palette.primaryEnd"></label>
+              <label>Glow blue<input data-root-path="theme.palette.glowBlue"></label>
+              <label>Glow pink<input data-root-path="theme.palette.glowPink"></label>
+            </div>
+          </section>
+
+
 
           <section class="panel">
             <div class="section-head">
@@ -500,6 +570,11 @@
     const itemCardTemplate = document.getElementById("itemCardTemplate");
     const saveButtons = [document.getElementById("saveTopButton"), document.getElementById("saveBottomButton")];
     const logoutButton = document.getElementById("logoutButton");
+    const uploadThemeLogoButton = document.getElementById("uploadThemeLogoButton");
+    const themeLogoFile = document.getElementById("themeLogoFile");
+    const brandPreviewMark = document.getElementById("brandPreviewMark");
+    const brandPreviewName = document.getElementById("brandPreviewName");
+    const brandPreviewTagline = document.getElementById("brandPreviewTagline");
 
     let state = null;
     let currentLocaleKey = "uk";
@@ -591,6 +666,57 @@
       }
     };
 
+    arrayEditors.examples.fields = [
+      { key: "label", label: "Мітка" },
+      { key: "title", label: "Заголовок" },
+      { key: "text", label: "Опис", type: "textarea" },
+      { key: "imageAlt", label: "Alt текст" },
+      { key: "beforeImage", label: "Фото ДО / before", type: "image-upload" },
+      { key: "afterImage", label: "Фото ПІСЛЯ / after", type: "image-upload" },
+      { key: "image", label: "Fallback картинка", type: "image-upload" },
+      { key: "gradient", label: "CSS градієнт" }
+    ];
+    arrayEditors.examples.create = () => ({
+      label: "Новий стиль",
+      title: "Новий стиль",
+      text: "Короткий опис прикладу.",
+      imageAlt: "PROMTI AI style example",
+      beforeImage: "",
+      afterImage: "",
+      image: "",
+      gradient: "linear-gradient(160deg, #d9dcff 0%, #ffd4ec 100%)"
+    });
+
+    function ensureThemeDefaults() {
+      state.theme ||= {};
+      state.theme.logoUrl ||= "";
+      state.theme.logoAlt ||= "PROMTI AI logo";
+      state.theme.palette ||= {};
+      state.theme.palette.themeColor ||= "#f8f5ff";
+      state.theme.palette.bg ||= "#f7f8ff";
+      state.theme.palette.text ||= "#1a1d38";
+      state.theme.palette.muted ||= "#64708b";
+      state.theme.palette.line ||= "rgba(119, 132, 182, 0.16)";
+      state.theme.palette.surface ||= "rgba(255, 255, 255, 0.84)";
+      state.theme.palette.primaryStart ||= "#7a6dff";
+      state.theme.palette.primaryMid ||= "#8f80ff";
+      state.theme.palette.primaryAccent ||= "#ff72c8";
+      state.theme.palette.primaryEnd ||= "#ff9fb7";
+      state.theme.palette.glowBlue ||= "rgba(115, 199, 255, 0.12)";
+      state.theme.palette.glowPink ||= "rgba(255, 108, 207, 0.12)";
+    }
+
+    function updateBrandPreview() {
+      if (!state) return;
+      const locale = getLocale();
+      const logoUrl = state.theme?.logoUrl || "";
+      brandPreviewName.textContent = locale.brand?.name || "PROMTI AI";
+      brandPreviewTagline.textContent = locale.brand?.tagline || "";
+      brandPreviewMark.innerHTML = logoUrl
+        ? `<img src="${logoUrl}" alt="${state.theme?.logoAlt || locale.brand?.name || "PROMTI AI logo"}">`
+        : "AI";
+    }
+
     function getLocale() {
       if (!state.locales[currentLocaleKey]) {
         state.locales[currentLocaleKey] = JSON.parse(JSON.stringify(state.locales.uk || {}));
@@ -629,17 +755,20 @@
       document.querySelectorAll("[data-root-path]").forEach((input) => {
         input.value = getByPath(state, input.dataset.rootPath) ?? "";
       });
+      updateBrandPreview();
     }
 
     function bindSimpleFields() {
       document.querySelectorAll("[data-path]").forEach((input) => {
         input.addEventListener("input", () => {
           setByPath(getLocale(), input.dataset.path, input.value);
+          if (input.dataset.path === "brand.name" || input.dataset.path === "brand.tagline") updateBrandPreview();
         });
       });
       document.querySelectorAll("[data-root-path]").forEach((input) => {
         input.addEventListener("input", () => {
           setByPath(state, input.dataset.rootPath, input.value);
+          if (input.dataset.brandRefresh === "true" || input.dataset.rootPath.startsWith("theme.palette")) updateBrandPreview();
         });
       });
     }
@@ -677,6 +806,34 @@
 
       const payload = await response.json();
       return payload.imageUrl;
+    }
+
+    function bindBrandTools() {
+      if (!uploadThemeLogoButton || !themeLogoFile) return;
+      uploadThemeLogoButton.addEventListener("click", async () => {
+        const file = themeLogoFile.files?.[0];
+        if (!file) {
+          setStatus(saveStatus, "Спочатку вибери файл логотипа.", "error");
+          return;
+        }
+
+        try {
+          clearStatus(saveStatus);
+          uploadThemeLogoButton.disabled = true;
+          uploadThemeLogoButton.textContent = "Завантаження...";
+          const imageUrl = await uploadExampleImage(file);
+          setByPath(state, "theme.logoUrl", imageUrl);
+          const input = document.querySelector('[data-root-path="theme.logoUrl"]');
+          if (input) input.value = imageUrl;
+          updateBrandPreview();
+          setStatus(saveStatus, "Логотип завантажено. Не забудь зберегти зміни.", "success");
+        } catch (error) {
+          setStatus(saveStatus, "Не вдалося завантажити логотип.", "error");
+        } finally {
+          uploadThemeLogoButton.disabled = false;
+          uploadThemeLogoButton.textContent = "Завантажити логотип";
+        }
+      });
     }
 
     function createField(field, item, path, index) {
@@ -820,6 +977,7 @@
       const response = await fetch("/api/admin/content", { credentials: "same-origin" });
       if (!response.ok) throw new Error("unauthorized");
       state = await response.json();
+      ensureThemeDefaults();
       if (!state.locales.en) {
         state.locales.en = JSON.parse(JSON.stringify(state.locales.uk || {}));
       }
@@ -884,6 +1042,7 @@
     });
     bindSimpleFields();
     bindAddButtons();
+    bindBrandTools();
 
     loadEditor().catch(() => {
       loginView.classList.remove("hidden");

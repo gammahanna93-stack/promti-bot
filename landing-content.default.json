@@ -22,8 +22,8 @@
         "secondaryCta": "Подивитися приклади",
         "trust": "3 Promti ✨ безкоштовно при старті",
         "mockupPromptTitle": "Стиль зйомки",
-        "mockupPromptText": "Б'юті, fashion, fantasy або свій промт",
-        "mockupResultTitle": "Готові генерації",
+        "mockupPromptText": "Б’юті, fashion, fantasy або свій промт",
+        "mockupResultTitle": "Що вміє бот",
         "floatTopTitle": "Promti баланс",
         "floatTopText": "Фото та відео оплачуються всередині бота",
         "floatBottomTitle": "Результат за секунди",
@@ -40,28 +40,40 @@
           "title": "Fashion",
           "text": "Глянець, студійне світло, ready-to-post кадри",
           "gradient": "linear-gradient(160deg, #c9d8ff 0%, #ffe3f2 100%)",
-          "image": ""
+          "image": "",
+          "beforeImage": "",
+          "afterImage": "",
+          "imageAlt": "Fashion before and after example"
         },
         {
           "label": "Beauty",
           "title": "Beauty",
-          "text": "М'яка шкіра, делікатний glow, преміум-подача",
+          "text": "М’яка шкіра, делікатний glow, преміум-подача",
           "gradient": "linear-gradient(160deg, #d8c9ff 0%, #ffd4ea 100%)",
-          "image": ""
+          "image": "",
+          "beforeImage": "",
+          "afterImage": "",
+          "imageAlt": "Beauty before and after example"
         },
         {
           "label": "Fantasy",
           "title": "Fantasy",
           "text": "Атмосферні образи, нові ролі та wow-ефект",
           "gradient": "linear-gradient(160deg, #b7d9ff 0%, #efccff 100%)",
-          "image": ""
+          "image": "",
+          "beforeImage": "",
+          "afterImage": "",
+          "imageAlt": "Fantasy before and after example"
         },
         {
           "label": "Hyperpop",
           "title": "Hyperpop",
           "text": "Яскравий digital-лук для соцмереж і відео",
           "gradient": "linear-gradient(160deg, #c4e0ff 0%, #ffb6dd 100%)",
-          "image": ""
+          "image": "",
+          "beforeImage": "",
+          "afterImage": "",
+          "imageAlt": "Hyperpop before and after example"
         }
       ],
       "howSection": {
@@ -87,7 +99,7 @@
       },
       "promtiSection": {
         "badge": "Основний продукт сервісу",
-        "title": "Promti ✨ — внутрішня валюта бота",
+        "title": "Promti ✨ - внутрішня валюта бота",
         "lead": "Ти купуєш Promti ✨, використовуєш їх на генерацію контенту й витрачаєш тільки на те, що хочеш створити: фото, короткі відео або більш складні AI-результати.",
         "usage": [
           {
@@ -107,6 +119,12 @@
             "title": "Kling відео",
             "text": "Більш виразна відеогенерація для преміального AI-контенту всередині бота.",
             "value": "8 Promti ✨"
+          },
+          {
+            "icon": "📊",
+            "title": "Інфографіки",
+            "text": "Візуальні матеріали для презентацій, постів і рекламних макетів прямо в Telegram.",
+            "value": "від 1 Promti ✨"
           }
         ]
       },
@@ -185,14 +203,14 @@
             "text": "Отримуй готові фото й відео швидко, коли контент потрібен вже сьогодні."
           },
           {
-            "icon": "📲",
+            "icon": "📱",
             "title": "Готово для соцмереж",
             "text": "Кадри та ролики легко використовувати для Stories, Reels, постів і реклами."
           },
           {
             "icon": "🎨",
             "title": "Багато стилів і форматів",
-            "text": "Від м'якого beauty до яскравого hyperpop, фото та відео в одному боті."
+            "text": "Від м’якого beauty до яскравого hyperpop, фото та відео в одному боті."
           }
         ]
       },
@@ -203,8 +221,8 @@
       },
       "contactsSection": {
         "badge": "Контакти та публічна інформація",
-        "title": "Зв'язок і юридичні дані",
-        "contactsTitle": "Зв'язок з нами",
+        "title": "Зв’язок і юридичні дані",
+        "contactsTitle": "Зв’язок з нами",
         "contacts": [
           {
             "label": "Email",
@@ -241,9 +259,9 @@
         {
           "id": "privacy",
           "title": "Політика конфіденційності",
-          "intro": "Ми обробляємо тільки ті дані, які потрібні для надання цифрових AI-послуг у Telegram, підтримки оплати та зв'язку з користувачем.",
+          "intro": "Ми обробляємо тільки ті дані, які потрібні для надання цифрових AI-послуг у Telegram, підтримки оплати та зв’язку з користувачем.",
           "items": [
-            "Можуть оброблятися Telegram ID, ім'я користувача, технічні дані запитів, історія транзакцій і завантажені матеріали для генерації.",
+            "Можуть оброблятися Telegram ID, ім’я користувача, технічні дані запитів, історія транзакцій і завантажені матеріали для генерації.",
             "Завантажені зображення використовуються для створення результату в боті та можуть тимчасово зберігатися для технічної обробки, без публічного розповсюдження без згоди користувача.",
             "Ми вживаємо розумних технічних заходів для захисту даних, але користувач також має самостійно берегти доступ до свого Telegram-акаунта.",
             "Для запитів щодо персональних даних або видалення звертайся за контактами, зазначеними на цій сторінці."
@@ -263,12 +281,12 @@
         {
           "id": "terms",
           "title": "Умови користування",
-          "intro": "Користуючись ботом, ти погоджуєшся з правилами використання сервісу цифрових AI-послуг і внутрішньої валюти Promti ✨.",
+          "intro": "Користуючись ботом, ти погоджуєшся з правилами використання цифрових AI-послуг і внутрішньої валюти Promti ✨.",
           "items": [
-            "Користувач самостійно відповідає за законність контенту, який завантажує для генерації, та за права на використання таких матеріалів.",
-            "Сервіс може оновлювати функції, стилі генерації, вартість у Promti та технічні умови без окремого персонального повідомлення, якщо інше не передбачено законом.",
-            "Заборонено використовувати сервіс для незаконного, шахрайського, образливого чи такого, що порушує права третіх осіб, контенту.",
-            "У разі виявлення зловживань доступ до сервісу може бути обмежено або припинено без компенсації за невикористані бонусні нарахування."
+            "Користувач самостійно несе відповідальність за законність контенту, який завантажує для генерації, а також за наявність прав на використання матеріалів.",
+            "Сервіс може оновлювати функціонал, стилі генерації, вартість Promti та технічні умови без окремого персонального повідомлення, якщо інше не передбачено законом.",
+            "Заборонено використовувати сервіс для незаконного, шахрайського, образливого або такого, що порушує права інших осіб, контенту.",
+            "У разі зловживань доступ до сервісу може бути обмежений або припинений без компенсації невикористаних бонусних нарахувань."
           ]
         }
       ],
@@ -301,7 +319,7 @@
         "trust": "3 Promti ✨ free when you start",
         "mockupPromptTitle": "Shoot style",
         "mockupPromptText": "Beauty, fashion, fantasy, or your own custom prompt",
-        "mockupResultTitle": "Generated results",
+        "mockupResultTitle": "What the bot can do",
         "floatTopTitle": "Promti balance",
         "floatTopText": "Photos and videos are paid for inside the bot",
         "floatBottomTitle": "Results in seconds",
@@ -318,28 +336,40 @@
           "title": "Fashion",
           "text": "Glossy visuals, studio lighting, and ready-to-post frames",
           "gradient": "linear-gradient(160deg, #c9d8ff 0%, #ffe3f2 100%)",
-          "image": ""
+          "image": "",
+          "beforeImage": "",
+          "afterImage": "",
+          "imageAlt": "Fashion before and after example"
         },
         {
           "label": "Beauty",
           "title": "Beauty",
           "text": "Soft skin, delicate glow, and a premium visual feel",
           "gradient": "linear-gradient(160deg, #d8c9ff 0%, #ffd4ea 100%)",
-          "image": ""
+          "image": "",
+          "beforeImage": "",
+          "afterImage": "",
+          "imageAlt": "Beauty before and after example"
         },
         {
           "label": "Fantasy",
           "title": "Fantasy",
           "text": "Atmospheric looks, new identities, and a wow effect",
           "gradient": "linear-gradient(160deg, #b7d9ff 0%, #efccff 100%)",
-          "image": ""
+          "image": "",
+          "beforeImage": "",
+          "afterImage": "",
+          "imageAlt": "Fantasy before and after example"
         },
         {
           "label": "Hyperpop",
           "title": "Hyperpop",
           "text": "Bold digital aesthetics for social media and video content",
           "gradient": "linear-gradient(160deg, #c4e0ff 0%, #ffb6dd 100%)",
-          "image": ""
+          "image": "",
+          "beforeImage": "",
+          "afterImage": "",
+          "imageAlt": "Hyperpop before and after example"
         }
       ],
       "howSection": {
@@ -349,12 +379,12 @@
           {
             "icon": "📸",
             "title": "Upload your photo",
-            "text": "Send your photo directly in Telegram and start without any extra services."
+            "text": "Send your photo right in Telegram and start generating without extra tools."
           },
           {
             "icon": "✨",
             "title": "Choose a style or prompt",
-            "text": "Use ready-made styles or enter your own prompt for a more tailored result."
+            "text": "Use a ready-made style or enter your own prompt for a more tailored result."
           },
           {
             "icon": "💬",
@@ -365,7 +395,7 @@
       },
       "promtiSection": {
         "badge": "The core product of the service",
-        "title": "Promti ✨ — the bot’s internal currency",
+        "title": "Promti ✨ - the bot internal currency",
         "lead": "You buy Promti ✨, spend them on content generation, and use them only for what you actually want to create: photos, short videos, or more advanced AI results.",
         "usage": [
           {
@@ -385,6 +415,12 @@
             "title": "Kling videos",
             "text": "More expressive video generation for premium AI content inside the bot.",
             "value": "8 Promti ✨"
+          },
+          {
+            "icon": "📊",
+            "title": "Infographics",
+            "text": "Visual materials for presentations, posts, and promo layouts directly in Telegram.",
+            "value": "from 1 Promti ✨"
           }
         ]
       },
@@ -440,7 +476,7 @@
       },
       "benefitsSection": {
         "badge": "Why it works for everyday content",
-        "title": "Why it’s convenient",
+        "title": "Why it is convenient",
         "items": [
           {
             "icon": "💄",
@@ -463,7 +499,7 @@
             "text": "Get finished photos and videos quickly when you need content today."
           },
           {
-            "icon": "📲",
+            "icon": "📱",
             "title": "Ready for social media",
             "text": "Use visuals easily for Stories, Reels, posts, and ads."
           },
@@ -530,7 +566,7 @@
         {
           "id": "refund",
           "title": "Refund Policy",
-          "intro": "Promti ✨ are the service’s internal digital currency and are credited automatically after successful payment.",
+          "intro": "Promti ✨ are the service internal digital currency and are credited automatically after successful payment.",
           "items": [
             "Refunds may be reviewed in case of technical issues, duplicate payments, or missing balance after a confirmed payment.",
             "If Promti were already spent on generation and the service was provided, refunds are generally not available except where required by Ukrainian law.",
@@ -559,6 +595,22 @@
   },
   "botLink": "https://t.me/Promtiai_bot",
   "theme": {
-    "supportsEnglishLater": true
+    "supportsEnglishLater": true,
+    "logoUrl": "",
+    "logoAlt": "PROMTI AI logo",
+    "palette": {
+      "themeColor": "#f8f5ff",
+      "bg": "#f7f8ff",
+      "text": "#1a1d38",
+      "muted": "#64708b",
+      "line": "rgba(119, 132, 182, 0.16)",
+      "surface": "rgba(255, 255, 255, 0.84)",
+      "primaryStart": "#7a6dff",
+      "primaryMid": "#8f80ff",
+      "primaryAccent": "#ff72c8",
+      "primaryEnd": "#ff9fb7",
+      "glowBlue": "rgba(115, 199, 255, 0.12)",
+      "glowPink": "rgba(255, 108, 207, 0.12)"
+    }
   }
 }

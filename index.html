@@ -32,7 +32,7 @@
       background:
         radial-gradient(circle at 0% 0%, rgba(115, 199, 255, 0.15), transparent 22%),
         radial-gradient(circle at 100% 20%, rgba(255, 108, 207, 0.12), transparent 20%),
-        linear-gradient(180deg, #fbfbff 0%, #f7f8ff 100%);
+        linear-gradient(180deg, #fbfbff 0%, var(--bg) 100%);
       overflow-x: hidden;
     }
     a { color: inherit; text-decoration: none; }
@@ -60,15 +60,44 @@
       gap: 12px;
     }
     .brand-mark {
-      width: 42px;
-      height: 42px;
-      border-radius: 14px;
+      width: 46px;
+      height: 46px;
+      border-radius: 16px;
       display: grid;
       place-items: center;
       background: var(--gradient-main);
       color: #fff;
       font-weight: 800;
       box-shadow: 0 14px 30px rgba(122, 109, 255, 0.28);
+      position: relative;
+      overflow: hidden;
+    }
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.34);
+    }
+    .brand-mark svg {
+      width: 28px;
+      height: 28px;
+      position: relative;
+      z-index: 1;
+      filter: drop-shadow(0 4px 10px rgba(82, 54, 164, 0.18));
+    }
+    .brand-mark.is-image {
+      padding: 4px;
+      background: rgba(255,255,255,0.94);
+    }
+    .brand-mark.is-image::after { display: none; }
+    .brand-logo-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 12px;
+      position: relative;
+      z-index: 1;
     }
     .brand-title { font-weight: 800; letter-spacing: -0.03em; }
     .brand-caption { color: var(--muted); font-size: 0.82rem; }
@@ -314,32 +343,102 @@
       display: grid;
       gap: 18px;
     }
-    .result-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 10px; gap: 10px; }
-    .result-thumb {
-      aspect-ratio: 0.82;
+    .result-card.demo-card { display: grid; gap: 14px; }
+    .demo-section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      color: #2e3560;
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+    .demo-abilities {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .demo-ability {
+      padding: 12px;
       border-radius: 18px;
-      overflow: hidden;
-      position: relative;
-      background: linear-gradient(160deg, rgba(115,199,255,0.18), rgba(255,111,200,0.22)), linear-gradient(180deg, #efeefe, #ffffff);
-    }
-    .result-thumb img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: center top;
-      display: block;
-    }
-    .result-thumb span {
-      position: absolute;
-      left: 10px;
-      bottom: 10px;
-      padding: 6px 9px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.88);
-      font-size: 0.74rem;
+      background: linear-gradient(180deg, rgba(122,109,255,0.10), rgba(255,116,199,0.08)), rgba(255,255,255,0.9);
+      border: 1px solid rgba(122,134,190,0.10);
+      color: #47527d;
+      font-size: 0.83rem;
       font-weight: 700;
-      color: #3c4774;
-      z-index: 1;
+      min-height: 76px;
+      display: grid;
+      align-content: space-between;
+      gap: 12px;
+    }
+    .demo-ability strong {
+      color: #283159;
+      font-size: 0.95rem;
+      letter-spacing: -0.02em;
+    }
+    .demo-step-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .demo-step-list li {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.9);
+      border: 1px solid rgba(122,134,190,0.10);
+      color: #4a557f;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+    .demo-step-list li span {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: rgba(109,99,255,0.12);
+      color: #5c53d4;
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+    .demo-cta-row {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 2px;
+    }
+    .demo-button {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 999px;
+      background: var(--gradient-main);
+      color: #fff;
+      font-size: 0.86rem;
+      font-weight: 800;
+      box-shadow: 0 14px 28px rgba(120, 105, 255, 0.18);
+    }
+    .demo-pill {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.94);
+      border: 1px solid rgba(122,134,190,0.12);
+      color: #556184;
+      font-size: 0.82rem;
+      font-weight: 700;
     }
     .floating-card {
       position: absolute;
@@ -366,6 +465,11 @@
         linear-gradient(180deg, rgba(255,255,255,0.04), rgba(18,21,48,0.36)),
         var(--example-fallback, linear-gradient(160deg, #d9dcff, #ffd4ec));
     }
+    .example-media {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
     .example-image {
       position: absolute;
       inset: 0;
@@ -376,6 +480,17 @@
       transform: scale(1);
       transition: transform 0.45s ease;
     }
+    .before-after-media .before-image,
+    .before-after-media .after-image {
+      animation-duration: 4s;
+      animation-iteration-count: infinite;
+      animation-timing-function: ease-in-out;
+      animation-delay: var(--before-after-delay, 0s);
+      will-change: opacity;
+    }
+    .before-after-media .before-image { animation-name: beforeFade; }
+    .before-after-media .after-image { animation-name: afterFade; opacity: 0; }
+    .example-card.static-image .example-image { opacity: 1; }
     .example-card:hover, .card:hover { transform: translateY(-6px); box-shadow: var(--shadow); }
     .example-card:hover .example-image { transform: scale(1.04); }
     .example-card::after {
@@ -553,10 +668,21 @@
       0%, 100% { transform: translate3d(0, 0, 0); }
       50% { transform: translate3d(0, -12px, 0); }
     }
+    @keyframes beforeFade {
+      0%, 42% { opacity: 1; }
+      50%, 92% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+    @keyframes afterFade {
+      0%, 42% { opacity: 0; }
+      50%, 92% { opacity: 1; }
+      100% { opacity: 0; }
+    }
     @media (min-width: 720px) {
       .container { width: min(calc(100% - 48px), var(--content-width)); }
       .hero-cta { flex-direction: row; flex-wrap: wrap; }
       .steps-grid, .usage-grid, .benefits-grid, .legal-links, .contact-grid, .legal-grid, .pricing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .demo-cta-row { flex-direction: row; }
     }
     @media (min-width: 980px) {
       .desktop-nav { display: flex; }
@@ -602,6 +728,131 @@
       return `<li><span>${label}:</span> <span>${value}</span></li>`;
     }
 
+    function getThemeConfig(payload) {
+      const theme = payload.theme || {};
+      const palette = theme.palette || {};
+      return {
+        logoUrl: theme.logoUrl || "",
+        logoAlt: theme.logoAlt || "PROMTI AI logo",
+        palette: {
+          bg: palette.bg || "#f7f8ff",
+          text: palette.text || "#1a1d38",
+          muted: palette.muted || "#64708b",
+          line: palette.line || "rgba(119, 132, 182, 0.16)",
+          surface: palette.surface || "rgba(255, 255, 255, 0.84)",
+          shadow: palette.shadow || "0 24px 60px rgba(98, 96, 164, 0.14)",
+          shadowSoft: palette.shadowSoft || "0 12px 30px rgba(88, 100, 164, 0.10)",
+          primaryStart: palette.primaryStart || "#7a6dff",
+          primaryMid: palette.primaryMid || "#8f80ff",
+          primaryAccent: palette.primaryAccent || "#ff72c8",
+          primaryEnd: palette.primaryEnd || "#ff9fb7",
+          glowBlue: palette.glowBlue || "rgba(115, 199, 255, 0.12)",
+          glowPink: palette.glowPink || "rgba(255, 108, 207, 0.12)",
+          themeColor: palette.themeColor || "#f8f5ff"
+        }
+      };
+    }
+
+    function applyTheme(payload) {
+      const theme = getThemeConfig(payload);
+      const root = document.documentElement;
+      const gradientMain = `linear-gradient(135deg, ${theme.palette.primaryStart} 0%, ${theme.palette.primaryMid} 24%, ${theme.palette.primaryAccent} 68%, ${theme.palette.primaryEnd} 100%)`;
+      const gradientSoft = `linear-gradient(135deg, ${theme.palette.glowBlue}, ${theme.palette.glowBlue} 45%, ${theme.palette.glowPink})`;
+
+      root.style.setProperty("--bg", theme.palette.bg);
+      root.style.setProperty("--text", theme.palette.text);
+      root.style.setProperty("--muted", theme.palette.muted);
+      root.style.setProperty("--line", theme.palette.line);
+      root.style.setProperty("--surface", theme.palette.surface);
+      root.style.setProperty("--shadow", theme.palette.shadow);
+      root.style.setProperty("--shadow-soft", theme.palette.shadowSoft);
+      root.style.setProperty("--gradient-main", gradientMain);
+      root.style.setProperty("--gradient-soft", gradientSoft);
+
+      const themeMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeMeta) themeMeta.setAttribute("content", theme.palette.themeColor);
+
+      return theme;
+    }
+
+    function renderBrandMark(theme, label) {
+      if (theme.logoUrl) {
+        return `<span class="brand-mark is-image" aria-hidden="true"><img class="brand-logo-image" src="${escapeHtml(theme.logoUrl)}" alt="${escapeHtml(theme.logoAlt || label)}"></span>`;
+      }
+
+      return `<span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+          <path d="M12.2 14.3C12.2 10.8 15 8 18.5 8H25.4C27.2 8 28.9 8.8 30.1 10.1L35.8 16C37 17.2 37.8 18.9 37.8 20.7V29.5C37.8 33 35 35.8 31.5 35.8H18.5C15 35.8 12.2 33 12.2 29.5V14.3Z" fill="url(#promti-bubble)"/>
+          <path d="M18.9 35.8L15.7 40C15 40.9 13.6 40.4 13.6 39.2V33.9L18.9 35.8Z" fill="url(#promti-tail)"/>
+          <path d="M25.3 12.8L26.7 18L31.8 19.4L26.7 20.7L25.3 25.9L23.9 20.7L18.8 19.4L23.9 18L25.3 12.8Z" fill="#FFF7F3"/>
+          <circle cx="18.8" cy="23.6" r="1.7" fill="#2F3667"/>
+          <circle cx="24.3" cy="23.6" r="1.7" fill="#2F3667"/>
+          <path d="M18.6 28.2C19.9 29.5 21.4 30.1 23.2 30.1C25.1 30.1 26.6 29.5 27.8 28.2" stroke="#2F3667" stroke-width="1.7" stroke-linecap="round"/>
+          <defs>
+            <linearGradient id="promti-bubble" x1="13.4" y1="9.2" x2="36.2" y2="35.8" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#7A6DFF"/>
+              <stop offset="0.54" stop-color="#8F80FF"/>
+              <stop offset="1" stop-color="#FF72C8"/>
+            </linearGradient>
+            <linearGradient id="promti-tail" x1="13.7" y1="33.9" x2="19.2" y2="39.2" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#8F80FF"/>
+              <stop offset="1" stop-color="#FFB2D6"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </span>`;
+    }
+
+    function getExampleBeforeImage(item) {
+      return item.beforeImage || item.image || "";
+    }
+
+    function getExampleAfterImage(item) {
+      return item.afterImage || "";
+    }
+
+    function getExampleAlt(item) {
+      return item.imageAlt || item.title || item.label || "PROMTI AI style example";
+    }
+
+    function renderBeforeAfterStyleCard(item, index) {
+      const fallback = escapeHtml(item.gradient || "linear-gradient(160deg, #d9dcff, #ffd4ec)");
+      const beforeImage = getExampleBeforeImage(item);
+      const afterImage = getExampleAfterImage(item);
+      const alt = getExampleAlt(item);
+      const delay = index % 4 ? ` delay-${Math.min(index % 4, 3)}` : "";
+      const animationDelay = `${(index % 4) * 0.35}s`;
+
+      let mediaMarkup = "";
+      let cardClass = "card example-card static-image";
+
+      if (beforeImage && afterImage) {
+        cardClass = "card example-card before-after-card";
+        mediaMarkup = `
+          <div class="example-media before-after-media" style="--before-after-delay:${animationDelay}">
+            <img class="example-image before-image" src="${escapeHtml(beforeImage)}" alt="${escapeHtml(alt)}">
+            <img class="example-image after-image" src="${escapeHtml(afterImage)}" alt="${escapeHtml(alt)}">
+          </div>
+        `;
+      } else if (beforeImage) {
+        mediaMarkup = `
+          <div class="example-media">
+            <img class="example-image" src="${escapeHtml(beforeImage)}" alt="${escapeHtml(alt)}">
+          </div>
+        `;
+      }
+
+      return `<article class="${cardClass} reveal${delay}" style="--example-fallback:${fallback}">
+        ${mediaMarkup}
+        <div class="content">
+          <div class="content-row">
+            <div class="example-meta"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.text)}</span></div>
+            <span class="tag">${escapeHtml(item.label)}</span>
+          </div>
+        </div>
+      </article>`;
+    }
+
     function normalizeLocale(value) {
       return value === "en" ? "en" : "uk";
     }
@@ -627,6 +878,21 @@
       const localeKey = detectLocale(payload);
       const locale = payload.locales[localeKey] || payload.locales.uk;
       const botLink = payload.botLink;
+      const theme = applyTheme(payload);
+      const mockupAbilities = localeKey === "en"
+        ? [
+            { icon: "🖼", title: "Photos" },
+            { icon: "🎬", title: "Videos" },
+            { icon: "📊", title: "Infographics" },
+            { icon: "🤖", title: "AI prompts" }
+          ]
+        : [
+            { icon: "🖼", title: "Фото" },
+            { icon: "🎬", title: "Відео" },
+            { icon: "📊", title: "Інфографіки" },
+            { icon: "🤖", title: "AI промти" }
+          ];
+      const mockupHowTitle = localeKey === "en" ? "How it works" : "Як це працює";
       const heroTitle = escapeHtml(locale.hero.title).replace(
         escapeHtml(locale.hero.titleAccent),
         `<span class="accent">${escapeHtml(locale.hero.titleAccent)}</span>`
@@ -639,7 +905,7 @@
           <div class="container">
             <div class="header-inner">
               <a class="brand" href="#top" aria-label="${escapeHtml(locale.brand.name)}">
-                <span class="brand-mark">✨</span>
+                ${renderBrandMark(theme, locale.brand.name)}
                 <span>
                   <div class="brand-title">${escapeHtml(locale.brand.name)}</div>
                   <div class="brand-caption">${escapeHtml(locale.brand.tagline)}</div>
@@ -690,30 +956,29 @@
                 <div class="phone-shell">
                   <div class="phone-screen">
                     <div class="telegram-bar">
-                      <div class="telegram-bot"><div class="telegram-avatar">AI</div><div>${escapeHtml(locale.brand.name)} Bot</div></div>
-                      <div>✨</div>
+                      <div class="telegram-bot"><div class="telegram-avatar">${theme.logoUrl ? `<img class="brand-logo-image" src="${escapeHtml(theme.logoUrl)}" alt="${escapeHtml(theme.logoAlt || locale.brand.name)}">` : "AI"}</div><div>${escapeHtml(locale.brand.name)} Bot</div></div>
+                      <div>&#10024;</div>
                     </div>
                     <div class="chat-stack">
-                      <div class="chat-bubble">
-                        <strong>${escapeHtml(locale.hero.mockupPromptTitle)}</strong>
-                        <span>${escapeHtml(locale.hero.mockupPromptText)}</span>
-                        <div class="bubble-chip-row">
-                          ${(locale.examples || []).slice(0, 3).map((item) => `<span class="bubble-chip">${escapeHtml(item.label)}</span>`).join("")}
+                      <div class="result-card demo-card">
+                        <div>
+                          <div class="demo-section-title"><strong>${escapeHtml(locale.hero.mockupResultTitle)}</strong><span>&#10024;</span></div>
+                          <div class="demo-abilities">
+                            ${mockupAbilities.map((item) => `<div class="demo-ability">
+                              <div>${escapeHtml(item.icon)}</div>
+                              <strong>${escapeHtml(item.title)}</strong>
+                            </div>`).join("")}
+                          </div>
                         </div>
-                      </div>
-                      <div class="result-card">
-                        <strong>${escapeHtml(locale.hero.mockupResultTitle)}</strong>
-                        <div class="result-grid">
-                          ${(locale.examples || []).slice(0, 4).map((item) => {
-                            const fallback = escapeHtml(item.gradient || "linear-gradient(160deg, #d9dcff, #ffd4ec)");
-                            const imageMarkup = item.image
-                              ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}">`
-                              : "";
-                            return `<div class="result-thumb" style="background:${fallback}">
-                              ${imageMarkup}
-                              <span>${escapeHtml(item.label)}</span>
-                            </div>`;
-                          }).join("")}
+                        <div>
+                          <div class="demo-section-title"><strong>${escapeHtml(mockupHowTitle)}</strong><span>&rarr;</span></div>
+                          <ol class="demo-step-list">
+                            ${(locale.howSection.steps || []).slice(0, 3).map((step, index) => `<li><span>${index + 1}</span><strong>${escapeHtml(step.title)}</strong></li>`).join("")}
+                          </ol>
+                        </div>
+                        <div class="demo-cta-row">
+                          <a class="demo-button" href="${escapeHtml(botLink)}" target="_blank" rel="noopener noreferrer">${escapeHtml(locale.hero.primaryCta)}</a>
+                          <div class="demo-pill">${escapeHtml(locale.hero.trust)}</div>
                         </div>
                       </div>
                     </div>
@@ -729,22 +994,7 @@
               <h2 class="section-title reveal">${escapeHtml(locale.examplesSection.title)}</h2>
               <p class="section-subtitle reveal delay-1">${escapeHtml(locale.examplesSection.subtitle)}</p>
               <div class="examples-grid" style="margin-top:34px">
-                ${(locale.examples || []).map((item, index) => {
-                  const delay = index % 4 ? ` delay-${Math.min(index % 4, 3)}` : "";
-                  const fallback = escapeHtml(item.gradient || "linear-gradient(160deg, #d9dcff, #ffd4ec)");
-                  const imageMarkup = item.image
-                    ? `<img class="example-image" src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}">`
-                    : "";
-                  return `<article class="card example-card reveal${delay}" style="--example-fallback:${fallback}">
-                    ${imageMarkup}
-                    <div class="content">
-                      <div class="content-row">
-                        <div class="example-meta"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.text)}</span></div>
-                        <span class="tag">${escapeHtml(item.label)}</span>
-                      </div>
-                    </div>
-                  </article>`;
-                }).join("")}
+                ${(locale.examples || []).map((item, index) => renderBeforeAfterStyleCard(item, index)).join("")}
               </div>
             </div>
           </section>

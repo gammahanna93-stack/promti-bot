@@ -1,4 +1,4 @@
-require("dotenv").config();
+﻿require("dotenv").config();
 
 process.on("uncaughtException",  (err)    => { console.error("UNCAUGHT EXCEPTION:", err.message); });
 process.on("unhandledRejection", (reason) => { console.error("UNHANDLED REJECTION:", reason);     });
@@ -8,6 +8,7 @@ const path     = require("path");
 const crypto   = require("crypto");
 const express  = require("express");
 const axios    = require("axios");
+const iconv    = require("iconv-lite");
 const { execSync } = require("child_process");
 const { Telegraf, Markup } = require("telegraf");
 const LocalSession = require("telegraf-session-local");
@@ -31,6 +32,96 @@ bot.use(localSession.middleware());
 
 fal.config({ credentials: process.env.FAL_KEY });
 
+function looksLikeGarbledText(value) {
+  if (typeof value !== "string" || !value) return false;
+  return GARBLED_PATTERNS.some((pattern) => value.includes(pattern));
+}
+
+function decodeGarbledText(value = "") {
+  const raw = String(value);
+  if (!looksLikeGarbledText(raw)) return raw;
+  try {
+    const decoded = iconv.decode(iconv.encode(raw, "cp1251"), "utf8");
+    return looksLikeGarbledText(decoded) ? raw : decoded;
+  } catch {
+    return raw;
+  }
+}
+
+function sanitizeTextTree(value) {
+  if (typeof value === "string") return decodeGarbledText(value);
+  if (Array.isArray(value)) return value.map((item) => sanitizeTextTree(item));
+  if (!value || typeof value !== "object" || Buffer.isBuffer(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeTextTree(item)]));
+}
+
+function normalizeTelegramPayload(value) {
+  return sanitizeTextTree(value);
+}
+
+function patchTelegramContext(ctx) {
+  if (ctx.__encodingPatched) return;
+  ctx.__encodingPatched = true;
+
+  const wrap = (methodName, config = {}) => {
+    if (typeof ctx[methodName] !== "function") return;
+    const original = ctx[methodName].bind(ctx);
+    ctx[methodName] = (...args) => {
+      const nextArgs = [...args];
+      if (config.textArg !== undefined && typeof nextArgs[config.textArg] === "string") {
+        nextArgs[config.textArg] = decodeGarbledText(nextArgs[config.textArg]);
+      }
+      if (config.optionsArg !== undefined && nextArgs[config.optionsArg] && typeof nextArgs[config.optionsArg] === "object") {
+        nextArgs[config.optionsArg] = normalizeTelegramPayload(nextArgs[config.optionsArg]);
+      }
+      if (config.mediaGroupArg !== undefined && Array.isArray(nextArgs[config.mediaGroupArg])) {
+        nextArgs[config.mediaGroupArg] = normalizeTelegramPayload(nextArgs[config.mediaGroupArg]);
+      }
+      return original(...nextArgs);
+    };
+  };
+
+  wrap("reply", { textArg: 0, optionsArg: 1 });
+  wrap("editMessageText", { textArg: 0, optionsArg: 1 });
+  wrap("answerCbQuery", { textArg: 0, optionsArg: 1 });
+  wrap("replyWithPhoto", { optionsArg: 1 });
+  wrap("replyWithVideo", { optionsArg: 1 });
+  wrap("replyWithDocument", { optionsArg: 1 });
+  wrap("replyWithMediaGroup", { mediaGroupArg: 0 });
+}
+
+function patchTelegramApi() {
+  if (bot.telegram.__encodingPatched) return;
+  bot.telegram.__encodingPatched = true;
+
+  const wrap = (methodName, config = {}) => {
+    if (typeof bot.telegram[methodName] !== "function") return;
+    const original = bot.telegram[methodName].bind(bot.telegram);
+    bot.telegram[methodName] = (...args) => {
+      const nextArgs = [...args];
+      if (config.textArg !== undefined && typeof nextArgs[config.textArg] === "string") {
+        nextArgs[config.textArg] = decodeGarbledText(nextArgs[config.textArg]);
+      }
+      if (config.optionsArg !== undefined && nextArgs[config.optionsArg] && typeof nextArgs[config.optionsArg] === "object") {
+        nextArgs[config.optionsArg] = normalizeTelegramPayload(nextArgs[config.optionsArg]);
+      }
+      return original(...nextArgs);
+    };
+  };
+
+  wrap("sendMessage", { textArg: 1, optionsArg: 2 });
+  wrap("sendPhoto", { optionsArg: 2 });
+  wrap("sendVideo", { optionsArg: 2 });
+  wrap("sendDocument", { optionsArg: 2 });
+}
+
+patchTelegramApi();
+
+bot.use(async (ctx, next) => {
+  patchTelegramContext(ctx);
+  await next();
+});
+
 bot.use(async (ctx, next) => {
   try {
     await next();
@@ -50,6 +141,23 @@ const WAYFORPAY = {
   returnUrl:       process.env.WAYFORPAY_RETURN_URL  || "https://t.me/Promtiai_bot",
   serviceUrl:      process.env.WAYFORPAY_SERVICE_URL || "",
 };
+
+const ADMIN_IDS = ADMINS;
+const KYIV_TIMEZONE = "Europe/Kyiv";
+const GOOGLE_SHEETS_URL = "https://docs.google.com/spreadsheets/d/1i1D_vLOLPHJbf-u1feSDMwh9FSkhVoRmHVSj9THVEFU/edit";
+const GOOGLE_SHEETS_SPREADSHEET_ID = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "1i1D_vLOLPHJbf-u1feSDMwh9FSkhVoRmHVSj9THVEFU";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_SHEETS_BASE_URL = "https://sheets.googleapis.com/v4/spreadsheets";
+const ANALYTICS_SHEETS = {
+  EVENTS: ["timestamp", "user_id", "event", "value", "style_id", "generation_id", "extra"],
+  USERS: ["user_id", "first_seen", "last_seen", "source", "total_generations", "total_spent"],
+  PAYMENTS: ["timestamp", "user_id", "amount", "currency", "promti_added", "status"],
+  GENERATIONS: ["timestamp", "user_id", "type", "style_id", "generation_id", "status"],
+};
+const ANALYTICS_CURRENCY = "UAH";
+const GARBLED_PATTERNS = [
+  "Рџ", "Рґ", "РЅ", "СЊ", "С–", "СЏ", "вњ", "рџ", "РІС", "Р ", "Р’", "Р“", "Р—", "вЂ", "пёЏ",
+];
 
 const REFERRAL_PROMTI_BONUS = 5;
 const START_PROMTI_BONUS = 3;
@@ -167,6 +275,93 @@ function saveJson(filePath, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
 }
 
+function repairGarbledJson(defaultValue, currentValue, stats = { replaced: 0 }) {
+  const cleanDefault = sanitizeTextTree(defaultValue);
+  const cleanCurrent = sanitizeTextTree(currentValue);
+
+  if (typeof cleanCurrent === "string") {
+    if (typeof cleanDefault === "string" && looksLikeGarbledText(String(currentValue || ""))) {
+      stats.replaced += 1;
+      return cleanDefault;
+    }
+    return cleanCurrent;
+  }
+
+  if (Array.isArray(cleanCurrent)) {
+    const defaultItem = Array.isArray(cleanDefault) ? cleanDefault[0] : undefined;
+    return cleanCurrent.map((item) => repairGarbledJson(defaultItem, item, stats));
+  }
+
+  if (!cleanCurrent || typeof cleanCurrent !== "object") {
+    return cleanDefault !== undefined ? cleanDefault : cleanCurrent;
+  }
+
+  const result = {};
+  const keys = new Set([
+    ...Object.keys(cleanDefault || {}),
+    ...Object.keys(cleanCurrent || {}),
+  ]);
+
+  for (const key of keys) {
+    if (cleanDefault && Object.prototype.hasOwnProperty.call(cleanDefault, key)) {
+      result[key] = repairGarbledJson(cleanDefault[key], cleanCurrent[key], stats);
+      continue;
+    }
+
+    const extraValue = cleanCurrent[key];
+    if (typeof extraValue === "string" && looksLikeGarbledText(String(currentValue?.[key] || ""))) {
+      stats.replaced += 1;
+      result[key] = decodeGarbledText(extraValue);
+    } else if (extraValue && typeof extraValue === "object") {
+      result[key] = repairGarbledJson(undefined, extraValue, stats);
+    } else {
+      result[key] = extraValue;
+    }
+  }
+
+  return result;
+}
+
+function readRepoJsonDefault(filePath, fallback) {
+  try {
+    if (!fs.existsSync(filePath)) return sanitizeTextTree(fallback);
+    return sanitizeTextTree(JSON.parse(fs.readFileSync(filePath, "utf8")));
+  } catch (e) {
+    console.error(`READ DEFAULT JSON ERROR ${filePath}:`, e.message);
+    return sanitizeTextTree(fallback);
+  }
+}
+
+function repairTextStorageFile(filePath, defaultValue, label) {
+  const stats = { replaced: 0 };
+  try {
+    const current = fs.existsSync(filePath)
+      ? JSON.parse(fs.readFileSync(filePath, "utf8"))
+      : undefined;
+    const repaired = repairGarbledJson(defaultValue, current, stats);
+    const shouldWrite = !fs.existsSync(filePath) || stats.replaced > 0;
+    if (shouldWrite) {
+      fs.writeFileSync(filePath, JSON.stringify(repaired, null, 2), "utf8");
+      console.log(`ENCODING REPAIR: ${label} repaired, replaced ${stats.replaced} strings`);
+    } else {
+      console.log(`ENCODING REPAIR: ${label} clean`);
+    }
+    return { filePath, label, replaced: stats.replaced, wrote: shouldWrite };
+  } catch (e) {
+    const fallbackValue = sanitizeTextTree(defaultValue);
+    fs.writeFileSync(filePath, JSON.stringify(fallbackValue, null, 2), "utf8");
+    console.log(`ENCODING REPAIR: ${label} reset from defaults after parse error (${e.message})`);
+    return { filePath, label, replaced: stats.replaced, wrote: true, reset: true };
+  }
+}
+
+function resetTextStorageFile(filePath, defaultValue, label) {
+  const cleanValue = sanitizeTextTree(defaultValue);
+  fs.writeFileSync(filePath, JSON.stringify(cleanValue, null, 2), "utf8");
+  console.log(`ENCODING RESET: ${label} overwritten with clean defaults`);
+  return { filePath, label, replaced: 0, wrote: true, reset: true };
+}
+
 function cloneJson(data) {
   return JSON.parse(JSON.stringify(data));
 }
@@ -189,11 +384,11 @@ function deepMerge(defaultValue, incomingValue) {
   return incomingValue !== undefined ? incomingValue : defaultValue;
 }
 
-const DEFAULT_LANDING_CONTENT = loadJson(LANDING_CONTENT_DEFAULT_PATH, {
+const DEFAULT_LANDING_CONTENT = sanitizeTextTree(loadJson(LANDING_CONTENT_DEFAULT_PATH, {
   locales: { uk: {}, en: {} },
   botLink: "https://t.me/Promtiai_bot",
   theme: { supportsEnglishLater: true },
-});
+}));
 
 function loadLandingContent() {
   const saved = loadJson(LANDING_CONTENT_PATH, DEFAULT_LANDING_CONTENT);
@@ -351,8 +546,443 @@ function log(type, userId, details = "") {
   console.log(`[${ts}] ${type} | user:${userId || "-"} | ${details}`);
 }
 
+let googleTokenCache = { accessToken: null, expiresAt: 0 };
+let analyticsEnsurePromise = null;
+let analyticsUsersRowCache = null;
+
+function getGoogleServiceAccountCredentials() {
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    try {
+      const parsed = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+      if (parsed.private_key) parsed.private_key = String(parsed.private_key).replace(/\\n/g, "\n");
+      return parsed;
+    } catch (e) {
+      console.error("GOOGLE_SERVICE_ACCOUNT_JSON parse error:", e.message);
+      return null;
+    }
+  }
+
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    return {
+      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      private_key: String(process.env.GOOGLE_PRIVATE_KEY).replace(/\\n/g, "\n"),
+      token_uri: GOOGLE_TOKEN_URL,
+    };
+  }
+
+  return null;
+}
+
+function isAnalyticsEnabled() {
+  return Boolean(getGoogleServiceAccountCredentials());
+}
+
+function base64UrlEncode(input) {
+  return Buffer.from(input)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+async function getGoogleAccessToken() {
+  if (!isAnalyticsEnabled()) return null;
+  if (googleTokenCache.accessToken && googleTokenCache.expiresAt - Date.now() > 60_000) {
+    return googleTokenCache.accessToken;
+  }
+
+  const creds = getGoogleServiceAccountCredentials();
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64UrlEncode(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = base64UrlEncode(JSON.stringify({
+    iss: creds.client_email,
+    scope: "https://www.googleapis.com/auth/spreadsheets",
+    aud: creds.token_uri || GOOGLE_TOKEN_URL,
+    exp: now + 3600,
+    iat: now,
+  }));
+  const unsigned = `${header}.${payload}`;
+  const signature = crypto.sign("RSA-SHA256", Buffer.from(unsigned), creds.private_key)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+
+  const response = await axios.post(
+    creds.token_uri || GOOGLE_TOKEN_URL,
+    new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: `${unsigned}.${signature}`,
+    }).toString(),
+    { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 30000 }
+  );
+
+  googleTokenCache = {
+    accessToken: response.data.access_token,
+    expiresAt: Date.now() + Number(response.data.expires_in || 3600) * 1000,
+  };
+  return googleTokenCache.accessToken;
+}
+
+async function sheetsApiRequest(method, endpoint, { params, data } = {}) {
+  const accessToken = await getGoogleAccessToken();
+  if (!accessToken) throw new Error("ANALYTICS_DISABLED");
+  const response = await axios({
+    method,
+    url: `${GOOGLE_SHEETS_BASE_URL}/${GOOGLE_SHEETS_SPREADSHEET_ID}${endpoint}`,
+    headers: { Authorization: `Bearer ${accessToken}` },
+    params,
+    data,
+    timeout: 30000,
+  });
+  return response.data;
+}
+
+async function ensureAnalyticsSheets() {
+  if (!isAnalyticsEnabled()) return false;
+  if (analyticsEnsurePromise) return analyticsEnsurePromise;
+
+  analyticsEnsurePromise = (async () => {
+    const metadata = await sheetsApiRequest("get", "", { params: { fields: "sheets.properties.title" } });
+    const existingTitles = new Set((metadata.sheets || []).map((sheet) => sheet.properties?.title).filter(Boolean));
+    const missing = Object.keys(ANALYTICS_SHEETS).filter((title) => !existingTitles.has(title));
+
+    if (missing.length) {
+      await sheetsApiRequest("post", ":batchUpdate", {
+        data: {
+          requests: missing.map((title) => ({ addSheet: { properties: { title } } })),
+        },
+      });
+    }
+
+    for (const [title, headers] of Object.entries(ANALYTICS_SHEETS)) {
+      const range = encodeURIComponent(`${title}!1:1`);
+      const current = await sheetsApiRequest("get", `/values/${range}`);
+      if (!current.values || !current.values.length) {
+        await sheetsApiRequest("put", `/values/${encodeURIComponent(`${title}!A1`)}`, {
+          params: { valueInputOption: "RAW" },
+          data: { range: `${title}!A1`, majorDimension: "ROWS", values: [headers] },
+        });
+      }
+    }
+
+    return true;
+  })().catch((e) => {
+    analyticsEnsurePromise = null;
+    throw e;
+  });
+
+  return analyticsEnsurePromise;
+}
+
+async function appendSheetRow(sheetName, row) {
+  await ensureAnalyticsSheets();
+  return sheetsApiRequest("post", `/values/${encodeURIComponent(`${sheetName}!A1`)}:append`, {
+    params: {
+      valueInputOption: "USER_ENTERED",
+      insertDataOption: "INSERT_ROWS",
+    },
+    data: {
+      range: `${sheetName}!A1`,
+      majorDimension: "ROWS",
+      values: [row],
+    },
+  });
+}
+
+async function getSheetRows(sheetName) {
+  await ensureAnalyticsSheets();
+  const response = await sheetsApiRequest("get", `/values/${encodeURIComponent(`${sheetName}!A:Z`)}`);
+  return response.values || [];
+}
+
+function serializeAnalyticsExtra(extra = {}) {
+  if (typeof extra === "string") return extra;
+  return Object.entries(extra)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(",") : value}`)
+    .join(";");
+}
+
+function parseAnalyticsExtra(extra = "") {
+  return String(extra || "")
+    .split(";")
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .reduce((acc, chunk) => {
+      const [key, ...rest] = chunk.split("=");
+      if (!key) return acc;
+      acc[key] = rest.join("=");
+      return acc;
+    }, {});
+}
+
+function getKyivDateKey(date = new Date()) {
+  const safeDate = date instanceof Date ? date : new Date(date);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: KYIV_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(safeDate);
+}
+
+function getKyivTimestamp(date = new Date()) {
+  const safeDate = date instanceof Date ? date : new Date(date);
+  const parts = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: KYIV_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(safeDate);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}:${map.second}`;
+}
+
+function getRecentKyivDateKeys(days) {
+  const keys = [];
+  for (let index = 0; index < days; index += 1) {
+    keys.push(getKyivDateKey(new Date(Date.now() - index * 86400000)));
+  }
+  return new Set(keys);
+}
+
+function runAnalyticsTask(task, label) {
+  Promise.resolve()
+    .then(task)
+    .catch((e) => {
+      console.error(`${label}:`, e.message);
+    });
+}
+
+async function ensureUsersSheetIndex() {
+  if (analyticsUsersRowCache) return analyticsUsersRowCache;
+  const rows = await getSheetRows("USERS");
+  analyticsUsersRowCache = {};
+  rows.slice(1).forEach((row, index) => {
+    const userId = row[0];
+    if (userId) analyticsUsersRowCache[String(userId)] = index + 2;
+  });
+  return analyticsUsersRowCache;
+}
+
+function deriveUserSource(ctx, user) {
+  const payload = ctx.startPayload || "";
+  if (payload.startsWith("prompt_")) return "style";
+  if (payload.startsWith("ref_")) return "referral";
+  if (user?.sourcePromptKey) return "style";
+  return "direct";
+}
+
+async function upsertAnalyticsUser(ctx, user, overrides = {}) {
+  if (!isAnalyticsEnabled()) return false;
+  await ensureAnalyticsSheets();
+
+  const userId = String(ctx.from?.id || user?.id || "");
+  if (!userId) return false;
+
+  const rowsIndex = await ensureUsersSheetIndex();
+  const nowTs = getKyivTimestamp();
+  const currentRow = rowsIndex[userId];
+  const existingRows = currentRow ? await getSheetRows("USERS") : null;
+  const existing = currentRow && existingRows?.[currentRow - 1] ? existingRows[currentRow - 1] : null;
+  const totalGenerations = Number(
+    overrides.totalGenerations !== undefined
+      ? overrides.totalGenerations
+      : (user?.generations || 0) + (user?.seedanceGenerations || 0) + (user?.klingGenerations || 0)
+  );
+  const totalSpent = Number(
+    overrides.totalSpent !== undefined
+      ? overrides.totalSpent
+      : user?.totalSpent || 0
+  );
+  const row = [
+    userId,
+    existing?.[1] || overrides.firstSeen || nowTs,
+    overrides.lastSeen || nowTs,
+    overrides.source || existing?.[3] || deriveUserSource(ctx, user),
+    totalGenerations,
+    totalSpent,
+  ];
+
+  if (currentRow) {
+    await sheetsApiRequest("put", `/values/${encodeURIComponent(`USERS!A${currentRow}:F${currentRow}`)}`, {
+      params: { valueInputOption: "USER_ENTERED" },
+      data: { range: `USERS!A${currentRow}:F${currentRow}`, majorDimension: "ROWS", values: [row] },
+    });
+  } else {
+    await appendSheetRow("USERS", row);
+    analyticsUsersRowCache = null;
+  }
+
+  return true;
+}
+
+function queueAnalyticsUserTouch(ctx, user, overrides = {}) {
+  runAnalyticsTask(() => upsertAnalyticsUser(ctx, user, overrides), "ANALYTICS_USER");
+}
+
+function getUserTotalGenerations(user) {
+  return Number(user?.generations || 0) + Number(user?.seedanceGenerations || 0) + Number(user?.klingGenerations || 0);
+}
+
+function createGenerationId(userId, prefix = "gen") {
+  return `${prefix}_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function logEvent({
+  user_id,
+  event,
+  value = 0,
+  style_id = "",
+  generation_id = "",
+  extra = "",
+}) {
+  if (!isAnalyticsEnabled()) return false;
+  await appendSheetRow("EVENTS", [
+    getKyivTimestamp(),
+    String(user_id || ""),
+    event,
+    Number(value || 0),
+    style_id || "",
+    generation_id || "",
+    serializeAnalyticsExtra(extra),
+  ]);
+  return true;
+}
+
+async function trackAnalyticsGeneration({
+  userId,
+  type,
+  styleId = "",
+  generationId = "",
+  status = "success",
+}) {
+  if (!isAnalyticsEnabled()) return false;
+  await appendSheetRow("GENERATIONS", [
+    getKyivTimestamp(),
+    String(userId || ""),
+    type || "",
+    styleId || "",
+    generationId || "",
+    status || "",
+  ]);
+  return true;
+}
+
+function queueLogEvent(payload) {
+  runAnalyticsTask(() => logEvent(payload), `ANALYTICS_EVENT_${payload?.event || "unknown"}`);
+}
+
+function queueAnalyticsEvent(ctx, event, value = 0, extra = {}) {
+  queueLogEvent({
+    user_id: ctx?.from?.id || extra.userId || "",
+    event,
+    value,
+    style_id: extra.style_id || extra.style || "",
+    generation_id: extra.generation_id || extra.generationId || "",
+    extra,
+  });
+}
+
+function queueAnalyticsGeneration(payload) {
+  runAnalyticsTask(() => trackAnalyticsGeneration(payload), `ANALYTICS_GENERATION_${payload?.generationId || "unknown"}`);
+}
+
+function hasLoggedPaymentAnalytics(paymentRecord, marker) {
+  if (!paymentRecord) return false;
+  if (!Array.isArray(paymentRecord.analyticsLoggedStatuses)) paymentRecord.analyticsLoggedStatuses = [];
+  return paymentRecord.analyticsLoggedStatuses.includes(marker);
+}
+
+function markLoggedPaymentAnalytics(paymentRecord, marker) {
+  if (!paymentRecord) return false;
+  if (!Array.isArray(paymentRecord.analyticsLoggedStatuses)) paymentRecord.analyticsLoggedStatuses = [];
+  if (!paymentRecord.analyticsLoggedStatuses.includes(marker)) paymentRecord.analyticsLoggedStatuses.push(marker);
+  return true;
+}
+
+async function trackAnalyticsPayment({ userId, amount, promtiAdded = 0, status, currency = ANALYTICS_CURRENCY }) {
+  if (!isAnalyticsEnabled()) return false;
+  await appendSheetRow("PAYMENTS", [
+    getKyivTimestamp(),
+    String(userId || ""),
+    Number(amount || 0),
+    currency || ANALYTICS_CURRENCY,
+    Number(promtiAdded || 0),
+    status || "",
+  ]);
+  return true;
+}
+
+function formatTopList(entries, fallback = "—") {
+  if (!entries.length) return fallback;
+  return entries
+    .map(([label, value], index) => `${index + 1}. ${label} — ${value}`)
+    .join("\n");
+}
+
+function requireAdminAnalytics(ctx) {
+  if (isAdmin(ctx.from.id)) return true;
+  ctx.reply("⛔ Access denied").catch(() => {});
+  return false;
+}
+
+async function loadAnalyticsSnapshot() {
+  const [userRows, eventRows, paymentRows, generationRows] = await Promise.all([
+    getSheetRows("USERS"),
+    getSheetRows("EVENTS"),
+    getSheetRows("PAYMENTS"),
+    getSheetRows("GENERATIONS"),
+  ]);
+
+  const users = userRows.slice(1).map((row) => ({
+    user_id: row[0] || "",
+    first_seen: row[1] || "",
+    last_seen: row[2] || "",
+    source: row[3] || "",
+    total_generations: Number(row[4] || 0),
+    total_spent: Number(row[5] || 0),
+  }));
+
+  const events = eventRows.slice(1).map((row) => ({
+    timestamp: row[0] || "",
+    user_id: row[1] || "",
+    event: row[2] || "",
+    value: Number(row[3] || 0),
+    style_id: row[4] || "",
+    generation_id: row[5] || "",
+    extra: row[6] || "",
+    extraMap: parseAnalyticsExtra(row[6] || ""),
+  }));
+
+  const payments = paymentRows.slice(1).map((row) => ({
+    timestamp: row[0] || "",
+    user_id: row[1] || "",
+    amount: Number(row[2] || 0),
+    currency: row[3] || ANALYTICS_CURRENCY,
+    promti_added: Number(row[4] || 0),
+    status: row[5] || "",
+  }));
+
+  const generations = generationRows.slice(1).map((row) => ({
+    timestamp: row[0] || "",
+    user_id: row[1] || "",
+    type: row[2] || "",
+    style_id: row[3] || "",
+    generation_id: row[4] || "",
+    status: row[5] || "",
+  }));
+
+  return { users, events, payments, generations };
+}
+
 // ─── ДАНІ ─────────────────────────────────────────────────────────────────────
-const DEFAULT_PROMPTS = {
+const DEFAULT_PROMPTS = sanitizeTextTree({
   portrait: "ultra realistic portrait, studio lighting, preserve face, do not change identity",
   beauty:   "beauty editorial, glossy skin, preserve face, do not change identity",
   fashion:  "high fashion photoshoot, preserve face, do not change identity",
@@ -360,9 +990,9 @@ const DEFAULT_PROMPTS = {
   trend:    "viral instagram aesthetic, preserve face, do not change identity",
   seedance: "cinematic motion, smooth animation, realistic movement",
   kling:    "cinematic video, fluid motion, high quality animation",
-};
+});
 
-const DEFAULT_CONTENT = {
+const DEFAULT_CONTENT = sanitizeTextTree({
   welcomeText:  "Привіт ✨\n\nОбери що хочеш зробити:\n🖼 Фото — генерація фото по стилях\n🎬 Відео — анімація фото у відео\n\n🎁 3 Promti ✨ безкоштовно при старті",
   infoText:     "PROMTI AI Bot\n\n🖼 Фото:\n10/99грн · 20/179грн · 30/249грн · 50/399грн\n\n🎬 Seedance:\n3/199грн · 5/349грн · 10/599грн\n\n🎥 Kling:\n3/299грн · 5/499грн · 10/899грн",
   helpText:     "Допомога:\n\n🖼 Фото:\n1. Натисни 🖼 Фото\n2. Обери стиль\n3. Надішли фото\n\n🎬 Відео:\n1. Натисни 🎬 Відео\n2. Обери модель\n3. Надішли фото для анімації",
@@ -372,15 +1002,50 @@ const DEFAULT_CONTENT = {
   pricesText:   "💰 PROMTI AI — Ціни\n\n💎 Валюта: Promti ✨\n1 Promti ✨ = від 6.7 до 9.9 грн\n\n📦 Пакети:\n10 Promti ✨ — 99 грн (9.9 грн/✨)\n30 Promti ✨ — 249 грн (8.3 грн/✨)\n60 Promti ✨ — 449 грн (7.5 грн/✨)\n150 Promti ✨ — 999 грн (6.7 грн/✨) 🔥\n\n💰 Ціни послуг:\n🖼 Фото — 1 Promti ✨\n🎬 Seedance відео — 5 Promti ✨\n🎥 Kling відео — 8 Promti ✨\n\n🎁 3 Promti ✨ безкоштовно при реєстрації!\n👫 +5 Promti ✨ за кожного друга який оплатить",
   promptLibrary: {},
   promptCategories: {},
-};
+});
+
+function getTextRepairTargets() {
+  return [
+    {
+      filePath: CONTENT_PATH,
+      label: "content.json",
+      defaultValue: readRepoJsonDefault(path.join(__dirname, "content.json"), DEFAULT_CONTENT),
+    },
+    {
+      filePath: SETTINGS_PATH,
+      label: "settings.json",
+      defaultValue: readRepoJsonDefault(path.join(__dirname, "settings.json"), DEFAULT_SETTINGS),
+    },
+    {
+      filePath: PROMPTS_PATH,
+      label: "prompts.json",
+      defaultValue: readRepoJsonDefault(path.join(__dirname, "prompts.json"), DEFAULT_PROMPTS),
+    },
+    {
+      filePath: LANDING_CONTENT_PATH,
+      label: "landing-content.json",
+      defaultValue: readRepoJsonDefault(LANDING_CONTENT_DEFAULT_PATH, DEFAULT_LANDING_CONTENT),
+    },
+  ];
+}
+
+function runEncodingRepair({ reset = false } = {}) {
+  return getTextRepairTargets().map((target) =>
+    reset
+      ? resetTextStorageFile(target.filePath, target.defaultValue, target.label)
+      : repairTextStorageFile(target.filePath, target.defaultValue, target.label)
+  );
+}
+
+runEncodingRepair();
 
 let users    = loadJson(USERS_PATH,    {});
 let prompts  = loadJson(PROMPTS_PATH,  DEFAULT_PROMPTS);
 let content  = loadJson(CONTENT_PATH,  DEFAULT_CONTENT);
 let payments = loadJson(PAYMENTS_PATH, []);
 
-prompts = { ...DEFAULT_PROMPTS, ...prompts };
-content = { ...DEFAULT_CONTENT, ...content };
+prompts = sanitizeTextTree({ ...DEFAULT_PROMPTS, ...prompts });
+content = sanitizeTextTree({ ...DEFAULT_CONTENT, ...content });
 if (!content.promptLibrary || typeof content.promptLibrary !== "object" || Array.isArray(content.promptLibrary)) content.promptLibrary = {};
 if (!content.promptCategories || typeof content.promptCategories !== "object" || Array.isArray(content.promptCategories)) content.promptCategories = {};
 if (typeof content.welcomeText === "string") {
@@ -653,6 +1318,7 @@ function touchUser(ctx) {
     user.firstName = newFirstName;
     saveJson(USERS_PATH, users);
   }
+  queueAnalyticsUserTouch(ctx, user);
   return user;
 }
 
@@ -1360,6 +2026,31 @@ bot.start(async (ctx) => {
   const user = touchUser(ctx);
   resetState(ctx);
   const payload = ctx.startPayload || "";
+  const promptSourceKey = payload.startsWith("prompt_") ? normalizePromptKey(payload.replace("prompt_", "")) : "";
+  const startSource = payload.startsWith("prompt_")
+    ? "style"
+    : payload.startsWith("ref_")
+      ? "referral"
+      : "direct";
+  queueAnalyticsUserTouch(ctx, user, {
+    source: startSource,
+  });
+  queueLogEvent({
+    user_id: ctx.from.id,
+    event: "user_start",
+    value: 1,
+    style_id: promptSourceKey,
+    extra: { source: payload.startsWith("prompt_") ? `style_${promptSourceKey}` : startSource },
+  });
+  if (isNew && START_PROMTI_BONUS > 0) {
+    queueLogEvent({
+      user_id: ctx.from.id,
+      event: "free_promti_claimed",
+      value: START_PROMTI_BONUS,
+      style_id: promptSourceKey,
+      extra: { source: startSource },
+    });
+  }
   if (isNew && payload.startsWith("ref_")) {
     const refId = Number(payload.replace("ref_", ""));
     if (refId && refId !== ctx.from.id) await handleReferral(ctx, refId);
@@ -1372,6 +2063,13 @@ bot.start(async (ctx) => {
       applyPromptStyleToSession(ctx, style.key);
       user.sourcePromptKey = style.key;
       saveUsers();
+      queueLogEvent({
+        user_id: ctx.from.id,
+        event: "view_style",
+        value: 1,
+        style_id: style.key,
+        extra: { source: "deep_link" },
+      });
       return sendPromptReadyMessage(ctx, style, { withPreview: true });
     }
   }
@@ -1387,38 +2085,198 @@ bot.command("admin", (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
   resetState(ctx);
   return ctx.reply(
-    "👑 Адмін панель\n\n" +
-
-    "📊 КНОПКИ МЕНЮ:\n" +
-    "📊 Статус бота — черга, воркери, ключі API, сегменти юзерів, виручка\n" +
-    "👤 Мій ID — показує твій Telegram ID\n" +
-    "👥 Користувачі — останні 15 юзерів з балансом\n" +
-    "💳 Останні оплати — останні 15 транзакцій\n" +
-    "📈 Аналітика — конверсія, топ пакети, виручка 7 днів\n" +
-    "📦 Пакети — всі пакети з цінами\n" +
-    "✏️ Змінити текст — редагувати тексти бота\n" +
-    "📝 Поточні тексти — переглянути всі тексти\n" +
-    "⚙️ Налаштування — ліміти черги, таймаути, денні ліміти\n" +
-    "🖼 Прикріпити фото — додати/видалити фото до welcomeText, infoText, helpText, pricesText, ideaText або broadcast\n\n" +
-
-    "💰 ЦІНИ ТА ПАКЕТИ:\n" +
-    "/packages — переглянути всі пакети і ціни\n" +
-    "/setprice promti_pack10 120 — змінити ціну пакету\n" +
-    "/addpackage KEY promti 15 1199 15 Promti — додати новий пакет\n" +
-    "/setlink support_link https://t.me/... — змінити посилання\n\n" +
-
-    "👥 КЕРУВАННЯ ЮЗЕРАМИ:\n" +
-    "/userinfo ID — повна інфо про юзера\n" +
-    "/addpromti ID 10 — нарахувати Promti юзеру вручну\n" +
-    "/ban ID — заблокувати юзера\n" +
-    "/unban ID — розблокувати юзера\n" +
-    "/delete_user ID — видалити юзера повністю\n\n" +
-
-    "📢 РОЗСИЛКА:\n" +
-    "/broadcast Текст — надіслати всім юзерам\n" +
-    "/analytics — детальна аналітика",
+    [
+      "🔧 АДМІН ПАНЕЛЬ PROMTI AI",
+      "",
+      "🌐 Веб-панель адмінки:",
+      "https://promti-bot-production.up.railway.app/admin",
+      "",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "📊 СТАТУС І АНАЛІТИКА",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "📊 Статус бота — ключі API, черга, воркери, помилки",
+      "📈 Аналітика — конверсії, виручка, топ-пакети, графік 7 днів",
+      "/analytics — детальна аналітика",
+      "/today — сьогоднішня статистика",
+      "/revenue — виручка по періодах",
+      "/top — топ стилів, юзерів і продуктів",
+      "/stats — Google Sheets",
+      "",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "👥 КОРИСТУВАЧІ",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "👥 Користувачі — список останніх 15 юзерів",
+      "👤 Мій ID — показати свій Telegram ID",
+      "/userinfo ID — повна інформація про юзера",
+      "/addpromti ID AMOUNT — нарахувати Promti юзеру",
+      "/ban ID — заблокувати юзера",
+      "/unban ID — розблокувати юзера",
+      "/delete_user ID — видалити обліковий запис",
+      "",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "💳 ОПЛАТИ І ПАКЕТИ",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "💳 Останні оплати — останні 15 транзакцій",
+      "📦 Пакети — список усіх пакетів Promti",
+      "/packages — переглянути всі пакети",
+      "/setprice KEY PRICE — змінити ціну пакету",
+      "/addpackage KEY promti COUNT PRICE TITLE — додати новий пакет",
+      "/reset_packages — скинути пакети до дефолтних",
+      "/setlink support_link URL — змінити посилання підтримки",
+      "",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "🎨 СТИЛІ ТА ПРОМТИ",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "🎨 Бібліотека стилів — усі static і dynamic стилі",
+      "/stylewizard — покроковий майстер створення нового стилю",
+      "/addprompt KEY | CATEGORY | TITLE | PROMPT — швидко додати static стиль",
+      "/prompts — список усіх стилів з deep-link",
+      "/delprompt KEY — видалити стиль",
+      "/trendprompt KEY on|off — позначити стиль як трендовий",
+      "/setpromptpreview KEY — задати preview photo стилю",
+      "/topprompts clicks|generations|purchases — топ стилів за метрикою",
+      "",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "✏️ ТЕКСТИ ТА ФОТО",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "✏️ Змінити текст — редагувати welcome/info/help/prices/idea/support",
+      "📝 Поточні тексти — переглянути всі тексти бота",
+      "🖼 Прикріпити фото — фото до welcome/info/help/prices/idea/broadcast",
+      "/repair_encoding — відновити тексти з volume",
+      "/reset_content_clean — перезаписати текстові JSON чистими дефолтами",
+      "",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "📢 РОЗСИЛКА",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "/broadcast TEXT — розсилка всім користувачам",
+      "(якщо прикріплене 📷 broadcastPhoto — піде з фото)",
+      "",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "⚙️ НАЛАШТУВАННЯ",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "⚙️ Налаштування — переглянути ліміти і таймаути",
+      "(редагування — через settings.json + рестарт бота)",
+      "",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "💡 ПІДКАЗКИ",
+      "━━━━━━━━━━━━━━━━━━━━━",
+      "• Для dynamic стилю: онови dynamic-prompts.json → імпорт → задай preview через бот",
+      "• Усі команди працюють тільки для адмінів",
+      "• Для повного керування контентом — використовуй веб-панель"
+    ].join("\n"),
     adminMenu()
   );
+});
+
+
+bot.command("stats", async (ctx) => {
+  touchUser(ctx);
+  if (!requireAdminAnalytics(ctx)) return;
+  return ctx.reply(GOOGLE_SHEETS_URL);
+});
+
+bot.command("test_sheets", async (ctx) => {
+  touchUser(ctx);
+  if (!requireAdminAnalytics(ctx)) return;
+  if (!isAnalyticsEnabled()) return ctx.reply("❌ помилка: Google Sheets не налаштовано");
+  try {
+    await ensureAnalyticsSheets();
+    await logEvent({
+      user_id: ctx.from.id,
+      event: "test_sheets",
+      value: 1,
+      extra: { source: "admin_command" },
+    });
+    return ctx.reply("✅ Google Sheets працює");
+  } catch (e) {
+    console.error("TEST_SHEETS:", e.message);
+    return ctx.reply(`❌ помилка: ${e.message}`);
+  }
+});
+
+bot.command("today", async (ctx) => {
+  touchUser(ctx);
+  if (!requireAdminAnalytics(ctx)) return;
+  if (!isAnalyticsEnabled()) return ctx.reply("Google Sheets аналітика не налаштована.");
+
+  const snapshot = await loadAnalyticsSnapshot();
+  const todayKey = getKyivDateKey();
+  const successfulPayments = snapshot.payments.filter((payment) => payment.status === "success" && getKyivDateKey(payment.timestamp) === todayKey);
+  const todayGenerations = snapshot.generations.filter((generation) => generation.status === "success" && getKyivDateKey(generation.timestamp) === todayKey);
+  const newUsers = snapshot.users.filter((user) => getKyivDateKey(user.first_seen) === todayKey).length;
+
+  return ctx.reply(
+    [
+      "📊 Today",
+      "",
+      `🖼 Генерацій: ${todayGenerations.length}`,
+      `💳 Оплат: ${successfulPayments.length}`,
+      `👥 Нових користувачів: ${newUsers}`,
+    ].join("\n")
+  );
+});
+
+bot.command("revenue", async (ctx) => {
+  touchUser(ctx);
+  if (!requireAdminAnalytics(ctx)) return;
+  if (!isAnalyticsEnabled()) return ctx.reply("Google Sheets аналітика не налаштована.");
+
+  const snapshot = await loadAnalyticsSnapshot();
+  const successfulPayments = snapshot.payments.filter((payment) => payment.status === "success");
+  const totalRevenue = successfulPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+  return ctx.reply(
+    [
+      "💰 Revenue",
+      "",
+      `${totalRevenue} UAH`,
+    ].join("\n")
+  );
+});
+
+bot.command("top", async (ctx) => {
+  touchUser(ctx);
+  if (!requireAdminAnalytics(ctx)) return;
+  if (!isAnalyticsEnabled()) return ctx.reply("Google Sheets аналітика не налаштована.");
+
+  const snapshot = await loadAnalyticsSnapshot();
+  const styleCounts = new Map();
+
+  for (const generation of snapshot.generations) {
+    if (generation.status !== "success") continue;
+    const styleKey = generation.style_id || "-";
+    styleCounts.set(styleKey, (styleCounts.get(styleKey) || 0) + 1);
+  }
+
+  const topStyles = [...styleCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  return ctx.reply(
+    [
+      "🏆 Top styles",
+      "",
+      formatTopList(topStyles),
+    ].join("\n")
+  );
+});
+
+bot.command("repair_encoding", (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+  const results = runEncodingRepair();
+  const touched = results.filter((item) => item.wrote || item.replaced > 0);
+  if (!touched.length) return ctx.reply("Усі текстові файли вже чисті.");
+  return ctx.reply(
+    touched
+      .map((item) => `${item.label}: замінено ${item.replaced} рядків`)
+      .join("\n")
+  );
+});
+
+bot.command("reset_content_clean", (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+  const results = runEncodingRepair({ reset: true });
+  return ctx.reply(results.map((item) => `Оновлено: ${item.label}`).join("\n"));
 });
 
 bot.command("ref", (ctx) => {
@@ -1901,8 +2759,13 @@ bot.hears(["portrait", "beauty", "fashion", "art", "trend", "seedance", "kling"]
 bot.hears("📝 Поточні тексти", (ctx) => {
   touchUser(ctx);
   if (!isAdmin(ctx.from.id)) return ctx.reply("❌");
+  const SKIP_KEYS = new Set([
+    "promptLibrary", "promptCategories", "styleLibrary",
+    "welcomePhoto", "infoPhoto", "helpPhoto",
+    "pricesPhoto", "ideaPhoto", "broadcastPhoto",
+  ]);
   const textOnlyEntries = Object.entries(content).filter(([k, v]) =>
-    !["promptLibrary", "promptCategories"].includes(k) && typeof v !== "object"
+    !SKIP_KEYS.has(k) && typeof v !== "object"
   );
   return replyLongText(ctx, textOnlyEntries.map(([k, v]) => `${k}:\n${v}`).join("\n\n==\n\n"), adminMenu());
 });
@@ -2099,8 +2962,22 @@ bot.hears("💬 Своя сума", async (ctx) => {
 });
 
 bot.hears(["✨ Купити Promti ✨", "✨ Купити Promti", "💳 Купити Promti"], (ctx) => {
-  touchUser(ctx);
+  const user = touchUser(ctx);
   if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
+  queueLogEvent({
+    user_id: ctx.from.id,
+    event: "click_buy_promti",
+    value: 1,
+    style_id: user.sourcePromptKey || ctx.session?.currentPromptKey || "",
+    extra: { source: "menu" },
+  });
+  queueLogEvent({
+    user_id: ctx.from.id,
+    event: "paywall_shown",
+    value: 1,
+    style_id: user.sourcePromptKey || ctx.session?.currentPromptKey || "",
+    extra: { source: "menu" },
+  });
   return ctx.reply(
     `💎 Обери пакет Promti ✨\n\n` +
     `📦 Пакети:\n` +
@@ -2131,6 +3008,13 @@ bot.hears("👫 Запросити друга", async (ctx) => {
   const refLink = `https://t.me/${botName}?start=ref_${userId}`;
   const earned  = user.referralEarned || 0;
   const count   = user.referralCount  || 0;
+  queueLogEvent({
+    user_id: userId,
+    event: "click_share_style",
+    value: 1,
+    style_id: user.sourcePromptKey || ctx.session?.currentPromptKey || "",
+    extra: { source: "referral_menu" },
+  });
   return ctx.reply(
     `👫 Реферальна програма\n\n` +
     `Запроси друга — отримай бонус!\n` +
@@ -2180,7 +3064,14 @@ bot.hears("🖼 Фото", (ctx) => {
   );
 });
 bot.hears("🎨 Трендові стилі", (ctx) => {
-  touchUser(ctx); ensureSession(ctx);
+  const user = touchUser(ctx); ensureSession(ctx);
+  queueLogEvent({
+    user_id: ctx.from.id,
+    event: "click_more_variants",
+    value: 1,
+    style_id: user.sourcePromptKey || ctx.session?.currentPromptKey || "",
+    extra: { source: "trending_menu" },
+  });
   return sendPromptLibraryPage(ctx, 0, false);
 });
 bot.hears("🎬 Відео", (ctx) => {
@@ -2316,6 +3207,13 @@ bot.hears("🎥 Kling", (ctx) => {
   ctx.session.mode = "video"; ctx.session.style = "kling";
   ctx.session.customType = null; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   ctx.session.videoInputMode = null;
+  queueLogEvent({
+    user_id: ctx.from.id,
+    event: "click_animate_kling",
+    value: 1,
+    style_id: ctx.session.currentPromptKey || ctx.session.sourcePromptKey || getUser(ctx.from.id).sourcePromptKey || "",
+    extra: { source: "video_menu" },
+  });
   return ctx.reply(
     "🎥 Kling\n\n" +
     "📸 Фото → Відео — надішли фото + промт, оживлю!\n" +
@@ -2368,10 +3266,20 @@ async function sendAutoPayment(ctx, packKey) {
   try {
     const user = touchUser(ctx);
     const pack = getPackages()[packKey];
+    if (pack) {
+      queueLogEvent({
+        user_id: ctx.from.id,
+        event: "click_buy_promti",
+        value: Number(pack.amount || 0),
+        style_id: user.lastGeneratedPromptKey || user.sourcePromptKey || ctx.session?.currentPromptKey || ctx.session?.sourcePromptKey || "",
+        extra: { packKey, title: pack.title, amount: pack.amount || 0 },
+      });
+    }
     if (!pack) return ctx.reply("❌ Пакет не знайдено.");
     const { invoiceUrl, orderReference } = await createWayForPayInvoice(ctx.from.id, packKey);
     user.pendingOrderReference = orderReference;
     user.lastPaymentRequest    = { packKey, createdAt: new Date().toISOString() };
+    user.pendingPurchasePromptKey = user.lastGeneratedPromptKey || user.sourcePromptKey || ctx.session?.currentPromptKey || ctx.session?.sourcePromptKey || null;
     saveUsers();
     return ctx.reply(`Пакет: ${pack.title}\nЦіна: ${pack.priceText}`, paymentInlineKeyboard(invoiceUrl, pack));
   } catch (e) {
@@ -2429,8 +3337,15 @@ bot.action(/^pay_custom_(.+)$/, async (ctx) => {
 bot.action("upsell_promti", async (ctx) => {
   try {
     await ctx.answerCbQuery();
-    touchUser(ctx);
+    const user = touchUser(ctx);
     if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.");
+    queueLogEvent({
+      user_id: ctx.from.id,
+      event: "paywall_shown",
+      value: 1,
+      style_id: user.lastGeneratedPromptKey || user.sourcePromptKey || ctx.session?.currentPromptKey || ctx.session?.sourcePromptKey || "",
+      extra: { source: "inline_upsell" },
+    });
     await ctx.reply(
       `💎 Обери пакет Promti ✨\n\n` +
       `📦 Пакети:\n` +
@@ -2472,7 +3387,18 @@ bot.action(/^admin_promptlib_page_(\d+)$/, async (ctx) => {
 bot.action(/^promptlib_open_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
-    return sendPromptStyleCard(ctx, normalizePromptKey(ctx.match[1]), false);
+    const promptKey = normalizePromptKey(ctx.match[1]);
+    const style = getPromptStyle(promptKey);
+    if (style) {
+      queueLogEvent({
+        user_id: ctx.from.id,
+        event: "view_style",
+        value: 1,
+        style_id: style.key,
+        extra: { source: "library" },
+      });
+    }
+    return sendPromptStyleCard(ctx, promptKey, false);
   } catch (e) { console.error("PROMPTLIB OPEN:", e.message); }
 });
 
@@ -2546,7 +3472,7 @@ bot.action(/^apply_ai_prompt_(photo|video)$/, async (ctx) => {
     await ctx.answerCbQuery("✅ Промт застосовано! Надішли фото.");
     const aiMode = ctx.match[1];
     await ctx.reply(
-      `✅ Промт збережено:\n\n📝 <code>${ctx.session.customPrompt || "-"}</code>\n\nНадішли фото 📸`,
+      `✅ Промт збережено:\n\n📝 <code>${escapeHtml(ctx.session.customPrompt || "-")}</code>\n\nНадішли фото 📸`,
       { parse_mode: "HTML", ...(aiMode === "video" ? videoMenu() : photoMenu()) }
     );
   } catch (e) { console.error("APPLY AI PROMPT:", e.message); }
@@ -2757,7 +3683,7 @@ bot.on("photo", async (ctx) => {
       ctx.session.awaitingCustomPrompt = false;
       const label = aiMode === "video" ? (ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance") : "🖼 Фото";
       return ctx.reply(
-        `🤖 AI промт для ${label}:\n\n📝 <code>${suggested}</code>\n\nНадішли фото ще раз — промт буде застосовано.`,
+        `🤖 AI промт для ${label}:\n\n📝 <code>${escapeHtml(suggested)}</code>\n\nНадішли фото ще раз — промт буде застосовано.`,
         { parse_mode: "HTML", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("✅ Застосувати", `apply_ai_prompt_${aiMode}`)], [Markup.button.callback("🔄 Новий варіант", `regen_ai_prompt_${aiMode}`)]]).reply_markup }
       );
     } catch (e) {
@@ -2794,6 +3720,10 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
   const cfg = loadSettings();
   let chargedFromBalance = false;
   const startMs          = Date.now();
+  let analyticsGenerationId = "";
+  let analyticsStyleId = "";
+  let analyticsGenerationType = mode === "video" ? "video" : "photo";
+  let analyticsGenerationLogged = false;
 
   try {
     touchRateLimit(userId, mode === "video" ? "video" : "photo");
@@ -2803,6 +3733,9 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       const videoStyle = ctx.session.style;
       if (!videoStyle) { userGenerating.delete(userId); return ctx.reply("Обери модель: 🎬 Seedance або 🎥 Kling", videoMenu()); }
       if (ctx.session.awaitingCustomPrompt) { userGenerating.delete(userId); return ctx.reply("Спочатку напиши промт текстом.", videoMenu()); }
+      analyticsGenerationId = createGenerationId(userId, videoStyle === "kling" ? "kling" : "video");
+      analyticsStyleId = videoStyle;
+      analyticsGenerationType = "video";
 
       if (!isAdmin(userId)) {
         const dailyErr = checkDailyVideoLimit(user, videoStyle);
@@ -2810,6 +3743,14 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         const videoCost = videoStyle === "kling" ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance;
         if ((user.promti || 0) < videoCost) {
           userGenerating.delete(userId);
+          queueLogEvent({
+            user_id: userId,
+            event: "paywall_shown",
+            value: videoCost,
+            style_id: videoStyle,
+            generation_id: analyticsGenerationId,
+            extra: { type: "video", balance: user.promti || 0, required: videoCost },
+          });
           return ctx.reply(
             `❌ Недостатньо Promti ✨\n\nПотрібно: ${videoCost} Promti ✨\nБаланс: ${user.promti || 0} Promti ✨\n\n💳 Купи пакет Promti`,
             videoStyle === "kling" ? klingMenu() : seedanceMenu()
@@ -2822,6 +3763,16 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       const videoInputMode = ctx.session.videoInputMode || "image";
       const stopProgress = startVideoProgress(ctx);
       const modeLabel = videoInputMode === "text" ? "з тексту" : "з фото";
+      if (videoStyle === "kling") {
+        queueLogEvent({
+          user_id: userId,
+          event: "kling_started",
+          value: 1,
+          style_id: videoStyle,
+          generation_id: analyticsGenerationId,
+          extra: { input: videoInputMode },
+        });
+      }
       await ctx.reply(`⏳ Генерую ${videoStyle === "seedance" ? "Seedance" : "Kling"} відео ${modeLabel}...\nЦе займе 1-8 хв ⌛`);
 
       const image = videoInputMode === "text" ? null : await getImage(ctx, photo.file_id);
@@ -2897,6 +3848,28 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
 
         log("VIDEO_OK", userId, `model:${videoStyle} dur:${Date.now()-startMs}ms`);
         appendLog({ type: "video", model: videoStyle, userId, prompt, success: true, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
+        queueAnalyticsGeneration({
+          userId,
+          type: "video",
+          styleId: videoStyle,
+          generationId: analyticsGenerationId,
+          status: "success",
+        });
+        analyticsGenerationLogged = true;
+        if (videoStyle === "kling") {
+          queueLogEvent({
+            user_id: userId,
+            event: "kling_success",
+            value: 1,
+            style_id: videoStyle,
+            generation_id: analyticsGenerationId,
+            extra: { input: videoInputMode },
+          });
+        }
+        queueAnalyticsUserTouch(ctx, user, {
+          totalGenerations: getUserTotalGenerations(user),
+          totalSpent: user.totalSpent || 0,
+        });
 
         const caption = isAdmin(userId)
           ? `🎬 Відео готове ✨\nМодель: ${videoStyle}\nАдмін: безліміт ✅`
@@ -2905,6 +3878,14 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         await tgSendWithRetry(() => ctx.replyWithVideo({ url: videoUrl }, { caption }));
 
         if (!isAdmin(userId) && (user.promti || 0) <= 5) {
+          queueLogEvent({
+            user_id: userId,
+            event: "paywall_shown",
+            value: user.promti || 0,
+            style_id: videoStyle,
+            generation_id: analyticsGenerationId,
+            extra: { type: "video", reason: "low_balance_after_success" },
+          });
           await ctx.reply(
             `💡 Залишилось ${user.promti || 0} Promti ✨. Поповни баланс!`,
             Markup.inlineKeyboard([[Markup.button.callback("💎 Купити Promti ✨", "upsell_promti")]])
@@ -2918,6 +3899,26 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         const refundCost = videoStyle === "kling" ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance;
         if (!isAdmin(userId) && chargedFromBalance) { user.promti = (user.promti || 0) + refundCost; saveUsersSync(); }
         appendLog({ type: "video", model: videoStyle, userId, prompt, success: false, error: e.message, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
+        if (!analyticsGenerationLogged && analyticsGenerationId) {
+          queueAnalyticsGeneration({
+            userId,
+            type: "video",
+            styleId: videoStyle,
+            generationId: analyticsGenerationId,
+            status: "error",
+          });
+          analyticsGenerationLogged = true;
+        }
+        if (videoStyle === "kling") {
+          queueLogEvent({
+            user_id: userId,
+            event: "kling_error",
+            value: 0,
+            style_id: videoStyle,
+            generation_id: analyticsGenerationId,
+            extra: { input: videoInputMode, error: e.message },
+          });
+        }
         throw e;
       }
     }
@@ -2927,6 +3928,8 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     const photoMode  = ctx.session.photoMode || "edit";
     let prompt = "";
     let promptKeyForStats = null;
+    analyticsGenerationId = createGenerationId(userId, "photo");
+    analyticsGenerationType = "photo";
 
     if (customType === "custom_photo" || customType === "create_photo") {
       if (!ctx.session.customPrompt) { userGenerating.delete(userId); return ctx.reply("Спочатку напиши промт текстом.", photoMenu()); }
@@ -2945,6 +3948,15 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       const photoCost = PROMTI_PRICES.photo;
       if ((user.promti || 0) < photoCost) {
         userGenerating.delete(userId);
+        const photoStyleId = promptKeyForStats || ctx.session.currentPromptKey || ctx.session.sourcePromptKey || user.sourcePromptKey || "custom";
+        queueLogEvent({
+          user_id: userId,
+          event: "paywall_shown",
+          value: photoCost,
+          style_id: photoStyleId,
+          generation_id: analyticsGenerationId,
+          extra: { type: "photo", balance: user.promti || 0, required: photoCost },
+        });
         return ctx.reply(
           `❌ Недостатньо Promti ✨\n\nПотрібно: ${photoCost} Promti ✨\nБаланс: ${user.promti || 0} Promti ✨\n\n💳 Купи пакет Promti`,
           photoMenu()
@@ -2966,7 +3978,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           num_images: 1,
           aspect_ratio: "auto",
           output_format: "png",
-          resolution: "1K",
+          resolution: "2K",
           limit_generations: true,
         },
         cfg.photoTimeoutMs
@@ -2983,7 +3995,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           num_images: 1,
           aspect_ratio: "auto",
           output_format: "png",
-          resolution: "1K",
+          resolution: "2K",
           limit_generations: true,
         },
         cfg.photoTimeoutMs
@@ -2994,16 +4006,61 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     if (!url) throw new Error("fal не повернув зображення");
 
     user.generations = (user.generations || 0) + 1;
-    if (promptKeyForStats) markPromptGeneration(user, promptKeyForStats);
+    analyticsStyleId = promptKeyForStats || ctx.session.currentPromptKey || ctx.session.sourcePromptKey || user.sourcePromptKey || "custom";
+    if (promptKeyForStats) {
+      markPromptGeneration(user, promptKeyForStats);
+      user.lastGeneratedPromptKey = promptKeyForStats;
+    }
     saveUsersSync();
     userGenerating.delete(userId);
     log("PHOTO_OK", userId, `dur:${Date.now()-startMs}ms`);
     appendLog({ type: "photo", model: customType || "custom", userId, prompt, success: true, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
+    queueLogEvent({
+      user_id: userId,
+      event: "generate_photo",
+      value: 1,
+      style_id: analyticsStyleId,
+      generation_id: analyticsGenerationId,
+      extra: { type: "photo", mode: photoMode },
+    });
+    queueAnalyticsGeneration({
+      userId,
+      type: "photo",
+      styleId: analyticsStyleId,
+      generationId: analyticsGenerationId,
+      status: "success",
+    });
+    analyticsGenerationLogged = true;
+    queueAnalyticsUserTouch(ctx, user, {
+      totalGenerations: getUserTotalGenerations(user),
+      totalSpent: user.totalSpent || 0,
+    });
 
     const caption = isAdmin(userId) ? "Готово ✨\nАдмін: безліміт ✅" : `Готово ✨\nЗалишилось: ${user.promti || 0} Promti ✨`;
-    await tgSendWithRetry(() => ctx.replyWithPhoto({ url }, { caption }));
+    try {
+      await tgSendWithRetry(() => ctx.replyWithDocument(
+        { url, filename: `promti_${Date.now()}.png` },
+        { caption }
+      ));
+    } catch (docErr) {
+      console.error("DOCUMENT SEND FAILED, fallback to photo:", docErr.message);
+      try {
+        await tgSendWithRetry(() => ctx.replyWithPhoto({ url }, { caption }));
+      } catch (photoErr) {
+        console.error("PHOTO FALLBACK ALSO FAILED:", photoErr.message);
+        throw photoErr;
+      }
+    }
 
     if (!isAdmin(userId) && user.generations % 3 === 0) {
+      queueLogEvent({
+        user_id: userId,
+        event: "paywall_shown",
+        value: user.promti || 0,
+        style_id: analyticsStyleId,
+        generation_id: analyticsGenerationId,
+        extra: { type: "photo", reason: "upsell_after_generation" },
+      });
       await ctx.reply(
         "💡 Хочеш оживити це фото? Спробуй відео-генерацію!",
         Markup.inlineKeyboard([[Markup.button.callback("🎬 Seedance", "upsell_promti"), Markup.button.callback("🎥 Kling", "upsell_promti")]])
@@ -3024,6 +4081,16 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         }
         saveUsersSync();
       }
+    }
+    if (!analyticsGenerationLogged && analyticsGenerationId) {
+      queueAnalyticsGeneration({
+        userId,
+        type: analyticsGenerationType,
+        styleId: analyticsStyleId || ctx.session?.style || ctx.session?.currentPromptKey || user?.sourcePromptKey || "custom",
+        generationId: analyticsGenerationId,
+        status: "error",
+      });
+      analyticsGenerationLogged = true;
     }
     notifyAdminsError(`${mode === "video" ? "VIDEO" : "PHOTO"} ERROR: user ${userId}\n${e.message}`).catch(() => {});
     if (e.message === "FAL_TIMEOUT") return ctx.reply("⏱ Занадто довго. Спробуй ще раз.");
@@ -3064,7 +4131,7 @@ bot.on(["video", "video_note"], async (ctx) => {
     ctx.session.awaitingCustomPrompt = false;
     const label = ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance";
     return ctx.reply(
-      `🤖 AI промт для ${label}:\n\n📝 <code>${suggested}</code>\n\n✅ Промт збережено. Надішли фото для генерації відео 📸`,
+      `🤖 AI промт для ${label}:\n\n📝 <code>${escapeHtml(suggested)}</code>\n\n✅ Промт збережено. Надішли фото для генерації відео 📸`,
       { parse_mode: "HTML", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("✅ Застосувати", "apply_ai_prompt_video")], [Markup.button.callback("🔄 Новий варіант", "regen_ai_prompt_video")]]).reply_markup }
     );
   } catch (e) {
@@ -3195,16 +4262,21 @@ app.post("/payment",
       return res.status(200).json(buildWfpAcceptResponse(data.orderReference || "unknown"));
     }
 
-    const user     = getUser(userId);
+    const user = getUser(userId);
     const txStatus = (data.transactionStatus || "").toLowerCase();
+    const paymentRecord = payments.find((entry) => entry.orderReference === data.orderReference);
 
     updatePaymentStatus(data.orderReference, data, txStatus || "callback_received");
 
     if (txStatus === "approved" && !isCredited(data.orderReference)) {
       markAsCredited(data.orderReference);
 
-      const p = payments.find(x => x.orderReference === data.orderReference);
-      if (p) { p.status = "credited"; p.updatedAt = new Date().toISOString(); p.amount = Number(data.amount || 0); p.callback = data; }
+      if (paymentRecord) {
+        paymentRecord.status = "credited";
+        paymentRecord.updatedAt = new Date().toISOString();
+        paymentRecord.amount = Number(data.amount || 0);
+        paymentRecord.callback = data;
+      }
 
       const promtiAmount = pack.promti || pack.count || 0;
       user.promti          = (user.promti          || 0) + promtiAmount;
@@ -3214,6 +4286,34 @@ app.post("/payment",
       user.lastPaidAt            = new Date().toISOString();
       markPromptPurchase(user, data.orderReference);
       saveUsersSync(); savePayments();
+      if (!hasLoggedPaymentAnalytics(paymentRecord, "success")) {
+        await trackAnalyticsPayment({
+          userId,
+          amount: Number(data.amount || 0),
+          promtiAdded: promtiAmount,
+          status: "success",
+          currency: String(data.currency || ANALYTICS_CURRENCY),
+        });
+        markLoggedPaymentAnalytics(paymentRecord, "success");
+        savePayments();
+      }
+      queueLogEvent({
+        user_id: userId,
+        event: "payment_success",
+        value: Number(data.amount || 0),
+        style_id: user.pendingPurchasePromptKey || user.lastGeneratedPromptKey || user.sourcePromptKey || "",
+        extra: {
+          plan: packKey,
+          amount: Number(data.amount || 0),
+          currency: String(data.currency || ANALYTICS_CURRENCY),
+          promti_added: promtiAmount,
+          method: "wayforpay",
+        },
+      });
+      queueAnalyticsUserTouch({ from: { id: userId } }, user, {
+        totalGenerations: getUserTotalGenerations(user),
+        totalSpent: user.totalSpent || 0,
+      });
 
       log("CREDITED", userId, `pack:${packKey} +${promtiAmount} amount:${data.amount}грн`);
       console.log(`✅ CREDITED: user ${userId}, pack ${packKey}, +${promtiAmount}`);
@@ -3254,6 +4354,19 @@ app.post("/payment",
 
     } else if (txStatus === "approved") {
       console.log("ALREADY CREDITED:", data.orderReference);
+    } else {
+      const failureMarker = txStatus || "failed";
+      if (!hasLoggedPaymentAnalytics(paymentRecord, failureMarker)) {
+        await trackAnalyticsPayment({
+          userId,
+          amount: Number(data.amount || 0),
+          promtiAdded: 0,
+          status: failureMarker,
+          currency: String(data.currency || ANALYTICS_CURRENCY),
+        });
+        markLoggedPaymentAnalytics(paymentRecord, failureMarker);
+        savePayments();
+      }
     }
 
     return res.status(200).json(buildWfpAcceptResponse(data.orderReference));
@@ -3272,6 +4385,9 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`⚙️  maxWorkers: ${cfg.maxWorkers} | photoRL: ${cfg.photoRateLimitMs}ms | videoRL: ${cfg.videoRateLimitMs}ms`);
   console.log(`📅 Seedance limit/day: ${cfg.dailySeedanceLimit} | Kling: ${cfg.dailyKlingLimit}`);
   console.log(`🤖 AI промт: ${cfg.aiPromptEnabled ? "✅" : "❌"} | Anthropic key: ${process.env.ANTHROPIC_API_KEY ? "✅" : "❌"}`);
+  if (!isAnalyticsEnabled()) {
+    console.log("📊 Google Sheets analytics disabled");
+  }
 });
 
 // ─── BACKUP КОЖНІ 6 ГОДИН ────────────────────────────────────────────────────

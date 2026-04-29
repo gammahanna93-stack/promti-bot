@@ -1145,6 +1145,7 @@ const DEFAULT_BUTTON_LABELS = sanitizeTextTree({
   main_support: "🆘 Підтримка",
   ai_studio_trends: "🔥 Тренди ChatGPT",
   ai_studio_library: "📚 Бібліотека стилів",
+  ai_studio_dynamic: "🔮 Dynamic стилі",
   photo_edit: "🖼 Редагувати фото",
   photo_create: "✨ Створити фото",
   photo_ai_prompt: "🤖 AI промт для фото",
@@ -1177,7 +1178,8 @@ const DEFAULT_BUTTON_HINTS = sanitizeTextTree({
     "🧠 AI Studio\n\n" +
     "Тут зібрані готові ідеї для генерацій:\n" +
     "🔥 Тренди ChatGPT — вірусні формати та ідеї\n" +
-    "📚 Бібліотека стилів — готові фото-стилі для селфі та портретів",
+    "📚 Бібліотека стилів — готові фото-стилі для селфі та портретів\n" +
+    "🔮 Dynamic стилі — серії з варіантами ракурсів і сюжетів",
   main_infographics:
     "🧾 Інфографіки\n\n" +
     "Обери, що хочеш створити:\n" +
@@ -1909,9 +1911,12 @@ function toTelegramMediaRef(value = "") {
 }
 
 function normalizePromptLibraryItem(item = {}, key = "") {
-  const examplePhotos = Array.isArray(item.examplePhotos)
-    ? item.examplePhotos.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS)
-    : [];
+  const rawExamplePhotos = Array.isArray(item.examplePhotos)
+    ? item.examplePhotos
+    : Array.isArray(item.exampleImages)
+      ? item.exampleImages
+      : [];
+  const examplePhotos = rawExamplePhotos.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
   const exampleLabels = Array.isArray(item.exampleLabels)
     ? item.exampleLabels
         .map((label) => String(label || "").trim())
@@ -1924,7 +1929,7 @@ function normalizePromptLibraryItem(item = {}, key = "") {
     description: item.description || "",
     prompt: item.prompt || "",
     category: item.category || "other",
-    previewPhoto: item.previewPhoto || null,
+    previewPhoto: item.previewPhoto || item.previewImage || null,
     examplePhotos,
     exampleLabels,
     provider: item.provider || "fal",
@@ -1983,6 +1988,14 @@ function getPromptExampleEntries(style) {
   }));
 }
 
+function getDynamicExampleImages(entity) {
+  return Array.isArray(entity?.exampleImages)
+    ? entity.exampleImages.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS)
+    : Array.isArray(entity?.examplePhotos)
+      ? entity.examplePhotos.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS)
+      : [];
+}
+
 function getSortedPromptStyles() {
   return Object.values(ensurePromptLibrary())
     .map(item => normalizePromptLibraryItem(item, item.key))
@@ -1994,14 +2007,45 @@ function getSortedPromptStyles() {
     );
 }
 
+function getPublicPromptStyles() {
+  return Object.values(ensurePromptLibrary())
+    .map((item) => normalizePromptLibraryItem(item, item.key))
+    .filter((item) => item.isActive !== false)
+    .sort((a, b) =>
+      Number(a.sortOrder || 0) - Number(b.sortOrder || 0) ||
+      Number(b.isTrending) - Number(a.isTrending) ||
+      Number(b.createdAt || 0) - Number(a.createdAt || 0) ||
+      Number(b.clicks || 0) - Number(a.clicks || 0)
+    );
+}
+
+function getSortedDynamicSeries(activeOnly = false) {
+  return Object.values(ensureDynamicStyleLibrary())
+    .map((item) => normalizeDynamicStyleSeries(item, item.id))
+    .filter((item) => activeOnly ? item.isActive !== false : true)
+    .sort((a, b) =>
+      Number(a.isTrending) - Number(b.isTrending) === 0
+        ? (
+            Number(b.stats?.clicks || 0) - Number(a.stats?.clicks || 0) ||
+            Number(b.createdAt || 0) - Number(a.createdAt || 0)
+          )
+        : Number(b.isTrending) - Number(a.isTrending)
+    );
+}
+
 function normalizeDynamicVariant(seriesId, variant = {}, index = 0) {
+  const rawExampleImages = Array.isArray(variant.exampleImages)
+    ? variant.exampleImages
+    : Array.isArray(variant.examplePhotos)
+      ? variant.examplePhotos
+      : [];
   return {
     id: normalizePromptKey(variant.id || `${seriesId}_variant_${index + 1}`),
     title: variant.title || `Variant ${index + 1}`,
     subtitle: variant.subtitle || "",
     variantPrompt: variant.variantPrompt || variant.prompt || "",
-    previewImage: variant.previewImage || null,
-    exampleImages: Array.isArray(variant.exampleImages) ? variant.exampleImages.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS) : [],
+    previewImage: variant.previewImage || variant.previewPhoto || null,
+    exampleImages: rawExampleImages.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS),
     isActive: variant.isActive !== false,
     stats: typeof variant.stats === "object" && variant.stats ? variant.stats : { clicks: 0, generations: 0, purchases: 0 },
   };
@@ -2009,6 +2053,11 @@ function normalizeDynamicVariant(seriesId, variant = {}, index = 0) {
 
 function normalizeDynamicStyleSeries(item = {}, key = "") {
   const seriesId = normalizePromptKey(item.id || key);
+  const rawExampleImages = Array.isArray(item.exampleImages)
+    ? item.exampleImages
+    : Array.isArray(item.examplePhotos)
+      ? item.examplePhotos
+      : [];
   return {
     id: seriesId,
     title: item.title || key,
@@ -2019,8 +2068,8 @@ function normalizeDynamicStyleSeries(item = {}, key = "") {
     price: Number(item.price || item.pricePromti || 1),
     isActive: item.isActive !== false,
     isTrending: Boolean(item.isTrending),
-    previewImage: item.previewImage || null,
-    exampleImages: Array.isArray(item.exampleImages) ? item.exampleImages.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS) : [],
+    previewImage: item.previewImage || item.previewPhoto || null,
+    exampleImages: rawExampleImages.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS),
     templatePrompt: item.templatePrompt || item.template || "",
     variants: Array.isArray(item.variants) ? item.variants.map((variant, index) => normalizeDynamicVariant(seriesId, variant, index)) : [],
     stats: typeof item.stats === "object" && item.stats ? item.stats : { clicks: 0, generations: 0, purchases: 0 },
@@ -2657,7 +2706,7 @@ function buildPromptStyleCardText(style, options = {}) {
 }
 
 function buildPromptLibraryKeyboard(page = 0, admin = false) {
-  const items = getSortedPromptStyles();
+  const items = admin ? getSortedPromptStyles() : getPublicPromptStyles();
   const totalPages = Math.max(1, Math.ceil(items.length / PROMPT_LIBRARY_PAGE_SIZE));
   const safePage = Math.max(0, Math.min(page, totalPages - 1));
   const start = safePage * PROMPT_LIBRARY_PAGE_SIZE;
@@ -2701,7 +2750,7 @@ function buildPromptStyleKeyboard(style, admin = false) {
 }
 
 async function sendPromptLibraryPage(ctx, page = 0, admin = false) {
-  const items = getSortedPromptStyles();
+  const items = admin ? getSortedPromptStyles() : getPublicPromptStyles();
   if (!items.length) {
     return ctx.reply(
       admin
@@ -2816,6 +2865,30 @@ async function sendPromptExamplePhotos(ctx, style) {
   }
 }
 
+async function sendDynamicExamplePhotos(ctx, entity) {
+  const photos = getDynamicExampleImages(entity);
+  if (!photos.length) return false;
+
+  try {
+    for (let index = 0; index < photos.length; index += 10) {
+      const chunk = photos.slice(index, index + 10);
+      const media = chunk
+        .map((fileId) => toTelegramMediaRef(fileId))
+        .filter(Boolean)
+        .map((fileId) => ({
+          type: "photo",
+          media: fileId,
+        }));
+      if (!media.length) continue;
+      await ctx.replyWithMediaGroup(media);
+    }
+    return true;
+  } catch (e) {
+    console.error("SEND DYNAMIC EXAMPLES:", e.message);
+    return false;
+  }
+}
+
 async function sendPromptExampleSelection(ctx, promptKey, exampleIndex) {
   const style = getPromptStyle(promptKey);
   if (!style) return ctx.reply("❌ Стиль не знайдено.");
@@ -2885,12 +2958,75 @@ function buildDynamicSeriesKeyboard(series, admin = false) {
   return Markup.inlineKeyboard(rows);
 }
 
+function buildDynamicLibraryKeyboard(page = 0) {
+  const items = getSortedDynamicSeries(true);
+  const totalPages = Math.max(1, Math.ceil(items.length / PROMPT_LIBRARY_PAGE_SIZE));
+  const safePage = Math.max(0, Math.min(page, totalPages - 1));
+  const start = safePage * PROMPT_LIBRARY_PAGE_SIZE;
+  const pageItems = items.slice(start, start + PROMPT_LIBRARY_PAGE_SIZE);
+  const rows = pageItems.map((series) => [
+    Markup.button.callback(
+      `${series.isTrending ? "🔥 " : ""}${series.title}`,
+      `dynamic_series_open:${series.id}`
+    )
+  ]);
+  const nav = [];
+  if (safePage > 0) nav.push(Markup.button.callback("⬅️", `dynamic_series_page:${safePage - 1}`));
+  nav.push(Markup.button.callback(`${safePage + 1}/${totalPages}`, "dynamic_series_noop"));
+  if (safePage < totalPages - 1) nav.push(Markup.button.callback("➡️", `dynamic_series_page:${safePage + 1}`));
+  if (nav.length) rows.push(nav);
+  return Markup.inlineKeyboard(rows);
+}
+
+async function sendDynamicLibraryPage(ctx, page = 0) {
+  const items = getSortedDynamicSeries(true);
+  if (!items.length) {
+    return ctx.reply("🔮 Поки що dynamic стилів немає. Спробуй трохи пізніше.");
+  }
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PROMPT_LIBRARY_PAGE_SIZE));
+  const safePage = Math.max(0, Math.min(page, totalPages - 1));
+  const categoryText = items
+    .slice(0, 6)
+    .map((item) => item.title)
+    .join(" • ");
+  const text =
+    `🔮 <b>Dynamic стилі</b>\n\n` +
+    `Обери серію зі списку. Всередині серії будуть variants, ракурси або сюжети.\n\n` +
+    `Серії: ${escapeHtml(categoryText || "-")}`;
+  const markup = buildDynamicLibraryKeyboard(safePage);
+
+  if (ctx.updateType === "callback_query") {
+    try {
+      return await ctx.editMessageText(text, {
+        parse_mode: "HTML",
+        reply_markup: markup.reply_markup,
+      });
+    } catch (e) {
+      if (String(e.message || "").includes("message is not modified")) return;
+    }
+  }
+
+  return ctx.reply(text, {
+    parse_mode: "HTML",
+    reply_markup: markup.reply_markup,
+  });
+}
+
 async function sendDynamicSeriesCard(ctx, seriesId, admin = false) {
   const series = getDynamicSeries(seriesId);
   if (!series) return ctx.reply("❌ Dynamic series не знайдено.");
   const botUsername = await resolveBotUsername(ctx);
   const text = buildDynamicSeriesText(series, admin, botUsername);
   const keyboard = buildDynamicSeriesKeyboard(series, admin);
+  const exampleImages = getDynamicExampleImages(series);
+  if (exampleImages.length) {
+    await sendDynamicExamplePhotos(ctx, series);
+    return ctx.reply(text, {
+      parse_mode: "HTML",
+      reply_markup: keyboard.reply_markup,
+    });
+  }
   if (series.previewImage) {
     return ctx.replyWithPhoto(toTelegramMediaRef(series.previewImage), {
       caption: text,
@@ -2905,8 +3041,21 @@ async function sendDynamicSeriesCard(ctx, seriesId, admin = false) {
 }
 
 async function sendDynamicVariantReadyMessage(ctx, series, variant) {
+  const previewSource = variant.previewImage || getDynamicExampleImages(variant)[0] || null;
+  const text =
+    `✅ Dynamic стиль завантажено\n\n` +
+    `🔮 ${series.title} — ${variant.title}\n` +
+    `${variant.subtitle ? `${variant.subtitle}\n` : ""}` +
+    `Баланс: ${getPromptBalanceText(ctx.from.id)}\n\n` +
+    `Надішли selfie 📸`;
+  if (previewSource) {
+    return ctx.replyWithPhoto(toTelegramMediaRef(previewSource), {
+      caption: text,
+      reply_markup: photoMenu().reply_markup,
+    });
+  }
   return ctx.reply(
-    `✅ Dynamic стиль завантажено\n\n🔮 ${series.title} — ${variant.title}\nБаланс: ${getPromptBalanceText(ctx.from.id)}\n\nНадішли selfie 📸`,
+    text,
     photoMenu()
   );
 }
@@ -3935,6 +4084,7 @@ const videoMenu     = () => Markup.keyboard([
 const aiStudioMenu = () => Markup.keyboard([
   [getButtonLabel("ai_studio_trends")],
   [getButtonLabel("ai_studio_library")],
+  [getButtonLabel("ai_studio_dynamic")],
   [getButtonLabel("back")],
 ]).resize();
 const infographicMenu = () => Markup.keyboard([
@@ -5091,6 +5241,17 @@ bot.hears("📚 Бібліотека стилів", (ctx) => {
   });
   return sendPromptLibraryPage(ctx, 0, false);
 });
+bot.hears("🔮 Dynamic стилі", (ctx) => {
+  const user = touchUser(ctx); ensureSession(ctx);
+  queueLogEvent({
+    user_id: ctx.from.id,
+    event: "open_dynamic_styles",
+    value: 1,
+    style_id: buildStaticStyleRef(user.sourcePromptKey || ctx.session?.currentPromptKey || ""),
+    extra: { source: "ai_studio" },
+  });
+  return sendDynamicLibraryPage(ctx, 0);
+});
 bot.hears("🔥 Тренди ChatGPT", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   queueLogEvent({
@@ -5844,6 +6005,35 @@ bot.action(/^dynamic_variant_open:(.+):(.+)$/, async (ctx) => {
   } catch (e) { console.error("DYNAMIC VARIANT OPEN:", e.message); }
 });
 
+bot.action(/^dynamic_series_open:(.+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const seriesId = normalizePromptKey(ctx.match[1]);
+    const series = getDynamicSeries(seriesId);
+    if (!series || series.isActive === false) return ctx.reply("❌ Dynamic стиль недоступний.");
+    incrementDynamicMetric(seriesId, "clicks");
+    queueLogEvent({
+      user_id: ctx.from.id,
+      event: "view_style",
+      value: 1,
+      style_id: buildDynamicStyleRef(seriesId),
+      extra: { source: "dynamic_library", kind: "dynamic_series" },
+    });
+    return sendDynamicSeriesCard(ctx, seriesId, false);
+  } catch (e) { console.error("DYNAMIC SERIES OPEN:", e.message); }
+});
+
+bot.action(/^dynamic_series_page:(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    return sendDynamicLibraryPage(ctx, Number(ctx.match[1] || 0));
+  } catch (e) { console.error("DYNAMIC SERIES PAGE:", e.message); }
+});
+
+bot.action("dynamic_series_noop", async (ctx) => {
+  try { await ctx.answerCbQuery(); } catch {}
+});
+
 bot.action("dynamic_retry_photo", async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -5948,7 +6138,7 @@ bot.action("savedprompt_back", async (ctx) => {
 
 // ─── ТЕКСТОВИЙ ХЕНДЛЕР ────────────────────────────────────────────────────────
 const ALL_BUTTONS = [
-  "🖼 Фото","🎬 Відео","🧠 AI Studio","🎨 Трендові стилі","🔥 Тренди ChatGPT","📚 Бібліотека стилів","🧾 Інфографіки","🧾 Інфографіка PNG","🔷 SVG логотип","⭐ Мої промти","📊 Баланс","💡 Ідея для промтів","ℹ️ Інформація","❓ Допомога","🆘 Підтримка","💰 Ціни",
+  "🖼 Фото","🎬 Відео","🧠 AI Studio","🎨 Трендові стилі","🔥 Тренди ChatGPT","📚 Бібліотека стилів","🔮 Dynamic стилі","🧾 Інфографіки","🧾 Інфографіка PNG","🔷 SVG логотип","⭐ Мої промти","📊 Баланс","💡 Ідея для промтів","ℹ️ Інформація","❓ Допомога","🆘 Підтримка","💰 Ціни",
   "👫 Запросити друга",
   "🖼 Редагувати фото","✨ Створити фото",
   "⚡ Авто анімація","🎬 Анімація + промт","🎥 Відео з тексту",
@@ -6932,7 +7122,20 @@ function toAdminBool(value, fallback = true) {
 }
 
 function safeAdminArray(value) {
-  return Array.isArray(value) ? value.filter(Boolean) : [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n/g)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
+  }
+  return [];
 }
 
 app.get("/api/admin/dashboard", requireAdminAuth, async (_, res) => {

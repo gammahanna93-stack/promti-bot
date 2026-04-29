@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="uk">
 <head>
   <meta charset="UTF-8">
@@ -344,7 +344,7 @@
       <section id="section-settings" class="section">
         <div class="section-head">
           <div class="title">
-            <h3>⚙️ Settings</h3>
+            <h3>вљ™пёЏ Settings</h3>
             <p>Ключові параметри без потреби редагувати код напряму.</p>
           </div>
           <button id="saveSettingsButton" class="button button-primary">💾 Зберегти settings</button>
@@ -374,33 +374,33 @@
     };
 
     const BUTTON_LABEL_KEYS = {
-      "buttonLabels.main_photo": "Кнопка: Фото",
-      "buttonLabels.main_video": "Кнопка: Відео",
-      "buttonLabels.main_ai_studio": "Кнопка: AI Studio",
-      "buttonLabels.main_infographics": "Кнопка: Інфографіки",
-      "buttonLabels.main_buy_promti": "Кнопка: Купити Promti",
-      "buttonLabels.main_balance": "Кнопка: Баланс",
-      "buttonLabels.main_prices": "Кнопка: Ціни",
-      "buttonLabels.main_ideas": "Кнопка: Ідея для промтів",
-      "buttonLabels.main_referral": "Кнопка: Запросити друга",
-      "buttonLabels.main_info": "Кнопка: Інформація",
-      "buttonLabels.main_help": "Кнопка: Допомога",
-      "buttonLabels.main_support": "Кнопка: Підтримка",
-      "buttonLabels.ai_studio_trends": "Кнопка: Тренди ChatGPT",
-      "buttonLabels.ai_studio_library": "Кнопка: Бібліотека стилів",
-      "buttonLabels.photo_edit": "Кнопка: Редагувати фото",
-      "buttonLabels.photo_create": "Кнопка: Створити фото",
-      "buttonLabels.photo_ai_prompt": "Кнопка: AI промт для фото",
-      "buttonLabels.photo_saved_prompts": "Кнопка: Мої промти (фото)",
-      "buttonLabels.video_seedance": "Кнопка: Seedance",
-      "buttonLabels.video_kling": "Кнопка: Kling",
-      "buttonLabels.video_ai_prompt": "Кнопка: AI промт для відео",
-      "buttonLabels.video_saved_prompts": "Кнопка: Мої промти (відео)",
-      "buttonLabels.infographic_png": "Кнопка: Інфографіка PNG",
-      "buttonLabels.infographic_svg": "Кнопка: SVG логотип",
-      "buttonLabels.back": "Кнопка: Назад",
-      "buttonLabels.back_photo": "Кнопка: Назад до фото",
-      "buttonLabels.back_video": "Кнопка: Назад до відео"
+      "buttonLabels.main_photo": "Коротка назва: Фото",
+      "buttonLabels.main_video": "Коротка назва: Відео",
+      "buttonLabels.main_ai_studio": "Коротка назва: AI Studio",
+      "buttonLabels.main_infographics": "Коротка назва: Інфографіки",
+      "buttonLabels.main_buy_promti": "Коротка назва: Купити Promti",
+      "buttonLabels.main_balance": "Коротка назва: Баланс",
+      "buttonLabels.main_prices": "Коротка назва: Ціни",
+      "buttonLabels.main_ideas": "Коротка назва: Ідея для промтів",
+      "buttonLabels.main_referral": "Коротка назва: Запросити друга",
+      "buttonLabels.main_info": "Коротка назва: Інформація",
+      "buttonLabels.main_help": "Коротка назва: Допомога",
+      "buttonLabels.main_support": "Коротка назва: Підтримка",
+      "buttonLabels.ai_studio_trends": "Коротка назва: Тренди ChatGPT",
+      "buttonLabels.ai_studio_library": "Коротка назва: Бібліотека стилів",
+      "buttonLabels.photo_edit": "Коротка назва: Редагувати фото",
+      "buttonLabels.photo_create": "Коротка назва: Створити фото",
+      "buttonLabels.photo_ai_prompt": "Коротка назва: AI промт для фото",
+      "buttonLabels.photo_saved_prompts": "Коротка назва: Мої промти (фото)",
+      "buttonLabels.video_seedance": "Коротка назва: Seedance",
+      "buttonLabels.video_kling": "Коротка назва: Kling",
+      "buttonLabels.video_ai_prompt": "Коротка назва: AI промт для відео",
+      "buttonLabels.video_saved_prompts": "Коротка назва: Мої промти (відео)",
+      "buttonLabels.infographic_png": "Коротка назва: Інфографіка PNG",
+      "buttonLabels.infographic_svg": "Коротка назва: SVG логотип",
+      "buttonLabels.back": "Коротка назва: Назад",
+      "buttonLabels.back_photo": "Коротка назва: Назад до фото",
+      "buttonLabels.back_video": "Коротка назва: Назад до відео"
     };
 
     const CONTENT_SKIP_KEYS = new Set([
@@ -524,7 +524,7 @@
       if (loginLabels[1] && loginLabels[1].childNodes[0]) loginLabels[1].childNodes[0].textContent = "Пароль";
       setText("#loginForm button[type='submit']", "Увійти");
 
-      setText(".toolbar .title p", "Керуй ботом з телефона без редагування JSON і без входу в код.");
+      setText(".toolbar .title p", "Керуйте ботом з телефона без редагування JSON і без входу в код.");
       setText("#refreshButton", "Оновити");
       setText("#logoutButton", "Вийти");
 
@@ -720,7 +720,7 @@
         <label class="field">
           Example images URLs
           <textarea name="exampleImages">${escapeHtml((item.exampleImages || []).join("\n"))}</textarea>
-          <span class="helper">Можна вставляти по одному URL/file_id в рядок або додати через upload нижче.</span>
+          <span class="helper">Можна вставляти по одному URL або file_id в рядок, або додати фото через upload нижче.</span>
         </label>
         <div class="actions">
           <label class="button button-secondary button-small">🖼 Upload preview<input type="file" data-upload-preview="static" accept="image/*" class="hidden"></label>
@@ -851,7 +851,7 @@
           <label class="field">
             Examples URLs
             <textarea name="exampleImages">${escapeHtml((item.exampleImages || []).join("\n"))}</textarea>
-            <span class="helper">Можна вставити вручну або додати через upload.</span>
+            <span class="helper">Можна вставити вручну або додати фото через upload.</span>
           </label>
         </div>
         <div class="actions">
@@ -1364,6 +1364,7 @@
           const editorId = target.dataset.uploadPreview === "static" ? "staticEditor" : "dynamicEditor";
           const input = document.getElementById(editorId).querySelector('input[name="previewImage"]');
           if (input) input.value = url;
+          target.value = "";
           setStatus(globalStatus, "Preview завантажено.");
           return;
         }
@@ -1378,6 +1379,7 @@
             const count = appendLinesToTextarea(textarea, urls, 10);
             setStatus(globalStatus, `Додано examples. Зараз: ${count}/10`);
           }
+          target.value = "";
           return;
         }
 
@@ -1387,6 +1389,7 @@
           const url = await uploadImage(file);
           const input = document.querySelector(`[data-variant-preview="${CSS.escape(target.dataset.uploadVariantPreview)}"]`);
           if (input) input.value = url;
+          target.value = "";
           setStatus(globalStatus, "Preview variant завантажено.");
           return;
         }
@@ -1400,6 +1403,7 @@
             const count = appendLinesToTextarea(textarea, urls, 10);
             setStatus(globalStatus, `Додано variant examples. Зараз: ${count}/10`);
           }
+          target.value = "";
         }
       } catch (error) {
         setStatus(globalStatus, `Upload error: ${error.message}`, "error");

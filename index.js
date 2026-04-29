@@ -1888,6 +1888,26 @@ function normalizePromptKey(key = "") {
   return String(key).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+function buildSafeEntityId(preferredValue, fallbackPrefix = "item") {
+  const normalized = normalizePromptKey(preferredValue);
+  return normalized || `${fallbackPrefix}_${Date.now()}`;
+}
+
+function toAbsolutePublicUrl(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${getAdminPanelBaseUrl()}${raw}`;
+  return raw;
+}
+
+function toTelegramMediaRef(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("/uploads/")) return toAbsolutePublicUrl(raw);
+  return raw;
+}
+
 function normalizePromptLibraryItem(item = {}, key = "") {
   const examplePhotos = Array.isArray(item.examplePhotos)
     ? item.examplePhotos.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS)
@@ -2736,7 +2756,7 @@ async function sendPromptStyleCard(ctx, promptKey, admin = false) {
     });
   }
   if (style.previewPhoto) {
-    return ctx.replyWithPhoto(style.previewPhoto, {
+    return ctx.replyWithPhoto(toTelegramMediaRef(style.previewPhoto), {
       caption: text,
       parse_mode: "HTML",
       reply_markup: markup.reply_markup,
@@ -2764,7 +2784,7 @@ async function sendPromptReadyMessage(ctx, style, options = {}) {
   }
 
   if (withPreview && style.previewPhoto) {
-    return ctx.replyWithPhoto(style.previewPhoto, {
+    return ctx.replyWithPhoto(toTelegramMediaRef(style.previewPhoto), {
       caption: text,
       reply_markup: photoMenu().reply_markup,
     });
@@ -2779,10 +2799,14 @@ async function sendPromptExamplePhotos(ctx, style) {
   try {
     for (let index = 0; index < photos.length; index += 10) {
       const chunk = photos.slice(index, index + 10);
-      const media = chunk.map((fileId) => ({
+      const media = chunk
+        .map((fileId) => toTelegramMediaRef(fileId))
+        .filter(Boolean)
+        .map((fileId) => ({
         type: "photo",
         media: fileId,
       }));
+      if (!media.length) continue;
       await ctx.replyWithMediaGroup(media);
     }
     return true;
@@ -2803,7 +2827,7 @@ async function sendPromptExampleSelection(ctx, promptKey, exampleIndex) {
   ctx.session.selectedPromptExampleIndex = selected.index;
   ctx.session.lastStateAt = Date.now();
 
-  return ctx.replyWithPhoto(selected.photo, {
+  return ctx.replyWithPhoto(toTelegramMediaRef(selected.photo), {
     caption:
       `🖼 <b>${escapeHtml(style.title)}</b>\n` +
       `Ракурс: <b>${escapeHtml(selected.label)}</b>\n\n` +
@@ -2868,7 +2892,7 @@ async function sendDynamicSeriesCard(ctx, seriesId, admin = false) {
   const text = buildDynamicSeriesText(series, admin, botUsername);
   const keyboard = buildDynamicSeriesKeyboard(series, admin);
   if (series.previewImage) {
-    return ctx.replyWithPhoto(series.previewImage, {
+    return ctx.replyWithPhoto(toTelegramMediaRef(series.previewImage), {
       caption: text,
       parse_mode: "HTML",
       reply_markup: keyboard.reply_markup,
@@ -3781,8 +3805,8 @@ function serializeStaticStyleForAdmin(style, botUsername = "Promtiai_bot") {
     model: normalized.model,
     type: "static",
     price: normalized.pricePromti,
-    previewImage: normalized.previewPhoto,
-    exampleImages: normalized.examplePhotos,
+    previewImage: toAbsolutePublicUrl(normalized.previewPhoto),
+    exampleImages: normalized.examplePhotos.map((item) => toAbsolutePublicUrl(item)),
     exampleLabels: normalized.exampleLabels,
     deepLink: getPromptDeepLink(botUsername, normalized.key),
     isActive: normalized.isActive,
@@ -3801,8 +3825,12 @@ function serializeDynamicSeriesForAdmin(series, botUsername = "Promtiai_bot") {
   return {
     ...normalized,
     deepLink: `https://t.me/${botUsername}?start=dynamic_${normalized.id}`,
+    previewImage: toAbsolutePublicUrl(normalized.previewImage),
+    exampleImages: (normalized.exampleImages || []).map((item) => toAbsolutePublicUrl(item)),
     variants: normalized.variants.map((variant) => ({
       ...variant,
+      previewImage: toAbsolutePublicUrl(variant.previewImage),
+      exampleImages: (variant.exampleImages || []).map((item) => toAbsolutePublicUrl(item)),
       deepLink: `https://t.me/${botUsername}?start=dynamic_${variant.id}`,
     })),
   };
@@ -6891,7 +6919,7 @@ app.post("/api/admin/upload-image",
   (req, res) => {
     try {
       const { fileName, dataUrl } = req.body || {};
-      const imageUrl = saveLandingImageUpload(fileName, dataUrl);
+      const imageUrl = toAbsolutePublicUrl(saveLandingImageUpload(fileName, dataUrl));
       return res.json({ ok: true, imageUrl });
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message || "UPLOAD_FAILED" });
@@ -6934,7 +6962,7 @@ app.get("/api/admin/styles/:id", requireAdminAuth, async (req, res) => {
 });
 
 app.post("/api/admin/styles", requireAdminAuth, async (req, res) => {
-  const key = normalizePromptKey(req.body?.id || req.body?.key || req.body?.title || `style_${Date.now()}`);
+  const key = buildSafeEntityId(req.body?.id || req.body?.key || req.body?.title, "style");
   if (!key) return res.status(400).json({ ok: false, error: "INVALID_STYLE_ID" });
   if (getPromptStyle(key)) return res.status(409).json({ ok: false, error: "STYLE_ALREADY_EXISTS" });
   ensurePromptLibrary();
@@ -7038,7 +7066,7 @@ app.get("/api/admin/dynamic-styles/:id", requireAdminAuth, async (req, res) => {
 });
 
 app.post("/api/admin/dynamic-styles", requireAdminAuth, async (req, res) => {
-  const id = normalizePromptKey(req.body?.id || req.body?.title || `series_${Date.now()}`);
+  const id = buildSafeEntityId(req.body?.id || req.body?.title, "series");
   if (!id) return res.status(400).json({ ok: false, error: "INVALID_SERIES_ID" });
   if (getDynamicSeries(id)) return res.status(409).json({ ok: false, error: "DYNAMIC_SERIES_ALREADY_EXISTS" });
   const series = normalizeDynamicStyleSeries({

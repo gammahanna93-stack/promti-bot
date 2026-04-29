@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PROMTI Control</title>
+  <meta name="robots" content="noindex,nofollow">
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --surface: #fff;
+      --line: #dde4f2;
+      --text: #1c2340;
+      --muted: #68728f;
+      --primary: #3e62ff;
+      --primary2: #7a4bff;
+      --success: #1f9b67;
+      --danger: #d94c6d;
+      --radius: 18px;
+      --shadow: 0 18px 40px rgba(34, 46, 92, 0.12);
+      --font: "Segoe UI", Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      background: linear-gradient(180deg, #fcfdff 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+    a { color: #3154f4; }
+    .page {
+      width: min(100% - 24px, 1240px);
+      margin: 0 auto;
+      padding: 16px 0 40px;
+    }
+    .card, .section, .editor, .login {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .login-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+    .login {
+      width: min(100%, 420px);
+      padding: 24px;
+    }
+    .title { display: grid; gap: 6px; }
+    h1, h2, h3, h4 { margin: 0; }
+    p { margin: 0; color: var(--muted); }
+    .grid { display: grid; gap: 16px; }
+    .split { display: grid; gap: 12px; }
+    .field { display: grid; gap: 8px; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    .button {
+      min-height: 44px;
+      border: 0;
+      border-radius: 999px;
+      padding: 0 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .button-primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--primary), var(--primary2));
+    }
+    .button-secondary {
+      color: var(--text);
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+    .button-danger {
+      color: var(--danger);
+      background: #fff3f6;
+      border: 1px solid rgba(217, 76, 109, 0.22);
+    }
+    .button-small {
+      min-height: 38px;
+      padding: 0 12px;
+      font-size: 0.92rem;
+    }
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 15;
+      padding: 8px 0 12px;
+      background: linear-gradient(180deg, rgba(245,247,251,0.96), rgba(245,247,251,0.88));
+      backdrop-filter: blur(12px);
+    }
+    .toolbar-inner {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+    }
+    .section {
+      display: none;
+      gap: 16px;
+      padding: 16px;
+    }
+    .section.active { display: grid; }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .list { display: grid; gap: 12px; }
+    .item {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      background: #fff;
+      display: grid;
+      gap: 12px;
+    }
+    .item-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .badges, .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #4656b4;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .editor {
+      display: none;
+      gap: 12px;
+      padding: 16px;
+    }
+    .editor.active { display: grid; }
+    .status {
+      display: none;
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-weight: 600;
+    }
+    .status.show { display: block; }
+    .status.success { background: #ecf8f1; color: var(--success); }
+    .status.error { background: #fff2f5; color: var(--danger); }
+    .stats-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      background: #fff;
+    }
+    .preview {
+      width: 100%;
+      max-height: 220px;
+      object-fit: cover;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #f7f8fc;
+    }
+    .hidden { display: none !important; }
+    .helper {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    @media (min-width: 920px) {
+      .split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div id="loginWrap" class="login-wrap">
+    <form id="loginForm" class="login grid">
+      <div class="title">
+        <h1>PROMTI Control</h1>
+        <p>Mobile-first панель для керування static styles, dynamic styles, presets, OpenAI tools, контентом і аналітикою.</p>
+      </div>
+      <div id="loginStatus" class="status"></div>
+      <label class="field">Логін<input name="login" required autocomplete="username"></label>
+      <label class="field">Пароль<input name="password" type="password" required autocomplete="current-password"></label>
+      <button class="button button-primary" type="submit">Увійти</button>
+    </form>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="page">
+      <div class="toolbar">
+        <div class="toolbar-inner card">
+          <div class="section-head">
+            <div class="title">
+              <h2>PROMTI Control</h2>
+              <p>Керуйте ботом з телефона без редагування JSON і без входу в код.</p>
+            </div>
+            <div class="actions">
+              <button id="refreshButton" class="button button-secondary">Оновити</button>
+              <button id="logoutButton" class="button button-secondary">Вийти</button>
+            </div>
+          </div>
+          <div class="nav">
+            <button class="button button-secondary nav-btn" data-section="static">📸 Static photo styles</button>
+            <button class="button button-secondary nav-btn" data-section="dynamic">🔮 Dynamic photo styles</button>
+            <button class="button button-secondary nav-btn" data-section="video">🎬 Video presets</button>
+            <button class="button button-secondary nav-btn" data-section="openai">🧩 OpenAI tools</button>
+            <button class="button button-secondary nav-btn" data-section="content">🔗 Content & Links</button>
+            <button class="button button-secondary nav-btn" data-section="analytics">📊 Analytics</button>
+            <button class="button button-secondary nav-btn" data-section="settings">⚙️ Settings</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="globalStatus" class="status"></div>
+
+      <section id="section-static" class="section active">
+        <div class="section-head">
+          <div class="title">
+            <h3>📸 Static photo styles</h3>
+            <p>Керує `content.promptLibrary`.</p>
+          </div>
+          <button id="createStaticButton" class="button button-primary">➕ Створити static style</button>
+        </div>
+        <div id="staticEditor" class="editor"></div>
+        <div id="staticList" class="list"></div>
+      </section>
+
+      <section id="section-dynamic" class="section">
+        <div class="section-head">
+          <div class="title">
+            <h3>🔮 Dynamic photo styles</h3>
+            <p>Серії типу zodiac / archetypes / collections з variants усередині.</p>
+          </div>
+          <button id="createDynamicButton" class="button button-primary">➕ Створити серію</button>
+        </div>
+        <div id="dynamicEditor" class="editor"></div>
+        <div id="dynamicList" class="list"></div>
+      </section>
+
+      <section id="section-video" class="section">
+        <div class="section-head">
+          <div class="title">
+            <h3>🎬 Video presets</h3>
+            <p>Окремі presets для Seedance, Kling та інших video models.</p>
+          </div>
+          <button id="createVideoButton" class="button button-primary">➕ Створити video preset</button>
+        </div>
+        <div id="videoEditor" class="editor"></div>
+        <div id="videoList" class="list"></div>
+      </section>
+
+      <section id="section-openai" class="section">
+        <div class="section-head">
+          <div class="title">
+            <h3>🧩 OpenAI tools</h3>
+            <p>Окремі пресети тільки для інфографік та SVG, без змішування з photo styles.</p>
+          </div>
+          <button id="createToolButton" class="button button-primary">➕ Створити OpenAI preset</button>
+        </div>
+        <div id="toolEditor" class="editor"></div>
+        <div id="toolList" class="list"></div>
+      </section>
+
+      <section id="section-content" class="section">
+        <div class="section-head">
+          <div class="title">
+            <h3>🔗 Content & Links</h3>
+            <p>Тексти, CTA, посилання, пояснення і службові повідомлення.</p>
+          </div>
+          <button id="saveContentButton" class="button button-primary">💾 Зберегти контент</button>
+        </div>
+        <div id="contentFields" class="grid"></div>
+      </section>
+
+      <section id="section-analytics" class="section">
+        <div class="section-head">
+          <div class="title">
+            <h3>📊 Analytics</h3>
+            <p>Зведення по static styles, dynamic series, variants, моделях і провайдерах.</p>
+          </div>
+        </div>
+        <div id="analyticsSummary" class="stats-grid"></div>
+        <div class="split">
+          <div class="card" style="padding:16px">
+            <h3>Top static styles</h3>
+            <div id="topStaticList" class="list" style="margin-top:12px"></div>
+          </div>
+          <div class="card" style="padding:16px">
+            <h3>Top dynamic series / variants</h3>
+            <div id="topDynamicList" class="list" style="margin-top:12px"></div>
+          </div>
+        </div>
+        <div class="split">
+          <div class="card" style="padding:16px">
+            <h3>Top providers</h3>
+            <div id="topProvidersList" class="list" style="margin-top:12px"></div>
+          </div>
+          <div class="card" style="padding:16px">
+            <h3>Top models</h3>
+            <div id="topModelsList" class="list" style="margin-top:12px"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="section-settings" class="section">
+        <div class="section-head">
+          <div class="title">
+            <h3>⚙️ Settings</h3>
+            <p>Ключові параметри без потреби редагувати код напряму.</p>
+          </div>
+          <button id="saveSettingsButton" class="button button-primary">💾 Зберегти settings</button>
+        </div>
+        <div id="settingsFields" class="grid"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      dashboard: null,
+      currentSection: "static",
+    };
+
+    const CONTENT_LABELS = {
+      welcomeText: "Welcome text",
+      infoText: "Info text",
+      helpText: "Help text",
+      supportText: "Support text",
+      ideaText: "Idea text",
+      pricesText: "Prices text",
+      support_link: "Support link",
+      channel_link: "Channel link",
+      buyText: "Buy text",
+      miniResultText: "Mini-result text",
+    };
+
+    const CONTENT_SKIP_KEYS = new Set([
+      "promptLibrary",
+      "promptCategories",
+      "chatgptTrendLibrary",
+      "styleLibrary",
+      "dynamicStyleLibrary",
+      "welcomePhoto",
+      "infoPhoto",
+      "helpPhoto",
+      "pricesPhoto",
+      "ideaPhoto",
+      "broadcastPhoto",
+    ]);
+
+    const SETTINGS_LABELS = {
+      defaultImageProvider: "Default image provider",
+      defaultImageModel: "Default image model",
+      defaultPromptModel: "Default prompt model",
+      defaultOpenAIImageModel: "Default OpenAI image model",
+      chatgptTrendPricePromti: "ChatGPT trend price",
+      infographicPricePromti: "Infographic price",
+      svgLogoPricePromti: "SVG logo price",
+      supportLink: "Support link",
+      channelLink: "Channel link",
+    };
+
+    const SETTINGS_ORDER = [
+      "defaultImageProvider",
+      "defaultImageModel",
+      "defaultPromptModel",
+      "defaultOpenAIImageModel",
+      "chatgptTrendPricePromti",
+      "infographicPricePromti",
+      "svgLogoPricePromti",
+      "supportLink",
+      "channelLink",
+    ];
+
+    const loginWrap = document.getElementById("loginWrap");
+    const loginForm = document.getElementById("loginForm");
+    const loginStatus = document.getElementById("loginStatus");
+    const app = document.getElementById("app");
+    const globalStatus = document.getElementById("globalStatus");
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function setStatus(node, text, type = "success") {
+      node.textContent = text;
+      node.className = `status show ${type}`;
+    }
+
+    function clearStatus(node) {
+      node.textContent = "";
+      node.className = "status";
+    }
+
+    function normalizeId(text) {
+      return String(text || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    }
+
+    function getRequestedSection() {
+      const valid = new Set(["static", "dynamic", "video", "openai", "content", "analytics", "settings"]);
+      const section = new URLSearchParams(window.location.search).get("section") || "static";
+      return valid.has(section) ? section : "static";
+    }
+
+    function navTo(section) {
+      state.currentSection = section;
+      document.querySelectorAll(".section").forEach((node) => node.classList.remove("active"));
+      const target = document.getElementById(`section-${section}`);
+      if (target) target.classList.add("active");
+      document.querySelectorAll(".nav-btn").forEach((button) => {
+        button.classList.toggle("button-primary", button.dataset.section === section);
+        button.classList.toggle("button-secondary", button.dataset.section !== section);
+      });
+      const url = new URL(window.location.href);
+      url.searchParams.set("section", section);
+      history.replaceState(null, "", url.toString());
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+        ...options,
+      });
+      if (response.status === 401) {
+        app.classList.add("hidden");
+        loginWrap.classList.remove("hidden");
+        throw new Error("AUTH_REQUIRED");
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "REQUEST_FAILED");
+      return data;
+    }
+
+    async function uploadImage(file) {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("FILE_READ_FAILED"));
+        reader.readAsDataURL(file);
+      });
+      const result = await api("/api/admin/upload-image", {
+        method: "POST",
+        body: JSON.stringify({ fileName: file.name, dataUrl }),
+      });
+      return result.imageUrl;
+    }
+
+    function collectFormData(root) {
+      const data = {};
+      root.querySelectorAll("input[name], textarea[name], select[name]").forEach((field) => {
+        data[field.name] = field.value;
+      });
+      return data;
+    }
+
+    function listFromTextarea(value) {
+      return String(value || "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+
+    function renderStaticList() {
+      const list = document.getElementById("staticList");
+      list.innerHTML = "";
+      (state.dashboard.staticStyles || []).forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "item";
+        card.innerHTML = `
+          <div class="item-head">
+            <div class="title">
+              <h3>${escapeHtml(item.title)}</h3>
+              <p>${escapeHtml(item.description || item.category || "")}</p>
+            </div>
+            <div class="badges">
+              <span class="badge">${escapeHtml(item.provider)}</span>
+              <span class="badge">${escapeHtml(item.model)}</span>
+              <span class="badge">${Number(item.price || 1)} Promti ✨</span>
+            </div>
+          </div>
+          ${item.previewImage ? `<img class="preview" src="${escapeHtml(item.previewImage)}" alt="${escapeHtml(item.title)}">` : ""}
+          <div class="badges">
+            <span class="badge">${item.isActive ? "active" : "inactive"}</span>
+            <span class="badge">${item.isTrending ? "trending" : "regular"}</span>
+            <span class="badge">clicks ${Number(item.stats?.clicks || 0)}</span>
+            <span class="badge">gen ${Number(item.stats?.generations || 0)}</span>
+            <span class="badge">buy ${Number(item.stats?.purchases || 0)}</span>
+          </div>
+          <div class="actions">
+            <button class="button button-secondary button-small" data-edit-static="${escapeHtml(item.id)}">✏️ Редагувати</button>
+            <button class="button button-secondary button-small" data-duplicate-static="${escapeHtml(item.id)}">📄 Дублювати</button>
+            <button class="button button-secondary button-small" data-toggle-static="${escapeHtml(item.id)}">${item.isActive ? "⛔ Вимкнути" : "✅ Увімкнути"}</button>
+            <button class="button button-danger button-small" data-delete-static="${escapeHtml(item.id)}">🗑 Видалити</button>
+          </div>
+          <p><strong>Deep-link:</strong> <a href="${escapeHtml(item.deepLink)}" target="_blank" rel="noopener">${escapeHtml(item.deepLink)}</a></p>
+        `;
+        list.appendChild(card);
+      });
+    }
+
+    function staticEditorTemplate(item = {}) {
+      return `
+        <div class="split">
+          <label class="field">ID<input name="id" value="${escapeHtml(item.id || "")}" ${item.id ? "disabled" : ""}></label>
+          <label class="field">Категорія<input name="category" value="${escapeHtml(item.category || "")}"></label>
+        </div>
+        <label class="field">Title<input name="title" value="${escapeHtml(item.title || "")}"></label>
+        <label class="field">Description<textarea name="description">${escapeHtml(item.description || "")}</textarea></label>
+        <label class="field">Prompt<textarea name="prompt">${escapeHtml(item.prompt || "")}</textarea></label>
+        <div class="split">
+          <label class="field">Provider<input name="provider" value="${escapeHtml(item.provider || "fal")}"></label>
+          <label class="field">Model<input name="model" value="${escapeHtml(item.model || "")}"></label>
+        </div>
+        <div class="split">
+          <label class="field">Price<input name="price" type="number" value="${Number(item.price || 1)}"></label>
+          <label class="field">Sort order<input name="sortOrder" type="number" value="${Number(item.sortOrder || 0)}"></label>
+        </div>
+        <label class="field">Preview image URL<input name="previewImage" value="${escapeHtml(item.previewImage || "")}"></label>
+        <label class="field">Example images URLs (по одному в рядок)<textarea name="exampleImages">${escapeHtml((item.exampleImages || []).join("\n"))}</textarea></label>
+        <div class="split">
+          <label class="field">Active<select name="isActive"><option value="true" ${item.isActive !== false ? "selected" : ""}>ON</option><option value="false" ${item.isActive === false ? "selected" : ""}>OFF</option></select></label>
+          <label class="field">Trending<select name="isTrending"><option value="false" ${!item.isTrending ? "selected" : ""}>OFF</option><option value="true" ${item.isTrending ? "selected" : ""}>ON</option></select></label>
+        </div>
+        <div class="actions">
+          <button class="button button-primary" data-save-static="${escapeHtml(item.id || "new")}">💾 Зберегти</button>
+          <label class="button button-secondary button-small">🖼 Upload preview<input type="file" data-upload-preview="static" accept="image/*" class="hidden"></label>
+          <button class="button button-secondary button-small" data-close-static-editor>Закрити</button>
+        </div>
+      `;
+    }
+
+    function openStaticEditor(item = {}) {
+      const editor = document.getElementById("staticEditor");
+      editor.innerHTML = staticEditorTemplate(item);
+      editor.classList.add("active");
+    }
+
+    function renderDynamicList() {
+      const list = document.getElementById("dynamicList");
+      list.innerHTML = "";
+      (state.dashboard.dynamicStyles || []).forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "item";
+        card.innerHTML = `
+          <div class="item-head">
+            <div class="title">
+              <h3>${escapeHtml(item.title)}</h3>
+              <p>${escapeHtml(item.description || "")}</p>
+            </div>
+            <div class="badges">
+              <span class="badge">${escapeHtml(item.provider)}</span>
+              <span class="badge">${escapeHtml(item.model)}</span>
+              <span class="badge">${Number(item.price || 1)} Promti ✨</span>
+            </div>
+          </div>
+          ${item.previewImage ? `<img class="preview" src="${escapeHtml(item.previewImage)}" alt="${escapeHtml(item.title)}">` : ""}
+          <div class="badges">
+            <span class="badge">${item.isActive ? "active" : "inactive"}</span>
+            <span class="badge">${item.isTrending ? "trending" : "regular"}</span>
+            <span class="badge">variants ${Number((item.variants || []).length)}</span>
+            <span class="badge">clicks ${Number(item.stats?.clicks || 0)}</span>
+            <span class="badge">gen ${Number(item.stats?.generations || 0)}</span>
+          </div>
+          <div class="actions">
+            <button class="button button-secondary button-small" data-edit-dynamic="${escapeHtml(item.id)}">✏️ Серія</button>
+            <button class="button button-secondary button-small" data-edit-variants="${escapeHtml(item.id)}">🧩 Варіанти</button>
+            <button class="button button-secondary button-small" data-toggle-dynamic="${escapeHtml(item.id)}">${item.isActive ? "⛔ Вимкнути" : "✅ Увімкнути"}</button>
+          </div>
+          <p><strong>Deep-link:</strong> <a href="${escapeHtml(item.deepLink)}" target="_blank" rel="noopener">${escapeHtml(item.deepLink)}</a></p>
+        `;
+        list.appendChild(card);
+      });
+    }
+
+    function dynamicEditorTemplate(item = {}) {
+      const variantsHtml = (item.variants || []).map((variant) => `
+        <div class="item">
+          <div class="item-head">
+            <div class="title">
+              <h4>${escapeHtml(variant.title)}</h4>
+              <p>${escapeHtml(variant.subtitle || "")}</p>
+            </div>
+            <div class="badges">
+              <span class="badge">${variant.isActive ? "active" : "inactive"}</span>
+              <span class="badge">gen ${Number(variant.stats?.generations || 0)}</span>
+            </div>
+          </div>
+          <div class="split">
+            <label class="field">Variant title<input data-variant-title="${escapeHtml(variant.id)}" value="${escapeHtml(variant.title || "")}"></label>
+            <label class="field">Subtitle<input data-variant-subtitle="${escapeHtml(variant.id)}" value="${escapeHtml(variant.subtitle || "")}"></label>
+          </div>
+          <label class="field">Variant prompt<textarea data-variant-prompt="${escapeHtml(variant.id)}">${escapeHtml(variant.variantPrompt || "")}</textarea></label>
+          <label class="field">Preview URL<input data-variant-preview="${escapeHtml(variant.id)}" value="${escapeHtml(variant.previewImage || "")}"></label>
+          <label class="field">Examples URLs<textarea data-variant-examples="${escapeHtml(variant.id)}">${escapeHtml((variant.exampleImages || []).join("\n"))}</textarea></label>
+          <div class="actions">
+            <button class="button button-primary button-small" data-save-variant="${escapeHtml(item.id)}:${escapeHtml(variant.id)}">💾 Зберегти variant</button>
+            <button class="button button-secondary button-small" data-toggle-variant="${escapeHtml(item.id)}:${escapeHtml(variant.id)}">${variant.isActive ? "⛔ Вимкнути" : "✅ Увімкнути"}</button>
+            <button class="button button-danger button-small" data-delete-variant="${escapeHtml(item.id)}:${escapeHtml(variant.id)}">🗑 Видалити</button>
+          </div>
+        </div>
+      `).join("");
+
+      return `
+        <div class="split">
+          <label class="field">ID<input name="id" value="${escapeHtml(item.id || "")}" ${item.id ? "disabled" : ""}></label>
+          <label class="field">Title<input name="title" value="${escapeHtml(item.title || "")}"></label>
+        </div>
+        <label class="field">Description<textarea name="description">${escapeHtml(item.description || "")}</textarea></label>
+        <label class="field">Template prompt<textarea name="templatePrompt">${escapeHtml(item.templatePrompt || "")}</textarea></label>
+        <div class="split">
+          <label class="field">Provider<input name="provider" value="${escapeHtml(item.provider || "fal")}"></label>
+          <label class="field">Model<input name="model" value="${escapeHtml(item.model || "")}"></label>
+        </div>
+        <div class="split">
+          <label class="field">Price<input name="price" type="number" value="${Number(item.price || 1)}"></label>
+          <label class="field">Trending<select name="isTrending"><option value="false" ${!item.isTrending ? "selected" : ""}>OFF</option><option value="true" ${item.isTrending ? "selected" : ""}>ON</option></select></label>
+        </div>
+        <div class="split">
+          <label class="field">Preview image URL<input name="previewImage" value="${escapeHtml(item.previewImage || "")}"></label>
+          <label class="field">Examples URLs<textarea name="exampleImages">${escapeHtml((item.exampleImages || []).join("\n"))}</textarea></label>
+        </div>
+        <div class="actions">
+          <button class="button button-primary" data-save-dynamic="${escapeHtml(item.id || "new")}">💾 Зберегти серію</button>
+          <label class="button button-secondary button-small">🖼 Upload preview<input type="file" data-upload-preview="dynamic" accept="image/*" class="hidden"></label>
+          <button class="button button-secondary button-small" data-add-variant="${escapeHtml(item.id || "")}" ${item.id ? "" : "disabled"}>➕ Додати variant</button>
+          <button class="button button-secondary button-small" data-close-dynamic-editor>Закрити</button>
+        </div>
+        ${item.id ? `<div class="grid">${variantsHtml || "<p>Поки що немає variants.</p>"}</div>` : `<p class="helper">Спочатку збережи серію, потім додай variants.</p>`}
+      `;
+    }
+
+    function openDynamicEditor(item = {}) {
+      const editor = document.getElementById("dynamicEditor");
+      editor.innerHTML = dynamicEditorTemplate(item);
+      editor.classList.add("active");
+    }
+
+    function renderSimpleList(targetId, items, typeLabel) {
+      const list = document.getElementById(targetId);
+      list.innerHTML = "";
+      items.forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "item";
+        card.innerHTML = `
+          <div class="item-head">
+            <div class="title">
+              <h3>${escapeHtml(item.title)}</h3>
+              <p>${escapeHtml(item.description || "")}</p>
+            </div>
+            <div class="badges">
+              <span class="badge">${escapeHtml(item.provider || "")}</span>
+              <span class="badge">${escapeHtml(item.model || "")}</span>
+              <span class="badge">${Number(item.price || 0)} Promti ✨</span>
+            </div>
+          </div>
+          <div class="badges">
+            <span class="badge">${item.isActive !== false ? "active" : "inactive"}</span>
+            <span class="badge">${escapeHtml(item.type || "")}</span>
+          </div>
+          <div class="actions">
+            <button class="button button-secondary button-small" data-edit-simple="${escapeHtml(typeLabel)}:${escapeHtml(item.id)}">✏️ Редагувати</button>
+            <button class="button button-secondary button-small" data-toggle-simple="${escapeHtml(typeLabel)}:${escapeHtml(item.id)}">${item.isActive !== false ? "⛔ Вимкнути" : "✅ Увімкнути"}</button>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+    }
+
+    function simpleEditorTemplate(item = {}, typeLabel) {
+      const isTool = typeLabel === "tool";
+      return `
+        <div class="split">
+          <label class="field">ID<input name="id" value="${escapeHtml(item.id || "")}" ${item.id ? "disabled" : ""}></label>
+          <label class="field">Title<input name="title" value="${escapeHtml(item.title || "")}"></label>
+        </div>
+        <label class="field">Description<textarea name="description">${escapeHtml(item.description || "")}</textarea></label>
+        <div class="split">
+          <label class="field">Provider<input name="provider" value="${escapeHtml(item.provider || (isTool ? "openai" : "fal"))}" ${isTool ? "disabled" : ""}></label>
+          <label class="field">Model<input name="model" value="${escapeHtml(item.model || "")}"></label>
+        </div>
+        <div class="split">
+          <label class="field">Price<input name="price" type="number" value="${Number(item.price || 0)}"></label>
+          <label class="field">Active<select name="isActive"><option value="true" ${item.isActive !== false ? "selected" : ""}>ON</option><option value="false" ${item.isActive === false ? "selected" : ""}>OFF</option></select></label>
+        </div>
+        <div class="split">
+          <label class="field">Type<input name="type" value="${escapeHtml(item.type || (isTool ? "infographic" : "video"))}"></label>
+          <label class="field">${isTool ? "Input type" : "Preview URL"}<input name="${isTool ? "inputType" : "previewVideo"}" value="${escapeHtml(isTool ? (item.inputType || "") : (item.previewVideo || ""))}"></label>
+        </div>
+        ${isTool ? `
+          <div class="split">
+            <label class="field">Output type<input name="outputType" value="${escapeHtml(item.outputType || "")}"></label>
+            <label class="field">Examples URLs<textarea name="examples">${escapeHtml((item.examples || []).join("\n"))}</textarea></label>
+          </div>
+          <label class="field">System prompt<textarea name="systemPrompt">${escapeHtml(item.systemPrompt || "")}</textarea></label>
+          <label class="field">User prompt template<textarea name="userPromptTemplate">${escapeHtml(item.userPromptTemplate || "")}</textarea></label>
+        ` : `
+          <label class="field">Prompt template<textarea name="promptTemplate">${escapeHtml(item.promptTemplate || "")}</textarea></label>
+          <label class="field">Example videos URLs<textarea name="exampleVideos">${escapeHtml((item.exampleVideos || []).join("\n"))}</textarea></label>
+        `}
+        <div class="actions">
+          <button class="button button-primary" data-save-simple="${escapeHtml(typeLabel)}:${escapeHtml(item.id || "new")}">💾 Зберегти</button>
+          <button class="button button-secondary button-small" data-close-simple-editor="${escapeHtml(typeLabel)}">Закрити</button>
+        </div>
+      `;
+    }
+
+    function openSimpleEditor(typeLabel, item = {}) {
+      const target = typeLabel === "video" ? document.getElementById("videoEditor") : document.getElementById("toolEditor");
+      target.innerHTML = simpleEditorTemplate(item, typeLabel);
+      target.classList.add("active");
+    }
+
+    function getEditableContentEntries() {
+      return Object.entries(state.dashboard.content || {})
+        .filter(([key, value]) => typeof value === "string" && !CONTENT_SKIP_KEYS.has(key))
+        .sort((a, b) => a[0].localeCompare(b[0]));
+    }
+
+    function renderContent() {
+      const wrap = document.getElementById("contentFields");
+      wrap.innerHTML = "";
+      getEditableContentEntries().forEach(([key, value]) => {
+        const field = document.createElement("label");
+        field.className = "field";
+        field.innerHTML = `
+          <span>${escapeHtml(CONTENT_LABELS[key] || key)}</span>
+          <textarea data-content-key="${escapeHtml(key)}">${escapeHtml(value)}</textarea>
+        `;
+        wrap.appendChild(field);
+      });
+    }
+
+    function renderSettings() {
+      const wrap = document.getElementById("settingsFields");
+      wrap.innerHTML = "";
+      SETTINGS_ORDER.forEach((key) => {
+        const value = state.dashboard.settings?.[key] ?? "";
+        const field = document.createElement("label");
+        field.className = "field";
+        field.innerHTML = `
+          <span>${escapeHtml(SETTINGS_LABELS[key] || key)}</span>
+          <input data-setting-key="${escapeHtml(key)}" value="${escapeHtml(value)}">
+        `;
+        wrap.appendChild(field);
+      });
+    }
+
+    function renderAnalytics() {
+      const analytics = state.dashboard.analytics || {};
+      const summary = analytics.summary || {};
+      document.getElementById("analyticsSummary").innerHTML = `
+        <div class="stat"><strong>Revenue</strong><p>${Number(summary.revenue || 0)} UAH</p></div>
+        <div class="stat"><strong>Purchases</strong><p>${Number(summary.purchases || 0)}</p></div>
+        <div class="stat"><strong>Static styles</strong><p>${Number(summary.staticStyles || 0)}</p></div>
+        <div class="stat"><strong>Dynamic series</strong><p>${Number(summary.dynamicSeries || 0)}</p></div>
+        <div class="stat"><strong>Dynamic variants</strong><p>${Number(summary.dynamicVariants || 0)}</p></div>
+        <div class="stat"><strong>Video presets</strong><p>${Number(summary.videoPresets || 0)}</p></div>
+        <div class="stat"><strong>OpenAI tools</strong><p>${Number(summary.openAiTools || 0)}</p></div>
+        <div class="stat"><strong>Trending static</strong><p>${Number(analytics.trendingStaticStyles || 0)}</p></div>
+      `;
+
+      document.getElementById("topStaticList").innerHTML =
+        (analytics.topStaticStyles || [])
+          .map((item) => `<div class="item"><strong>${escapeHtml(item.title)}</strong><p>gen ${Number(item.generations || 0)} · buy ${Number(item.purchases || 0)}</p></div>`)
+          .join("") || "<p>—</p>";
+
+      document.getElementById("topDynamicList").innerHTML =
+        [
+          ...(analytics.topDynamicSeries || []).map((item) => `<div class="item"><strong>${escapeHtml(item.title)}</strong><p>gen ${Number(item.stats?.generations || 0)}</p></div>`),
+          ...(analytics.topDynamicVariants || []).map((item) => `<div class="item"><strong>${escapeHtml(item.seriesTitle)} → ${escapeHtml(item.title)}</strong><p>gen ${Number(item.stats?.generations || 0)}</p></div>`),
+        ].join("") || "<p>—</p>";
+
+      document.getElementById("topProvidersList").innerHTML =
+        (analytics.topProviders || [])
+          .map(([key, value]) => `<div class="item"><strong>${escapeHtml(key)}</strong><p>gen ${Number(value.generations || 0)} · buy ${Number(value.purchases || 0)}</p></div>`)
+          .join("") || "<p>—</p>";
+
+      document.getElementById("topModelsList").innerHTML =
+        (analytics.topModels || [])
+          .map(([key, value]) => `<div class="item"><strong>${escapeHtml(key)}</strong><p>gen ${Number(value.generations || 0)} · buy ${Number(value.purchases || 0)}</p></div>`)
+          .join("") || "<p>—</p>";
+    }
+
+    function renderAll() {
+      renderStaticList();
+      renderDynamicList();
+      renderSimpleList("videoList", state.dashboard.videoPresets || [], "video");
+      renderSimpleList("toolList", state.dashboard.openAiTools || [], "tool");
+      renderContent();
+      renderSettings();
+      renderAnalytics();
+      navTo(state.currentSection || getRequestedSection());
+    }
+
+    async function refreshDashboard() {
+      clearStatus(globalStatus);
+      state.dashboard = await api("/api/admin/dashboard");
+      renderAll();
+    }
+
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearStatus(loginStatus);
+      const formData = new FormData(loginForm);
+      try {
+        await api("/api/admin/login", {
+          method: "POST",
+          body: JSON.stringify({
+            login: formData.get("login"),
+            password: formData.get("password"),
+          }),
+        });
+        loginWrap.classList.add("hidden");
+        app.classList.remove("hidden");
+        await refreshDashboard();
+      } catch (error) {
+        setStatus(loginStatus, "Невірний логін або пароль.", "error");
+      }
+    });
+
+    document.getElementById("logoutButton").addEventListener("click", async () => {
+      await fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" });
+      app.classList.add("hidden");
+      loginWrap.classList.remove("hidden");
+    });
+
+    document.getElementById("refreshButton").addEventListener("click", refreshDashboard);
+    document.querySelectorAll(".nav-btn").forEach((button) => button.addEventListener("click", () => navTo(button.dataset.section)));
+
+    document.getElementById("createStaticButton").addEventListener("click", () => openStaticEditor({}));
+    document.getElementById("createDynamicButton").addEventListener("click", () => openDynamicEditor({ variants: [] }));
+    document.getElementById("createVideoButton").addEventListener("click", () => openSimpleEditor("video", { provider: "fal", type: "video", isActive: true }));
+    document.getElementById("createToolButton").addEventListener("click", () => openSimpleEditor("tool", { provider: "openai", type: "infographic", isActive: true }));
+
+    document.body.addEventListener("click", async (event) => {
+      const target = event.target;
+      const staticEditId = target.dataset.editStatic;
+      const staticDupId = target.dataset.duplicateStatic;
+      const staticToggleId = target.dataset.toggleStatic;
+      const staticDeleteId = target.dataset.deleteStatic;
+      const dynamicEditId = target.dataset.editDynamic;
+      const dynamicVariantsId = target.dataset.editVariants;
+      const dynamicToggleId = target.dataset.toggleDynamic;
+      const addVariantId = target.dataset.addVariant;
+      const saveVariantRef = target.dataset.saveVariant;
+      const toggleVariantRef = target.dataset.toggleVariant;
+      const deleteVariantRef = target.dataset.deleteVariant;
+      const editSimpleRef = target.dataset.editSimple;
+      const toggleSimpleRef = target.dataset.toggleSimple;
+      const saveStaticRef = target.dataset.saveStatic;
+      const saveDynamicRef = target.dataset.saveDynamic;
+      const saveSimpleRef = target.dataset.saveSimple;
+
+      try {
+        if (staticEditId) {
+          openStaticEditor(state.dashboard.staticStyles.find((item) => item.id === staticEditId) || {});
+          return;
+        }
+        if (staticDupId) {
+          await api(`/api/admin/styles/${staticDupId}/duplicate`, { method: "POST", body: JSON.stringify({}) });
+          await refreshDashboard();
+          setStatus(globalStatus, "Static style дубльовано.");
+          return;
+        }
+        if (staticToggleId) {
+          const item = state.dashboard.staticStyles.find((style) => style.id === staticToggleId);
+          await api(`/api/admin/styles/${staticToggleId}/toggle`, { method: "PATCH", body: JSON.stringify({ isActive: !item.isActive }) });
+          await refreshDashboard();
+          setStatus(globalStatus, "Статус static style оновлено.");
+          return;
+        }
+        if (staticDeleteId) {
+          if (!confirm(`Видалити style ${staticDeleteId}?`)) return;
+          await api(`/api/admin/styles/${staticDeleteId}`, { method: "DELETE" });
+          await refreshDashboard();
+          setStatus(globalStatus, "Static style видалено.");
+          return;
+        }
+        if (saveStaticRef) {
+          const editor = document.getElementById("staticEditor");
+          const payload = collectFormData(editor);
+          payload.price = Number(payload.price || 1);
+          payload.sortOrder = Number(payload.sortOrder || 0);
+          payload.isActive = payload.isActive === "true";
+          payload.isTrending = payload.isTrending === "true";
+          payload.exampleImages = listFromTextarea(payload.exampleImages);
+          const method = saveStaticRef === "new" ? "POST" : "PUT";
+          const path = saveStaticRef === "new" ? "/api/admin/styles" : `/api/admin/styles/${saveStaticRef}`;
+          await api(path, { method, body: JSON.stringify(payload) });
+          document.getElementById("staticEditor").classList.remove("active");
+          await refreshDashboard();
+          setStatus(globalStatus, "Static style збережено.");
+          return;
+        }
+        if (target.dataset.closeStaticEditor !== undefined) {
+          document.getElementById("staticEditor").classList.remove("active");
+          return;
+        }
+        if (dynamicEditId || dynamicVariantsId) {
+          const id = dynamicEditId || dynamicVariantsId;
+          openDynamicEditor(state.dashboard.dynamicStyles.find((item) => item.id === id) || {});
+          return;
+        }
+        if (dynamicToggleId) {
+          const item = state.dashboard.dynamicStyles.find((series) => series.id === dynamicToggleId);
+          await api(`/api/admin/dynamic-styles/${dynamicToggleId}/toggle`, { method: "PATCH", body: JSON.stringify({ isActive: !item.isActive }) });
+          await refreshDashboard();
+          setStatus(globalStatus, "Статус dynamic series оновлено.");
+          return;
+        }
+        if (saveDynamicRef) {
+          const editor = document.getElementById("dynamicEditor");
+          const payload = collectFormData(editor);
+          payload.price = Number(payload.price || 1);
+          payload.isTrending = payload.isTrending === "true";
+          payload.exampleImages = listFromTextarea(payload.exampleImages);
+          payload.variants = (state.dashboard.dynamicStyles.find((item) => item.id === saveDynamicRef) || {}).variants || [];
+          const method = saveDynamicRef === "new" ? "POST" : "PUT";
+          const path = saveDynamicRef === "new" ? "/api/admin/dynamic-styles" : `/api/admin/dynamic-styles/${saveDynamicRef}`;
+          await api(path, { method, body: JSON.stringify(payload) });
+          document.getElementById("dynamicEditor").classList.remove("active");
+          await refreshDashboard();
+          setStatus(globalStatus, "Dynamic series збережено.");
+          return;
+        }
+        if (addVariantId !== undefined) {
+          if (!addVariantId) {
+            setStatus(globalStatus, "Спочатку збережи серію.", "error");
+            return;
+          }
+          const title = prompt("Назва variant");
+          if (!title) return;
+          const id = prompt("ID variant", normalizeId(title));
+          if (!id) return;
+          await api(`/api/admin/dynamic-styles/${addVariantId}/variants`, {
+            method: "POST",
+            body: JSON.stringify({ id, title, variantPrompt: "" }),
+          });
+          await refreshDashboard();
+          openDynamicEditor(state.dashboard.dynamicStyles.find((item) => item.id === addVariantId) || {});
+          setStatus(globalStatus, "Variant додано.");
+          return;
+        }
+        if (saveVariantRef) {
+          const [seriesId, variantId] = saveVariantRef.split(":");
+          const series = state.dashboard.dynamicStyles.find((item) => item.id === seriesId);
+          const variant = (series?.variants || []).find((item) => item.id === variantId);
+          if (!series || !variant) throw new Error("VARIANT_NOT_FOUND");
+          await api(`/api/admin/dynamic-styles/${seriesId}/variants/${variantId}`, {
+            method: "PUT",
+            body: JSON.stringify({
+              ...variant,
+              title: document.querySelector(`[data-variant-title="${CSS.escape(variantId)}"]`)?.value || variant.title,
+              subtitle: document.querySelector(`[data-variant-subtitle="${CSS.escape(variantId)}"]`)?.value || variant.subtitle,
+              variantPrompt: document.querySelector(`[data-variant-prompt="${CSS.escape(variantId)}"]`)?.value || variant.variantPrompt,
+              previewImage: document.querySelector(`[data-variant-preview="${CSS.escape(variantId)}"]`)?.value || variant.previewImage,
+              exampleImages: listFromTextarea(document.querySelector(`[data-variant-examples="${CSS.escape(variantId)}"]`)?.value || ""),
+            }),
+          });
+          await refreshDashboard();
+          openDynamicEditor(state.dashboard.dynamicStyles.find((item) => item.id === seriesId) || {});
+          setStatus(globalStatus, "Variant збережено.");
+          return;
+        }
+        if (toggleVariantRef) {
+          const [seriesId, variantId] = toggleVariantRef.split(":");
+          const series = state.dashboard.dynamicStyles.find((item) => item.id === seriesId);
+          const variant = (series?.variants || []).find((item) => item.id === variantId);
+          await api(`/api/admin/dynamic-styles/${seriesId}/variants/${variantId}/toggle`, {
+            method: "PATCH",
+            body: JSON.stringify({ isActive: !variant.isActive }),
+          });
+          await refreshDashboard();
+          openDynamicEditor(state.dashboard.dynamicStyles.find((item) => item.id === seriesId) || {});
+          setStatus(globalStatus, "Статус variant оновлено.");
+          return;
+        }
+        if (deleteVariantRef) {
+          const [seriesId, variantId] = deleteVariantRef.split(":");
+          if (!confirm(`Видалити variant ${variantId}?`)) return;
+          await api(`/api/admin/dynamic-styles/${seriesId}/variants/${variantId}`, { method: "DELETE" });
+          await refreshDashboard();
+          openDynamicEditor(state.dashboard.dynamicStyles.find((item) => item.id === seriesId) || {});
+          setStatus(globalStatus, "Variant видалено.");
+          return;
+        }
+        if (target.dataset.closeDynamicEditor !== undefined) {
+          document.getElementById("dynamicEditor").classList.remove("active");
+          return;
+        }
+        if (editSimpleRef) {
+          const [typeLabel, id] = editSimpleRef.split(":");
+          const source = typeLabel === "video" ? state.dashboard.videoPresets : state.dashboard.openAiTools;
+          openSimpleEditor(typeLabel, source.find((item) => item.id === id) || {});
+          return;
+        }
+        if (toggleSimpleRef) {
+          const [typeLabel, id] = toggleSimpleRef.split(":");
+          const source = typeLabel === "video" ? state.dashboard.videoPresets : state.dashboard.openAiTools;
+          const item = source.find((entry) => entry.id === id);
+          const path = typeLabel === "video" ? `/api/admin/video-presets/${id}/toggle` : `/api/admin/openai-tools/${id}/toggle`;
+          await api(path, { method: "PATCH", body: JSON.stringify({ isActive: !item.isActive }) });
+          await refreshDashboard();
+          setStatus(globalStatus, "Статус пресету оновлено.");
+          return;
+        }
+        if (saveSimpleRef) {
+          const [typeLabel, ref] = saveSimpleRef.split(":");
+          const targetEditor = typeLabel === "video" ? document.getElementById("videoEditor") : document.getElementById("toolEditor");
+          const payload = collectFormData(targetEditor);
+          payload.price = Number(payload.price || 0);
+          payload.isActive = payload.isActive === "true";
+          if (typeLabel === "video") {
+            payload.exampleVideos = listFromTextarea(payload.exampleVideos);
+          } else {
+            payload.examples = listFromTextarea(payload.examples);
+          }
+          const method = ref === "new" ? "POST" : "PUT";
+          const path = typeLabel === "video"
+            ? (ref === "new" ? "/api/admin/video-presets" : `/api/admin/video-presets/${ref}`)
+            : (ref === "new" ? "/api/admin/openai-tools" : `/api/admin/openai-tools/${ref}`);
+          await api(path, { method, body: JSON.stringify(payload) });
+          targetEditor.classList.remove("active");
+          await refreshDashboard();
+          setStatus(globalStatus, typeLabel === "video" ? "Video preset збережено." : "OpenAI tool збережено.");
+          return;
+        }
+        if (target.dataset.closeSimpleEditor) {
+          if (target.dataset.closeSimpleEditor === "video") document.getElementById("videoEditor").classList.remove("active");
+          if (target.dataset.closeSimpleEditor === "tool") document.getElementById("toolEditor").classList.remove("active");
+        }
+      } catch (error) {
+        setStatus(globalStatus, `Помилка: ${error.message}`, "error");
+      }
+    });
+
+    document.body.addEventListener("change", async (event) => {
+      const mode = event.target.dataset.uploadPreview;
+      if (!mode) return;
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        const url = await uploadImage(file);
+        const container = mode === "static" ? document.getElementById("staticEditor") : document.getElementById("dynamicEditor");
+        const input = container.querySelector('input[name="previewImage"]');
+        if (input) input.value = url;
+        setStatus(globalStatus, "Preview завантажено.");
+      } catch (error) {
+        setStatus(globalStatus, `Upload error: ${error.message}`, "error");
+      }
+    });
+
+    document.getElementById("saveContentButton").addEventListener("click", async () => {
+      try {
+        for (const textarea of document.querySelectorAll("[data-content-key]")) {
+          await api(`/api/admin/content/${textarea.dataset.contentKey}`, {
+            method: "PUT",
+            body: JSON.stringify({ value: textarea.value }),
+          });
+        }
+        await refreshDashboard();
+        setStatus(globalStatus, "Контент оновлено.");
+      } catch (error) {
+        setStatus(globalStatus, `Помилка: ${error.message}`, "error");
+      }
+    });
+
+    document.getElementById("saveSettingsButton").addEventListener("click", async () => {
+      try {
+        for (const input of document.querySelectorAll("[data-setting-key]")) {
+          await api(`/api/admin/content/settings.${input.dataset.settingKey}`, {
+            method: "PUT",
+            body: JSON.stringify({ value: input.value }),
+          });
+        }
+        await refreshDashboard();
+        setStatus(globalStatus, "Settings оновлено.");
+      } catch (error) {
+        setStatus(globalStatus, `Помилка: ${error.message}`, "error");
+      }
+    });
+
+    (async function bootstrap() {
+      state.currentSection = getRequestedSection();
+      try {
+        await refreshDashboard();
+        loginWrap.classList.add("hidden");
+        app.classList.remove("hidden");
+      } catch {
+        loginWrap.classList.remove("hidden");
+        app.classList.add("hidden");
+      }
+    })();
+  </script>
+</body>
+</html>

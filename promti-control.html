@@ -187,6 +187,18 @@
       border: 1px solid var(--line);
       background: #f7f8fc;
     }
+    .example-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .example-grid img {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+    }
     .hidden { display: none !important; }
     .helper {
       font-size: 0.9rem;
@@ -292,7 +304,7 @@
         <div class="section-head">
           <div class="title">
             <h3>🔗 Content & Links</h3>
-            <p>Тексти, CTA, посилання, пояснення і службові повідомлення.</p>
+            <p>Тут можна редагувати тексти, CTA, посилання і назви Telegram-кнопок.</p>
           </div>
           <button id="saveContentButton" class="button button-primary">💾 Зберегти контент</button>
         </div>
@@ -361,19 +373,96 @@
       miniResultText: "Mini-result text",
     };
 
+    const BUTTON_LABEL_KEYS = {
+      "buttonLabels.main_photo": "Кнопка: Фото",
+      "buttonLabels.main_video": "Кнопка: Відео",
+      "buttonLabels.main_ai_studio": "Кнопка: AI Studio",
+      "buttonLabels.main_infographics": "Кнопка: Інфографіки",
+      "buttonLabels.main_buy_promti": "Кнопка: Купити Promti",
+      "buttonLabels.main_balance": "Кнопка: Баланс",
+      "buttonLabels.main_prices": "Кнопка: Ціни",
+      "buttonLabels.main_ideas": "Кнопка: Ідея для промтів",
+      "buttonLabels.main_referral": "Кнопка: Запросити друга",
+      "buttonLabels.main_info": "Кнопка: Інформація",
+      "buttonLabels.main_help": "Кнопка: Допомога",
+      "buttonLabels.main_support": "Кнопка: Підтримка",
+      "buttonLabels.ai_studio_trends": "Кнопка: Тренди ChatGPT",
+      "buttonLabels.ai_studio_library": "Кнопка: Бібліотека стилів",
+      "buttonLabels.photo_edit": "Кнопка: Редагувати фото",
+      "buttonLabels.photo_create": "Кнопка: Створити фото",
+      "buttonLabels.photo_ai_prompt": "Кнопка: AI промт для фото",
+      "buttonLabels.photo_saved_prompts": "Кнопка: Мої промти (фото)",
+      "buttonLabels.video_seedance": "Кнопка: Seedance",
+      "buttonLabels.video_kling": "Кнопка: Kling",
+      "buttonLabels.video_ai_prompt": "Кнопка: AI промт для відео",
+      "buttonLabels.video_saved_prompts": "Кнопка: Мої промти (відео)",
+      "buttonLabels.infographic_png": "Кнопка: Інфографіка PNG",
+      "buttonLabels.infographic_svg": "Кнопка: SVG логотип",
+      "buttonLabels.back": "Кнопка: Назад",
+      "buttonLabels.back_photo": "Кнопка: Назад до фото",
+      "buttonLabels.back_video": "Кнопка: Назад до відео"
+    };
+
     const CONTENT_SKIP_KEYS = new Set([
       "promptLibrary",
       "promptCategories",
       "chatgptTrendLibrary",
       "styleLibrary",
       "dynamicStyleLibrary",
+      "buttonLabels",
+      "buttonHints",
       "welcomePhoto",
       "infoPhoto",
       "helpPhoto",
       "pricesPhoto",
       "ideaPhoto",
-      "broadcastPhoto",
+      "broadcastPhoto"
     ]);
+
+    const BUTTON_HINT_KEYS = {
+      "buttonHints.main_photo": "Пояснення: Фото",
+      "buttonHints.main_video": "Пояснення: Відео",
+      "buttonHints.main_ai_studio": "Пояснення: AI Studio",
+      "buttonHints.main_infographics": "Пояснення: Інфографіки",
+      "buttonHints.photo_edit": "Пояснення: Редагувати фото",
+      "buttonHints.photo_create": "Пояснення: Створити фото",
+      "buttonHints.photo_ai_prompt": "Пояснення: AI промт для фото",
+      "buttonHints.video_seedance": "Пояснення: Seedance",
+      "buttonHints.video_kling": "Пояснення: Kling",
+      "buttonHints.video_ai_prompt": "Пояснення: AI промт для відео",
+      "buttonHints.infographic_png": "Пояснення: Інфографіка PNG",
+      "buttonHints.infographic_svg": "Пояснення: SVG логотип"
+    };
+
+    Object.assign(BUTTON_LABEL_KEYS, {
+      "buttonLabels.main_photo": "Коротка назва: Фото",
+      "buttonLabels.main_video": "Коротка назва: Відео",
+      "buttonLabels.main_ai_studio": "Коротка назва: AI Studio",
+      "buttonLabels.main_infographics": "Коротка назва: Інфографіки",
+      "buttonLabels.main_buy_promti": "Коротка назва: Купити Promti",
+      "buttonLabels.main_balance": "Коротка назва: Баланс",
+      "buttonLabels.main_prices": "Коротка назва: Ціни",
+      "buttonLabels.main_ideas": "Коротка назва: Ідея для промтів",
+      "buttonLabels.main_referral": "Коротка назва: Запросити друга",
+      "buttonLabels.main_info": "Коротка назва: Інформація",
+      "buttonLabels.main_help": "Коротка назва: Допомога",
+      "buttonLabels.main_support": "Коротка назва: Підтримка",
+      "buttonLabels.ai_studio_trends": "Коротка назва: Тренди ChatGPT",
+      "buttonLabels.ai_studio_library": "Коротка назва: Бібліотека стилів",
+      "buttonLabels.photo_edit": "Коротка назва: Редагувати фото",
+      "buttonLabels.photo_create": "Коротка назва: Створити фото",
+      "buttonLabels.photo_ai_prompt": "Коротка назва: AI промт для фото",
+      "buttonLabels.photo_saved_prompts": "Коротка назва: Мої промти (фото)",
+      "buttonLabels.video_seedance": "Коротка назва: Seedance",
+      "buttonLabels.video_kling": "Коротка назва: Kling",
+      "buttonLabels.video_ai_prompt": "Коротка назва: AI промт для відео",
+      "buttonLabels.video_saved_prompts": "Коротка назва: Мої промти (відео)",
+      "buttonLabels.infographic_png": "Коротка назва: Інфографіка PNG",
+      "buttonLabels.infographic_svg": "Коротка назва: SVG логотип",
+      "buttonLabels.back": "Коротка назва: Назад",
+      "buttonLabels.back_photo": "Коротка назва: Назад до фото",
+      "buttonLabels.back_video": "Коротка назва: Назад до відео"
+    });
 
     const SETTINGS_LABELS = {
       defaultImageProvider: "Default image provider",
@@ -384,7 +473,7 @@
       infographicPricePromti: "Infographic price",
       svgLogoPricePromti: "SVG logo price",
       supportLink: "Support link",
-      channelLink: "Channel link",
+      channelLink: "Channel link"
     };
 
     const SETTINGS_ORDER = [
@@ -396,7 +485,7 @@
       "infographicPricePromti",
       "svgLogoPricePromti",
       "supportLink",
-      "channelLink",
+      "channelLink"
     ];
 
     const loginWrap = document.getElementById("loginWrap");
@@ -423,12 +512,84 @@
       node.className = "status";
     }
 
+    function setText(selector, text) {
+      const node = document.querySelector(selector);
+      if (node) node.textContent = text;
+    }
+
+    function normalizeStaticUiText() {
+      setText("#loginForm .title p", "Mobile-first панель для керування static styles, dynamic styles, presets, OpenAI tools, контентом і аналітикою.");
+      const loginLabels = document.querySelectorAll("#loginForm label.field");
+      if (loginLabels[0] && loginLabels[0].childNodes[0]) loginLabels[0].childNodes[0].textContent = "Логін";
+      if (loginLabels[1] && loginLabels[1].childNodes[0]) loginLabels[1].childNodes[0].textContent = "Пароль";
+      setText("#loginForm button[type='submit']", "Увійти");
+
+      setText(".toolbar .title p", "Керуй ботом з телефона без редагування JSON і без входу в код.");
+      setText("#refreshButton", "Оновити");
+      setText("#logoutButton", "Вийти");
+
+      document.querySelectorAll(".nav-btn").forEach((button) => {
+        const map = {
+          static: "📸 Static photo styles",
+          dynamic: "🔮 Dynamic photo styles",
+          video: "🎬 Video presets",
+          openai: "🧩 OpenAI tools",
+          content: "🔗 Content & Links",
+          analytics: "📊 Analytics",
+          settings: "⚙️ Settings",
+        };
+        if (map[button.dataset.section]) button.textContent = map[button.dataset.section];
+      });
+
+      setText("#section-static h3", "📸 Static photo styles");
+      setText("#section-static .title p", "Керує `content.promptLibrary`.");
+      setText("#createStaticButton", "➕ Створити static style");
+      setText("#section-dynamic h3", "🔮 Dynamic photo styles");
+      setText("#section-dynamic .title p", "Серії типу zodiac / archetypes / collections з variants усередині.");
+      setText("#createDynamicButton", "➕ Створити серію");
+      setText("#section-video h3", "🎬 Video presets");
+      setText("#section-video .title p", "Окремі presets для Seedance, Kling та інших video models.");
+      setText("#createVideoButton", "➕ Створити video preset");
+      setText("#section-openai h3", "🧩 OpenAI tools");
+      setText("#section-openai .title p", "Окремі пресети тільки для інфографік та SVG, без змішування з photo styles.");
+      setText("#createToolButton", "➕ Створити OpenAI preset");
+      setText("#section-content h3", "🔗 Content & Links");
+      setText("#section-content .title p", "Тут можна редагувати тексти, CTA, посилання, короткі назви кнопок і пояснення для кнопок.");
+      setText("#saveContentButton", "💾 Зберегти контент");
+      setText("#section-analytics h3", "📊 Analytics");
+      setText("#section-analytics .title p", "Зведення по static styles, dynamic series, variants, моделях і провайдерах.");
+      setText("#section-settings h3", "⚙️ Settings");
+      setText("#section-settings .title p", "Ключові параметри без потреби редагувати код напряму.");
+      setText("#saveSettingsButton", "💾 Зберегти settings");
+    }
+
+    normalizeStaticUiText();
+
     function normalizeId(text) {
       return String(text || "")
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9_-]+/g, "_")
         .replace(/^_+|_+$/g, "");
+    }
+
+    function listFromTextarea(value) {
+      return String(value || "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+
+    function appendLinesToTextarea(textarea, lines, limit = 10) {
+      const current = listFromTextarea(textarea.value);
+      const merged = [...current];
+      for (const line of lines) {
+        if (!line || merged.includes(line)) continue;
+        if (merged.length >= limit) break;
+        merged.push(line);
+      }
+      textarea.value = merged.join("\n");
+      return merged.length;
     }
 
     function getRequestedSection() {
@@ -481,19 +642,21 @@
       return result.imageUrl;
     }
 
+    async function uploadManyImages(fileList, limit = 10) {
+      const files = Array.from(fileList || []).slice(0, limit);
+      const urls = [];
+      for (const file of files) {
+        urls.push(await uploadImage(file));
+      }
+      return urls;
+    }
+
     function collectFormData(root) {
       const data = {};
       root.querySelectorAll("input[name], textarea[name], select[name]").forEach((field) => {
         data[field.name] = field.value;
       });
       return data;
-    }
-
-    function listFromTextarea(value) {
-      return String(value || "")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
     }
 
     function renderStaticList() {
@@ -515,9 +678,11 @@
             </div>
           </div>
           ${item.previewImage ? `<img class="preview" src="${escapeHtml(item.previewImage)}" alt="${escapeHtml(item.title)}">` : ""}
+          ${(item.exampleImages || []).length ? `<div class="example-grid">${item.exampleImages.slice(0, 6).map((url) => `<img src="${escapeHtml(url)}" alt="example">`).join("")}</div>` : ""}
           <div class="badges">
             <span class="badge">${item.isActive ? "active" : "inactive"}</span>
             <span class="badge">${item.isTrending ? "trending" : "regular"}</span>
+            <span class="badge">examples ${(item.exampleImages || []).length}/10</span>
             <span class="badge">clicks ${Number(item.stats?.clicks || 0)}</span>
             <span class="badge">gen ${Number(item.stats?.generations || 0)}</span>
             <span class="badge">buy ${Number(item.stats?.purchases || 0)}</span>
@@ -552,14 +717,21 @@
           <label class="field">Sort order<input name="sortOrder" type="number" value="${Number(item.sortOrder || 0)}"></label>
         </div>
         <label class="field">Preview image URL<input name="previewImage" value="${escapeHtml(item.previewImage || "")}"></label>
-        <label class="field">Example images URLs (по одному в рядок)<textarea name="exampleImages">${escapeHtml((item.exampleImages || []).join("\n"))}</textarea></label>
+        <label class="field">
+          Example images URLs
+          <textarea name="exampleImages">${escapeHtml((item.exampleImages || []).join("\n"))}</textarea>
+          <span class="helper">Можна вставляти по одному URL/file_id в рядок або додати через upload нижче.</span>
+        </label>
+        <div class="actions">
+          <label class="button button-secondary button-small">🖼 Upload preview<input type="file" data-upload-preview="static" accept="image/*" class="hidden"></label>
+          <label class="button button-secondary button-small">📚 Upload examples<input type="file" data-upload-examples="static" accept="image/*" multiple class="hidden"></label>
+        </div>
         <div class="split">
           <label class="field">Active<select name="isActive"><option value="true" ${item.isActive !== false ? "selected" : ""}>ON</option><option value="false" ${item.isActive === false ? "selected" : ""}>OFF</option></select></label>
           <label class="field">Trending<select name="isTrending"><option value="false" ${!item.isTrending ? "selected" : ""}>OFF</option><option value="true" ${item.isTrending ? "selected" : ""}>ON</option></select></label>
         </div>
         <div class="actions">
           <button class="button button-primary" data-save-static="${escapeHtml(item.id || "new")}">💾 Зберегти</button>
-          <label class="button button-secondary button-small">🖼 Upload preview<input type="file" data-upload-preview="static" accept="image/*" class="hidden"></label>
           <button class="button button-secondary button-small" data-close-static-editor>Закрити</button>
         </div>
       `;
@@ -590,10 +762,12 @@
             </div>
           </div>
           ${item.previewImage ? `<img class="preview" src="${escapeHtml(item.previewImage)}" alt="${escapeHtml(item.title)}">` : ""}
+          ${(item.exampleImages || []).length ? `<div class="example-grid">${item.exampleImages.slice(0, 6).map((url) => `<img src="${escapeHtml(url)}" alt="example">`).join("")}</div>` : ""}
           <div class="badges">
             <span class="badge">${item.isActive ? "active" : "inactive"}</span>
             <span class="badge">${item.isTrending ? "trending" : "regular"}</span>
             <span class="badge">variants ${Number((item.variants || []).length)}</span>
+            <span class="badge">examples ${(item.exampleImages || []).length}/10</span>
             <span class="badge">clicks ${Number(item.stats?.clicks || 0)}</span>
             <span class="badge">gen ${Number(item.stats?.generations || 0)}</span>
           </div>
@@ -618,6 +792,7 @@
             </div>
             <div class="badges">
               <span class="badge">${variant.isActive ? "active" : "inactive"}</span>
+              <span class="badge">examples ${(variant.exampleImages || []).length}/10</span>
               <span class="badge">gen ${Number(variant.stats?.generations || 0)}</span>
             </div>
           </div>
@@ -627,7 +802,14 @@
           </div>
           <label class="field">Variant prompt<textarea data-variant-prompt="${escapeHtml(variant.id)}">${escapeHtml(variant.variantPrompt || "")}</textarea></label>
           <label class="field">Preview URL<input data-variant-preview="${escapeHtml(variant.id)}" value="${escapeHtml(variant.previewImage || "")}"></label>
-          <label class="field">Examples URLs<textarea data-variant-examples="${escapeHtml(variant.id)}">${escapeHtml((variant.exampleImages || []).join("\n"))}</textarea></label>
+          <label class="field">
+            Examples URLs
+            <textarea data-variant-examples="${escapeHtml(variant.id)}">${escapeHtml((variant.exampleImages || []).join("\n"))}</textarea>
+          </label>
+          <div class="actions">
+            <label class="button button-secondary button-small">🖼 Upload preview<input type="file" data-upload-variant-preview="${escapeHtml(variant.id)}" accept="image/*" class="hidden"></label>
+            <label class="button button-secondary button-small">📚 Upload examples<input type="file" data-upload-variant-examples="${escapeHtml(variant.id)}" accept="image/*" multiple class="hidden"></label>
+          </div>
           <div class="actions">
             <button class="button button-primary button-small" data-save-variant="${escapeHtml(item.id)}:${escapeHtml(variant.id)}">💾 Зберегти variant</button>
             <button class="button button-secondary button-small" data-toggle-variant="${escapeHtml(item.id)}:${escapeHtml(variant.id)}">${variant.isActive ? "⛔ Вимкнути" : "✅ Увімкнути"}</button>
@@ -653,11 +835,18 @@
         </div>
         <div class="split">
           <label class="field">Preview image URL<input name="previewImage" value="${escapeHtml(item.previewImage || "")}"></label>
-          <label class="field">Examples URLs<textarea name="exampleImages">${escapeHtml((item.exampleImages || []).join("\n"))}</textarea></label>
+          <label class="field">
+            Examples URLs
+            <textarea name="exampleImages">${escapeHtml((item.exampleImages || []).join("\n"))}</textarea>
+            <span class="helper">Можна вставити вручну або додати через upload.</span>
+          </label>
+        </div>
+        <div class="actions">
+          <label class="button button-secondary button-small">🖼 Upload preview<input type="file" data-upload-preview="dynamic" accept="image/*" class="hidden"></label>
+          <label class="button button-secondary button-small">📚 Upload examples<input type="file" data-upload-examples="dynamic" accept="image/*" multiple class="hidden"></label>
         </div>
         <div class="actions">
           <button class="button button-primary" data-save-dynamic="${escapeHtml(item.id || "new")}">💾 Зберегти серію</button>
-          <label class="button button-secondary button-small">🖼 Upload preview<input type="file" data-upload-preview="dynamic" accept="image/*" class="hidden"></label>
           <button class="button button-secondary button-small" data-add-variant="${escapeHtml(item.id || "")}" ${item.id ? "" : "disabled"}>➕ Додати variant</button>
           <button class="button button-secondary button-small" data-close-dynamic-editor>Закрити</button>
         </div>
@@ -755,6 +944,7 @@
     function renderContent() {
       const wrap = document.getElementById("contentFields");
       wrap.innerHTML = "";
+
       getEditableContentEntries().forEach(([key, value]) => {
         const field = document.createElement("label");
         field.className = "field";
@@ -764,6 +954,83 @@
         `;
         wrap.appendChild(field);
       });
+
+      const buttonGroup = document.createElement("div");
+      buttonGroup.className = "card";
+      buttonGroup.style.padding = "16px";
+      buttonGroup.innerHTML = `<div class="title"><h3>Тексти Telegram-кнопок</h3><p>Тут можна перейменувати кнопки в самому боті без зміни коду.</p></div>`;
+      const inner = document.createElement("div");
+      inner.className = "grid";
+      inner.style.marginTop = "12px";
+
+      Object.entries(BUTTON_LABEL_KEYS).forEach(([key, label]) => {
+        const value = state.dashboard.content?.buttonLabels?.[key.replace(/^buttonLabels\./, "")] || "";
+        const field = document.createElement("label");
+        field.className = "field";
+        field.innerHTML = `
+          <span>${escapeHtml(label)}</span>
+          <input data-content-key="${escapeHtml(key)}" value="${escapeHtml(value)}">
+        `;
+        inner.appendChild(field);
+      });
+      buttonGroup.appendChild(inner);
+      wrap.appendChild(buttonGroup);
+    }
+
+    function renderContent() {
+      const wrap = document.getElementById("contentFields");
+      wrap.innerHTML = "";
+
+      getEditableContentEntries().forEach(([key, value]) => {
+        const field = document.createElement("label");
+        field.className = "field";
+        field.innerHTML = `
+          <span>${escapeHtml(CONTENT_LABELS[key] || key)}</span>
+          <textarea data-content-key="${escapeHtml(key)}">${escapeHtml(value)}</textarea>
+        `;
+        wrap.appendChild(field);
+      });
+
+      const buttonGroup = document.createElement("div");
+      buttonGroup.className = "card";
+      buttonGroup.style.padding = "16px";
+      buttonGroup.innerHTML = `<div class="title"><h3>Тексти Telegram-кнопок</h3><p>Тут можна окремо змінювати коротку назву кнопки і пояснення, яке бот показує після натискання.</p></div>`;
+
+      const labelsWrap = document.createElement("div");
+      labelsWrap.className = "grid";
+      labelsWrap.style.marginTop = "12px";
+      labelsWrap.innerHTML = `<div class="title"><h4>Короткі назви кнопок</h4><p>Це саме текст на кнопці.</p></div>`;
+
+      Object.entries(BUTTON_LABEL_KEYS).forEach(([key, label]) => {
+        const value = state.dashboard.content?.buttonLabels?.[key.replace(/^buttonLabels\./, "")] || "";
+        const field = document.createElement("label");
+        field.className = "field";
+        field.innerHTML = `
+          <span>${escapeHtml(label)}</span>
+          <input data-content-key="${escapeHtml(key)}" value="${escapeHtml(value)}">
+        `;
+        labelsWrap.appendChild(field);
+      });
+
+      const hintsWrap = document.createElement("div");
+      hintsWrap.className = "grid";
+      hintsWrap.style.marginTop = "18px";
+      hintsWrap.innerHTML = `<div class="title"><h4>Пояснення кнопок у повідомленні</h4><p>Цей текст бот покаже після натискання кнопки, щоб було зрозуміло, що це і для чого.</p></div>`;
+
+      Object.entries(BUTTON_HINT_KEYS).forEach(([key, label]) => {
+        const value = state.dashboard.content?.buttonHints?.[key.replace(/^buttonHints\./, "")] || "";
+        const field = document.createElement("label");
+        field.className = "field";
+        field.innerHTML = `
+          <span>${escapeHtml(label)}</span>
+          <textarea data-content-key="${escapeHtml(key)}">${escapeHtml(value)}</textarea>
+        `;
+        hintsWrap.appendChild(field);
+      });
+
+      buttonGroup.appendChild(labelsWrap);
+      buttonGroup.appendChild(hintsWrap);
+      wrap.appendChild(buttonGroup);
     }
 
     function renderSettings() {
@@ -818,6 +1085,7 @@
     }
 
     function renderAll() {
+      normalizeStaticUiText();
       renderStaticList();
       renderDynamicList();
       renderSimpleList("videoList", state.dashboard.videoPresets || [], "video");
@@ -982,15 +1250,16 @@
           const series = state.dashboard.dynamicStyles.find((item) => item.id === seriesId);
           const variant = (series?.variants || []).find((item) => item.id === variantId);
           if (!series || !variant) throw new Error("VARIANT_NOT_FOUND");
+          const escId = CSS.escape(variantId);
           await api(`/api/admin/dynamic-styles/${seriesId}/variants/${variantId}`, {
             method: "PUT",
             body: JSON.stringify({
               ...variant,
-              title: document.querySelector(`[data-variant-title="${CSS.escape(variantId)}"]`)?.value || variant.title,
-              subtitle: document.querySelector(`[data-variant-subtitle="${CSS.escape(variantId)}"]`)?.value || variant.subtitle,
-              variantPrompt: document.querySelector(`[data-variant-prompt="${CSS.escape(variantId)}"]`)?.value || variant.variantPrompt,
-              previewImage: document.querySelector(`[data-variant-preview="${CSS.escape(variantId)}"]`)?.value || variant.previewImage,
-              exampleImages: listFromTextarea(document.querySelector(`[data-variant-examples="${CSS.escape(variantId)}"]`)?.value || ""),
+              title: document.querySelector(`[data-variant-title="${escId}"]`)?.value || variant.title,
+              subtitle: document.querySelector(`[data-variant-subtitle="${escId}"]`)?.value || variant.subtitle,
+              variantPrompt: document.querySelector(`[data-variant-prompt="${escId}"]`)?.value || variant.variantPrompt,
+              previewImage: document.querySelector(`[data-variant-preview="${escId}"]`)?.value || variant.previewImage,
+              exampleImages: listFromTextarea(document.querySelector(`[data-variant-examples="${escId}"]`)?.value || ""),
             }),
           });
           await refreshDashboard();
@@ -1064,6 +1333,7 @@
         if (target.dataset.closeSimpleEditor) {
           if (target.dataset.closeSimpleEditor === "video") document.getElementById("videoEditor").classList.remove("active");
           if (target.dataset.closeSimpleEditor === "tool") document.getElementById("toolEditor").classList.remove("active");
+          return;
         }
       } catch (error) {
         setStatus(globalStatus, `Помилка: ${error.message}`, "error");
@@ -1071,16 +1341,52 @@
     });
 
     document.body.addEventListener("change", async (event) => {
-      const mode = event.target.dataset.uploadPreview;
-      if (!mode) return;
-      const file = event.target.files?.[0];
-      if (!file) return;
+      const target = event.target;
       try {
-        const url = await uploadImage(file);
-        const container = mode === "static" ? document.getElementById("staticEditor") : document.getElementById("dynamicEditor");
-        const input = container.querySelector('input[name="previewImage"]');
-        if (input) input.value = url;
-        setStatus(globalStatus, "Preview завантажено.");
+        if (target.dataset.uploadPreview) {
+          const file = target.files?.[0];
+          if (!file) return;
+          const url = await uploadImage(file);
+          const editorId = target.dataset.uploadPreview === "static" ? "staticEditor" : "dynamicEditor";
+          const input = document.getElementById(editorId).querySelector('input[name="previewImage"]');
+          if (input) input.value = url;
+          setStatus(globalStatus, "Preview завантажено.");
+          return;
+        }
+
+        if (target.dataset.uploadExamples) {
+          const files = target.files || [];
+          if (!files.length) return;
+          const urls = await uploadManyImages(files, 10);
+          const editorId = target.dataset.uploadExamples === "static" ? "staticEditor" : "dynamicEditor";
+          const textarea = document.getElementById(editorId).querySelector('textarea[name="exampleImages"]');
+          if (textarea) {
+            const count = appendLinesToTextarea(textarea, urls, 10);
+            setStatus(globalStatus, `Додано examples. Зараз: ${count}/10`);
+          }
+          return;
+        }
+
+        if (target.dataset.uploadVariantPreview) {
+          const file = target.files?.[0];
+          if (!file) return;
+          const url = await uploadImage(file);
+          const input = document.querySelector(`[data-variant-preview="${CSS.escape(target.dataset.uploadVariantPreview)}"]`);
+          if (input) input.value = url;
+          setStatus(globalStatus, "Preview variant завантажено.");
+          return;
+        }
+
+        if (target.dataset.uploadVariantExamples) {
+          const files = target.files || [];
+          if (!files.length) return;
+          const urls = await uploadManyImages(files, 10);
+          const textarea = document.querySelector(`[data-variant-examples="${CSS.escape(target.dataset.uploadVariantExamples)}"]`);
+          if (textarea) {
+            const count = appendLinesToTextarea(textarea, urls, 10);
+            setStatus(globalStatus, `Додано variant examples. Зараз: ${count}/10`);
+          }
+        }
       } catch (error) {
         setStatus(globalStatus, `Upload error: ${error.message}`, "error");
       }
@@ -1088,10 +1394,10 @@
 
     document.getElementById("saveContentButton").addEventListener("click", async () => {
       try {
-        for (const textarea of document.querySelectorAll("[data-content-key]")) {
-          await api(`/api/admin/content/${textarea.dataset.contentKey}`, {
+        for (const field of document.querySelectorAll("[data-content-key]")) {
+          await api(`/api/admin/content/${field.dataset.contentKey}`, {
             method: "PUT",
-            body: JSON.stringify({ value: textarea.value }),
+            body: JSON.stringify({ value: field.value }),
           });
         }
         await refreshDashboard();

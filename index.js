@@ -96,6 +96,31 @@ function sanitizeTextTree(value) {
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeTextTree(item)]));
 }
 
+function getNestedValue(source, pathValue, fallback = undefined) {
+  const segments = String(pathValue || "").split(".").filter(Boolean);
+  let current = source;
+  for (const segment of segments) {
+    if (!current || typeof current !== "object" || !(segment in current)) return fallback;
+    current = current[segment];
+  }
+  return current === undefined ? fallback : current;
+}
+
+function setNestedValue(target, pathValue, nextValue) {
+  const segments = String(pathValue || "").split(".").filter(Boolean);
+  if (!segments.length) return target;
+  let current = target;
+  for (let index = 0; index < segments.length - 1; index += 1) {
+    const segment = segments[index];
+    if (!current[segment] || typeof current[segment] !== "object" || Array.isArray(current[segment])) {
+      current[segment] = {};
+    }
+    current = current[segment];
+  }
+  current[segments[segments.length - 1]] = nextValue;
+  return target;
+}
+
 function normalizeTelegramPayload(value) {
   return sanitizeTextTree(value);
 }
@@ -160,6 +185,9 @@ patchTelegramApi();
 
 bot.use(async (ctx, next) => {
   patchTelegramContext(ctx);
+  if (ctx.message && typeof ctx.message.text === "string") {
+    ctx.message.text = normalizeIncomingButtonText(ctx.message.text);
+  }
   await next();
 });
 
@@ -1102,6 +1130,87 @@ const DEFAULT_PROMPTS = sanitizeTextTree({
   kling:    "cinematic video, fluid motion, high quality animation",
 });
 
+const DEFAULT_BUTTON_LABELS = sanitizeTextTree({
+  main_photo: "🖼 Фото",
+  main_video: "🎬 Відео",
+  main_ai_studio: "🧠 AI Studio",
+  main_infographics: "🧾 Інфографіки",
+  main_buy_promti: "✨ Купити Promti ✨",
+  main_balance: "📊 Баланс",
+  main_prices: "💰 Ціни",
+  main_ideas: "💡 Ідея для промтів",
+  main_referral: "👫 Запросити друга",
+  main_info: "ℹ️ Інформація",
+  main_help: "❓ Допомога",
+  main_support: "🆘 Підтримка",
+  ai_studio_trends: "🔥 Тренди ChatGPT",
+  ai_studio_library: "📚 Бібліотека стилів",
+  photo_edit: "🖼 Редагувати фото",
+  photo_create: "✨ Створити фото",
+  photo_ai_prompt: "🤖 AI промт для фото",
+  photo_saved_prompts: "⭐ Мої промти",
+  video_seedance: "🎬 Seedance",
+  video_kling: "🎥 Kling",
+  video_ai_prompt: "🤖 AI промт для відео",
+  video_saved_prompts: "⭐ Мої промти",
+  infographic_png: "🧾 Інфографіка PNG",
+  infographic_svg: "🔷 SVG логотип",
+  back: "↩️ Назад",
+  back_photo: "↩️ Назад до фото",
+  back_video: "↩️ Назад до відео",
+});
+
+const DEFAULT_BUTTON_HINTS = sanitizeTextTree({
+  main_photo:
+    "🖼 Меню фото\n\n" +
+    "Обери режим:\n" +
+    "🖼 Редагувати фото — надішли своє фото + промт, змінимо стиль\n" +
+    "✨ Створити фото — напиши ідею, створю фото з нуля\n" +
+    "🤖 AI промт — підкажу промт на основі твого фото\n\n" +
+    "💡 Ідеї: t.me/promteamai",
+  main_video:
+    "🎬 Меню відео\n\n" +
+    "🎬 Seedance — реалістична анімація фото\n" +
+    "🎥 Kling — більш кінематографічний результат\n\n" +
+    "💡 Ідеї: t.me/promteamai",
+  main_ai_studio:
+    "🧠 AI Studio\n\n" +
+    "Тут зібрані готові ідеї для генерацій:\n" +
+    "🔥 Тренди ChatGPT — вірусні формати та ідеї\n" +
+    "📚 Бібліотека стилів — готові фото-стилі для селфі та портретів",
+  main_infographics:
+    "🧾 Інфографіки\n\n" +
+    "Обери, що хочеш створити:\n" +
+    "🧾 Інфографіка PNG — готовий візуал для поста, реклами або каруселі\n" +
+    "🔷 SVG логотип — чистий масштабований логотип у SVG",
+  photo_edit:
+    "✏️ Режим редагування фото\n\n" +
+    "Напиши, як хочеш змінити фото, потім надішли селфі.\n" +
+    "Приклад: beauty editorial, glossy skin",
+  photo_create:
+    "✨ Режим створення фото\n\n" +
+    "Напиши, що хочеш згенерувати — я створю зображення з нуля.\n" +
+    "Приклад: portrait of woman in Renaissance style, cinematic lighting",
+  photo_ai_prompt:
+    "🤖 AI промт для фото\n\n" +
+    "Надішли фото, і я підготую короткий промт для генерації.",
+  video_seedance:
+    "🎬 Seedance\n\n" +
+    "Ця модель добре підходить для природного руху, волосся, погляду та міміки.",
+  video_kling:
+    "🎥 Kling\n\n" +
+    "Ця модель краще підходить для кінематографічної анімації та драматичнішого руху.",
+  video_ai_prompt:
+    "🤖 AI промт для відео\n\n" +
+    "Надішли фото або коротке відео, і я підготую короткий промт для анімації.",
+  infographic_png:
+    "🧾 Інфографіка PNG\n\n" +
+    "Надішли текстовий опис або фото з підписом. Я зберу з цього готову інфографіку.",
+  infographic_svg:
+    "🔷 SVG логотип\n\n" +
+    "Напиши короткий бриф: назва бренду, сфера, стиль, кольори, символи. Я поверну чистий SVG-файл.",
+});
+
 const DEFAULT_CONTENT = sanitizeTextTree({
   welcomeText:  "Привіт ✨\n\nОбери що хочеш зробити:\n🖼 Фото — генерація фото по стилях\n🎬 Відео — анімація фото у відео\n\n🎁 3 Promti ✨ безкоштовно при старті",
   infoText:     "PROMTI AI Bot\n\n🖼 Фото:\n10/99грн · 20/179грн · 30/249грн · 50/399грн\n\n🎬 Seedance:\n3/199грн · 5/349грн · 10/599грн\n\n🎥 Kling:\n3/299грн · 5/499грн · 10/899грн",
@@ -1110,6 +1219,8 @@ const DEFAULT_CONTENT = sanitizeTextTree({
   ideaText:     "💡 Ідеї для промтів:\n\n🖼 Фото:\n• \"portrait in Renaissance style\"\n• \"cyberpunk neon portrait\"\n\n🎬 Відео:\n• \"hair gently flowing in wind\"\n• \"eyes slowly opening, cinematic\"",
   support_link: "https://t.me/promteamai?direct",
   pricesText:   "💰 PROMTI AI — Ціни\n\n💎 Валюта: Promti ✨\n1 Promti ✨ = від 6.7 до 9.9 грн\n\n📦 Пакети:\n10 Promti ✨ — 99 грн (9.9 грн/✨)\n30 Promti ✨ — 249 грн (8.3 грн/✨)\n60 Promti ✨ — 449 грн (7.5 грн/✨)\n150 Promti ✨ — 999 грн (6.7 грн/✨) 🔥\n\n💰 Ціни послуг:\n🖼 Фото — 1 Promti ✨\n🎬 Seedance відео — 5 Promti ✨\n🎥 Kling відео — 8 Promti ✨\n\n🎁 3 Promti ✨ безкоштовно при реєстрації!\n👫 +5 Promti ✨ за кожного друга який оплатить",
+  buttonLabels: DEFAULT_BUTTON_LABELS,
+  buttonHints: DEFAULT_BUTTON_HINTS,
   promptLibrary: {},
   promptCategories: {},
   chatgptTrendLibrary: {},
@@ -1244,6 +1355,14 @@ let openAiTools = loadJson(OPENAI_TOOLS_PATH, DEFAULT_OPENAI_TOOLS);
 
 prompts = sanitizeTextTree({ ...DEFAULT_PROMPTS, ...prompts });
 content = sanitizeTextTree({ ...DEFAULT_CONTENT, ...content });
+content.buttonLabels = {
+  ...DEFAULT_BUTTON_LABELS,
+  ...(content.buttonLabels && typeof content.buttonLabels === "object" && !Array.isArray(content.buttonLabels) ? content.buttonLabels : {}),
+};
+content.buttonHints = {
+  ...DEFAULT_BUTTON_HINTS,
+  ...(content.buttonHints && typeof content.buttonHints === "object" && !Array.isArray(content.buttonHints) ? content.buttonHints : {}),
+};
 if (!content.promptLibrary || typeof content.promptLibrary !== "object" || Array.isArray(content.promptLibrary)) content.promptLibrary = {};
 if (!content.promptCategories || typeof content.promptCategories !== "object" || Array.isArray(content.promptCategories)) content.promptCategories = {};
 if (!content.chatgptTrendLibrary || typeof content.chatgptTrendLibrary !== "object" || Array.isArray(content.chatgptTrendLibrary)) content.chatgptTrendLibrary = {};
@@ -3690,48 +3809,67 @@ function buildAnalyticsPayload() {
   };
 }
 
+function getButtonLabel(key, fallback = "") {
+  const stored = getNestedValue(content, `buttonLabels.${key}`, "");
+  return typeof stored === "string" && stored.trim() ? stored.trim() : (DEFAULT_BUTTON_LABELS[key] || fallback);
+}
+
+function getButtonHint(key, fallback = "") {
+  const stored = getNestedValue(content, `buttonHints.${key}`, "");
+  return typeof stored === "string" && stored.trim() ? stored.trim() : (DEFAULT_BUTTON_HINTS[key] || fallback);
+}
+
+function normalizeIncomingButtonText(text = "") {
+  if (typeof text !== "string" || !text.trim()) return text;
+  for (const [key, canonical] of Object.entries(DEFAULT_BUTTON_LABELS)) {
+    const configured = getButtonLabel(key, canonical);
+    if (text === configured) return canonical;
+  }
+  return text;
+}
+
 // ─── МЕНЮ ─────────────────────────────────────────────────────────────────────
 const mainMenu  = () => Markup.keyboard([
-  ["🖼 Фото", "🎬 Відео"],
-  ["🧠 AI Studio"],
-  ["🧾 Інфографіки"],
-  ["✨ Купити Promti ✨"],
-  ["📊 Баланс", "💰 Ціни"],
-  ["💡 Ідея для промтів", "👫 Запросити друга"],
-  ["ℹ️ Інформація", "❓ Допомога"],
-  ["🆘 Підтримка"]
+  [getButtonLabel("main_photo"), getButtonLabel("main_video")],
+  [getButtonLabel("main_ai_studio")],
+  [getButtonLabel("main_infographics")],
+  [getButtonLabel("main_buy_promti")],
+  [getButtonLabel("main_balance"), getButtonLabel("main_prices")],
+  [getButtonLabel("main_ideas"), getButtonLabel("main_referral")],
+  [getButtonLabel("main_info"), getButtonLabel("main_help")],
+  [getButtonLabel("main_support")]
 ]).resize();
 const photoMenu = () => Markup.keyboard([
-  ["🖼 Редагувати фото", "✨ Створити фото"],
-  ["🤖 AI промт для фото", "⭐ Мої промти"],
-  ["📊 Баланс"],
-  ["↩️ Назад"]
+  [getButtonLabel("photo_edit"), getButtonLabel("photo_create")],
+  [getButtonLabel("photo_ai_prompt"), getButtonLabel("photo_saved_prompts")],
+  [getButtonLabel("main_balance")],
+  [getButtonLabel("back")]
 ]).resize();
 const videoMenu     = () => Markup.keyboard([
-  ["🎬 Seedance", "🎥 Kling"],
-  ["🤖 AI промт для відео", "⭐ Мої промти"],
-  ["📊 Баланс"],
-  ["↩️ Назад"]
+  [getButtonLabel("video_seedance"), getButtonLabel("video_kling")],
+  [getButtonLabel("video_ai_prompt"), getButtonLabel("video_saved_prompts")],
+  [getButtonLabel("main_balance")],
+  [getButtonLabel("back")]
 ]).resize();
 const aiStudioMenu = () => Markup.keyboard([
-  ["🔥 Тренди ChatGPT"],
-  ["📚 Бібліотека стилів"],
-  ["↩️ Назад"],
+  [getButtonLabel("ai_studio_trends")],
+  [getButtonLabel("ai_studio_library")],
+  [getButtonLabel("back")],
 ]).resize();
 const infographicMenu = () => Markup.keyboard([
-  ["🧾 Інфографіка PNG"],
-  ["🔷 SVG логотип"],
-  ["↩️ Назад"],
+  [getButtonLabel("infographic_png")],
+  [getButtonLabel("infographic_svg")],
+  [getButtonLabel("back")],
 ]).resize();
 const seedanceMenu  = () => Markup.keyboard([
   ["⚡ Авто анімація", "🎬 Анімація + промт"],
   ["🎥 Відео з тексту"],
-  ["↩️ Назад до відео"]
+  [getButtonLabel("back_video")]
 ]).resize();
 const klingMenu     = () => Markup.keyboard([
   ["⚡ Авто анімація", "🎬 Анімація + промт"],
   ["🎥 Відео з тексту"],
-  ["↩️ Назад до відео"]
+  [getButtonLabel("back_video")]
 ]).resize();
 const adminMenu       = () => Markup.keyboard([
   ["📊 Статус бота", "🌐 PROMTI Control"],
@@ -4848,14 +4986,7 @@ bot.hears("🖼 Фото", (ctx) => {
   clearPromptAttribution(ctx);
   ctx.session.mode = "photo";
   ctx.session.lastStateAt = Date.now();
-  return ctx.reply(
-    "🖼 Меню фото\n\n" +
-    "🖼 Редагувати фото — надішли своє фото + промт, змінимо стиль!\n" +
-    "✨ Створити фото — напиши промт, створю фото з нуля\n" +
-    "🤖 AI промт — аналізую твоє фото і пропоную промт\n\n" +
-    "💡 Ідеї: t.me/promteamai",
-    photoMenu()
-  );
+  return ctx.reply(getButtonHint("main_photo"), photoMenu());
 });
 bot.hears("🧠 AI Studio", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
@@ -4866,7 +4997,7 @@ bot.hears("🧠 AI Studio", (ctx) => {
     style_id: ctx.session?.currentPromptKey || ctx.session?.sourcePromptKey || getUser(ctx.from.id).sourcePromptKey || "",
     extra: { source: "main_menu" },
   });
-  return ctx.reply("🧠 AI Studio\n\nОбери, що хочеш відкрити:", aiStudioMenu());
+  return ctx.reply(getButtonHint("main_ai_studio"), aiStudioMenu());
 });
 bot.hears("📚 Бібліотека стилів", (ctx) => {
   const user = touchUser(ctx); ensureSession(ctx);
@@ -4903,7 +5034,7 @@ bot.hears("🎨 Трендові стилі", (ctx) => {
 });
 bot.hears("🧾 Інфографіки", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
-  return ctx.reply("🧾 Інфографіки\n\nОбери, що хочеш створити:", infographicMenu());
+  return ctx.reply(getButtonHint("main_infographics"), infographicMenu());
 });
 bot.hears("⭐ Мої промти", (ctx) => {
   const user = touchUser(ctx); ensureSession(ctx);
@@ -4928,10 +5059,7 @@ bot.hears("🧾 Інфографіка PNG", (ctx) => {
   ctx.session.infographicMode = "png";
   ctx.session.awaitingInfographicInput = true;
   touchSessionState(ctx);
-  return ctx.reply(
-    "🧾 Інфографіка PNG\n\nНадішли текстовий опис або фото з підписом. Я зберу з цього готову інфографіку.",
-    infographicMenu()
-  );
+  return ctx.reply(getButtonHint("infographic_png"), infographicMenu());
 });
 bot.hears("🔷 SVG логотип", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
@@ -4940,10 +5068,7 @@ bot.hears("🔷 SVG логотип", (ctx) => {
   ctx.session.infographicMode = "svg";
   ctx.session.awaitingInfographicInput = true;
   touchSessionState(ctx);
-  return ctx.reply(
-    "🔷 SVG логотип\n\nНапиши короткий бриф: назва бренду, сфера, стиль, кольори, символи. Я поверну чистий SVG-файл.",
-    infographicMenu()
-  );
+  return ctx.reply(getButtonHint("infographic_svg"), infographicMenu());
 });
 bot.hears("🎬 Відео", (ctx) => {
   const cfg = loadSettings();
@@ -4952,13 +5077,7 @@ bot.hears("🎬 Відео", (ctx) => {
   clearPromptAttribution(ctx);
   ctx.session.mode = "video";
   ctx.session.lastStateAt = Date.now();
-  return ctx.reply(
-    "🎬 Меню відео\n\n" +
-    "🎬 Seedance — ByteDance модель, реалістична анімація\n" +
-    "🎥 Kling — кінематографічна якість відео\n\n" +
-    "💡 Ідеї: t.me/promteamai",
-    videoMenu()
-  );
+  return ctx.reply(getButtonHint("main_video"), videoMenu());
 });
 
 // ─── ФОТО РЕЖИМИ ──────────────────────────────────────────────────────────────
@@ -4971,10 +5090,7 @@ bot.hears("🖼 Редагувати фото", (ctx) => {
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   touchSessionState(ctx);
-  return ctx.reply(
-    "✏️ Режим редагування фото\n\nНапиши промт як хочеш змінити фото, потім надішли своє фото.\n\nПриклад: \"beauty editorial, glossy skin\"\n\n💡 Ідеї: t.me/promteamai",
-    photoMenu()
-  );
+  return ctx.reply(getButtonHint("photo_edit"), photoMenu());
 });
 
 bot.hears("✨ Створити фото", (ctx) => {
@@ -4986,10 +5102,7 @@ bot.hears("✨ Створити фото", (ctx) => {
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   touchSessionState(ctx);
-  return ctx.reply(
-    "✨ Режим створення фото\n\nНапиши що хочеш згенерувати — фото буде створено з нуля.\n\nПриклад: \"portrait of woman in Renaissance style, cinematic lighting\"\n\n💡 Ідеї: t.me/promteamai",
-    photoMenu()
-  );
+  return ctx.reply(getButtonHint("photo_create"), photoMenu());
 });
 
 // ─── ВІДЕО МОДЕЛІ ─────────────────────────────────────────────────────────────
@@ -5247,7 +5360,7 @@ bot.hears("🤖 AI промт для фото", (ctx) => {
   ctx.session.mode = "photo"; ctx.session.style = null;
   ctx.session.awaitingAiPrompt = "photo"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   touchSessionState(ctx);
-  return ctx.reply("🤖 Надішли фото — я запропоную промт для генерації.", photoMenu());
+  return ctx.reply(getButtonHint("photo_ai_prompt", "🤖 Надішли фото — я запропоную промт для генерації."), photoMenu());
 });
 
 bot.hears("🤖 AI промт для відео", (ctx) => {
@@ -5267,7 +5380,7 @@ bot.hears("🤖 AI промт для відео", (ctx) => {
   ctx.session.awaitingAiPrompt = "video"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   touchSessionState(ctx);
   const label = ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance";
-  return ctx.reply(`🤖 AI промт для відео (${label})\n\nНадішли:\n📸 Фото — опишу рух\n🎬 Відео до 10 сек — проаналізую рух\n\nПромт: макс. 10 слів.`, videoMenu());
+  return ctx.reply(getButtonHint("video_ai_prompt", `🤖 AI промт для відео (${label})\n\nНадішли:\n📸 Фото — опишу рух\n🎬 Відео до 10 сек — проаналізую рух\n\nПромт: макс. 10 слів.`), videoMenu());
 });
 
 // ─── ПОКУПКА ──────────────────────────────────────────────────────────────────
@@ -7046,7 +7159,7 @@ app.put("/api/admin/content/:key", requireAdminAuth, (req, res) => {
     return res.json({ ok: true, key: rawKey, value });
   }
   backupJsonFile(CONTENT_PATH, "content-admin");
-  content[rawKey] = value;
+  setNestedValue(content, rawKey, value);
   saveContent();
   return res.json({ ok: true, key: rawKey, value });
 });

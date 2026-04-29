@@ -1603,6 +1603,7 @@ function resetState(ctx) {
   ctx.session.awaitingPromptPreviewKey = null;
   ctx.session.awaitingPromptExamplesKey = null;
   ctx.session.awaitingChatgptPreviewKey = null;
+  ctx.session.selectedPromptExampleIndex = null;
   ctx.session.currentPromptKey      = null;
   ctx.session.sourcePromptKey       = null;
   ctx.session.currentDynamicSeriesId = null;
@@ -1765,6 +1766,7 @@ function cleanupSessionsStorage(ttlMs) {
       "awaitingTextEditKey",
       "awaitingPromptPreviewKey",
       "awaitingPromptExamplesKey",
+      "selectedPromptExampleIndex",
       "currentPromptKey",
       "sourcePromptKey",
       "currentDynamicSeriesId",
@@ -1890,6 +1892,11 @@ function normalizePromptLibraryItem(item = {}, key = "") {
   const examplePhotos = Array.isArray(item.examplePhotos)
     ? item.examplePhotos.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS)
     : [];
+  const exampleLabels = Array.isArray(item.exampleLabels)
+    ? item.exampleLabels
+        .map((label) => String(label || "").trim())
+        .slice(0, MAX_PROMPT_EXAMPLE_PHOTOS)
+    : [];
   return {
     id: item.id || key,
     key: item.key || key,
@@ -1899,6 +1906,7 @@ function normalizePromptLibraryItem(item = {}, key = "") {
     category: item.category || "other",
     previewPhoto: item.previewPhoto || null,
     examplePhotos,
+    exampleLabels,
     provider: item.provider || "fal",
     model: item.model || loadSettings().defaultImageModel || "fal-ai/nano-banana-2",
     promptModel: item.promptModel || loadSettings().defaultPromptModel || "gpt-4.1-mini",
@@ -1943,6 +1951,16 @@ function getPromptExamplePhotos(style) {
   return Array.isArray(style?.examplePhotos)
     ? style.examplePhotos.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS)
     : [];
+}
+
+function getPromptExampleEntries(style) {
+  const photos = getPromptExamplePhotos(style);
+  const labels = Array.isArray(style?.exampleLabels) ? style.exampleLabels : [];
+  return photos.map((photo, index) => ({
+    index,
+    photo,
+    label: String(labels[index] || `Ракурс ${index + 1}`).trim(),
+  }));
 }
 
 function getSortedPromptStyles() {
@@ -2455,6 +2473,7 @@ function getPromptBalanceText(userId) {
 
 function clearPromptAttribution(ctx) {
   ensureSession(ctx);
+  ctx.session.selectedPromptExampleIndex = null;
   ctx.session.currentPromptKey = null;
   ctx.session.sourcePromptKey = null;
   ctx.session.currentDynamicSeriesId = null;
@@ -2606,10 +2625,12 @@ function buildPromptStyleCardText(style, options = {}) {
   }
 
   const balanceText = userId ? getPromptBalanceText(userId) : "-";
+  const exampleEntries = getPromptExampleEntries(style);
   return (
     `🎨 <b>${escapeHtml(style.title)}</b>\n` +
     `${trendMark}` +
     `Категорія: <b>${escapeHtml(style.category)}</b>\n\n` +
+    `${exampleEntries.length > 1 ? `Доступно ракурсів: <b>${exampleEntries.length}</b>\nНатисни потрібний ракурс нижче, щоб побачити точний приклад.\n\n` : ""}` +
     `Надішли своє фото — бот зробить таке ж.\n` +
     `Баланс: <b>${escapeHtml(balanceText)}</b>`
   );
@@ -2638,10 +2659,17 @@ function buildPromptLibraryKeyboard(page = 0, admin = false) {
 
 function buildPromptStyleKeyboard(style, admin = false) {
   if (!admin) {
-    return Markup.inlineKeyboard([
+    const rows = [
       [Markup.button.callback("✅ Обрати стиль", `promptlib_apply_${style.key}`)],
-      [Markup.button.callback("📚 До списку стилів", "promptlib_page_0")],
-    ]);
+    ];
+    const exampleEntries = getPromptExampleEntries(style);
+    if (exampleEntries.length > 1) {
+      rows.push(...exampleEntries.map((entry) => [
+        Markup.button.callback(`🖼 ${entry.label}`, `promptlib_example:${style.key}:${entry.index}`),
+      ]));
+    }
+    rows.push([Markup.button.callback("📚 До списку стилів", "promptlib_page_0")]);
+    return Markup.inlineKeyboard(rows);
   }
   return Markup.inlineKeyboard([
     [Markup.button.callback(style.isTrending ? "🔕 Зняти тренд" : "🔥 Зробити трендом", `admin_promptlib_trend_${style.key}_${style.isTrending ? "off" : "on"}`)],
@@ -2762,6 +2790,30 @@ async function sendPromptExamplePhotos(ctx, style) {
     console.error("SEND PROMPT EXAMPLES:", e.message);
     return false;
   }
+}
+
+async function sendPromptExampleSelection(ctx, promptKey, exampleIndex) {
+  const style = getPromptStyle(promptKey);
+  if (!style) return ctx.reply("❌ Стиль не знайдено.");
+  const entries = getPromptExampleEntries(style);
+  const selected = entries.find((entry) => entry.index === Number(exampleIndex));
+  if (!selected) return ctx.reply("❌ Приклад не знайдено.");
+
+  ensureSession(ctx);
+  ctx.session.selectedPromptExampleIndex = selected.index;
+  ctx.session.lastStateAt = Date.now();
+
+  return ctx.replyWithPhoto(selected.photo, {
+    caption:
+      `🖼 <b>${escapeHtml(style.title)}</b>\n` +
+      `Ракурс: <b>${escapeHtml(selected.label)}</b>\n\n` +
+      `Ось саме цей приклад є в стилі.\nНадішли своє selfie 📸`,
+    parse_mode: "HTML",
+    reply_markup: Markup.inlineKeyboard([
+      [Markup.button.callback("✅ Обрати цей стиль", `promptlib_apply_${style.key}`)],
+      [Markup.button.callback("📚 Назад до стилю", `promptlib_open_${style.key}`)],
+    ]).reply_markup,
+  });
 }
 
 function buildDynamicSeriesText(series, admin = false, botUsername = "Promtiai_bot") {
@@ -3731,6 +3783,7 @@ function serializeStaticStyleForAdmin(style, botUsername = "Promtiai_bot") {
     price: normalized.pricePromti,
     previewImage: normalized.previewPhoto,
     exampleImages: normalized.examplePhotos,
+    exampleLabels: normalized.exampleLabels,
     deepLink: getPromptDeepLink(botUsername, normalized.key),
     isActive: normalized.isActive,
     isTrending: normalized.isTrending,
@@ -5544,6 +5597,15 @@ bot.action(/^promptlib_open_(.+)$/, async (ctx) => {
   } catch (e) { console.error("PROMPTLIB OPEN:", e.message); }
 });
 
+bot.action(/^promptlib_example:([^:]+):(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery("Показую приклад ракурсу");
+    return sendPromptExampleSelection(ctx, normalizePromptKey(ctx.match[1]), Number(ctx.match[2]));
+  } catch (e) {
+    console.error("PROMPTLIB EXAMPLE:", e.message);
+  }
+});
+
 bot.action(/^admin_promptlib_open_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -6888,6 +6950,7 @@ app.post("/api/admin/styles", requireAdminAuth, async (req, res) => {
     pricePromti: Number(req.body?.price || req.body?.pricePromti || 1),
     previewPhoto: req.body?.previewImage || null,
     examplePhotos: safeAdminArray(req.body?.exampleImages),
+    exampleLabels: safeAdminArray(req.body?.exampleLabels),
     isActive: toAdminBool(req.body?.isActive, true),
     isTrending: toAdminBool(req.body?.isTrending, false),
     sortOrder: Number(req.body?.sortOrder || 0),
@@ -6909,6 +6972,7 @@ app.put("/api/admin/styles/:id", requireAdminAuth, async (req, res) => {
     id: current.key,
     previewPhoto: req.body?.previewImage !== undefined ? req.body.previewImage : current.previewPhoto,
     examplePhotos: req.body?.exampleImages !== undefined ? safeAdminArray(req.body.exampleImages) : current.examplePhotos,
+    exampleLabels: req.body?.exampleLabels !== undefined ? safeAdminArray(req.body.exampleLabels) : current.exampleLabels,
     pricePromti: Number(req.body?.price ?? req.body?.pricePromti ?? current.pricePromti ?? 1),
   }, current.key);
   backupJsonFile(CONTENT_PATH, "content-styles");

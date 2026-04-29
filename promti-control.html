@@ -740,6 +740,19 @@
     function openStaticEditor(item = {}) {
       const editor = document.getElementById("staticEditor");
       editor.innerHTML = staticEditorTemplate(item);
+      if (!editor.querySelector('textarea[name="exampleLabels"]')) {
+        const examplesField = editor.querySelector('textarea[name="exampleImages"]')?.closest(".field");
+        if (examplesField) {
+          const labelField = document.createElement("label");
+          labelField.className = "field";
+          labelField.innerHTML = `
+            <span>Example labels</span>
+            <textarea name="exampleLabels">${escapeHtml((item.exampleLabels || []).join("\n"))}</textarea>
+            <span class="helper">Один підпис на рядок у тому ж порядку, що й фото. Наприклад: Фронтально, Профіль, Сидячи.</span>
+          `;
+          examplesField.insertAdjacentElement("afterend", labelField);
+        }
+      }
       editor.classList.add("active");
     }
 
@@ -1188,6 +1201,7 @@
           payload.isActive = payload.isActive === "true";
           payload.isTrending = payload.isTrending === "true";
           payload.exampleImages = listFromTextarea(payload.exampleImages);
+          payload.exampleLabels = listFromTextarea(payload.exampleLabels);
           const method = saveStaticRef === "new" ? "POST" : "PUT";
           const path = saveStaticRef === "new" ? "/api/admin/styles" : `/api/admin/styles/${saveStaticRef}`;
           await api(path, { method, body: JSON.stringify(payload) });

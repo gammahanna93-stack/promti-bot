@@ -15,10 +15,18 @@ const { Telegraf, Markup } = require("telegraf");
 const LocalSession = require("telegraf-session-local");
 const { fal } = require("@fal-ai/client");
 let OpenAI = null;
+let toFile = null;
 try {
   OpenAI = require("openai");
+  ({ toFile } = require("openai/uploads"));
 } catch (e) {
   console.warn("OPENAI SDK NOT INSTALLED YET:", e.message);
+}
+let GoogleGenAI = null;
+try {
+  ({ GoogleGenAI } = require("@google/genai"));
+} catch (e) {
+  console.warn("GOOGLE GENAI SDK NOT INSTALLED YET:", e.message);
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -228,13 +236,14 @@ const GARBLED_PATTERNS = [
   "Рџ", "Рґ", "РЅ", "СЊ", "С–", "СЏ", "вњ", "рџ", "РІС", "Р ", "Р’", "Р“", "Р—", "вЂ", "пёЏ",
 ];
 
+const DATA_SCHEMA_VERSION = 2;
 const REFERRAL_PROMTI_BONUS = 5;
-const START_PROMTI_BONUS = 3;
+const START_FREE_PHOTO_CREDITS = 1;
 
 const PROMTI_PRICES = {
   photo:    1,
-  seedance: 5,
   kling:    8,
+  veo:      20,
 };
 
 const MAX_PROMPT_EXAMPLE_PHOTOS = 10;
@@ -307,22 +316,34 @@ const DEFAULT_SETTINGS = {
   photoTimeoutMs:      120000,
   seedanceTimeoutMs:   300000,
   klingTimeoutMs:      480000,
+  veoTimeoutMs:        600000,
   seedanceDurationSec: 5,
   klingDurationSec:    5,
+  veoDurationSec:      8,
   seedanceAspectRatio: "9:16",
   klingAspectRatio:    "9:16",
+  veoAspectRatio:      "9:16",
+  veoResolution:       "720p",
   maxWorkers:          5,
   dailySeedanceLimit:  5,
   dailyKlingLimit:     3,
+  dailyVeoLimit:       1,
   aiPromptEnabled:     true,
   videoEnabled:        true,
+  veoEnabled:          true,
   dailyAiPromptLimit:  10,
+  dataSchemaVersion:   DATA_SCHEMA_VERSION,
+  startFreePhotoCredits: START_FREE_PHOTO_CREDITS,
   defaultImageProvider: "fal",
   defaultImageModel: "fal-ai/nano-banana-2",
   defaultOpenAIImageProvider: "openai",
   defaultOpenAIImageModel: "gpt-image-1",
   defaultPromptProvider: "openai",
   defaultPromptModel: "gpt-4.1-mini",
+  defaultVeoProvider: "google",
+  defaultVeoModel: "veo-3.0-fast-generate-001",
+  defaultVeoLiteModel: "veo-3.1-lite-generate-preview",
+  defaultVeoPremiumModel: "veo-3.0-fast-generate-001",
   aiPromptCacheEnabled: true,
   aiPromptCacheTtlMs: 86400000,
   failedCommandsTtlMs: 604800000,
@@ -332,12 +353,34 @@ const DEFAULT_SETTINGS = {
   chatgptTrendPricePromti: 1,
   infographicPricePromti: 2,
   svgLogoPricePromti: 3,
+  klingPricePromti: 8,
+  veoPricePromti: 20,
+  veoLitePricePromti: 12,
   defaultInfographicProvider: "openai",
   defaultInfographicImageModel: "gpt-image-1",
   defaultSvgModel: "gpt-4.1-mini",
+  subscriptionPlans: {
+    promti_pro_monthly: {
+      key: "promti_pro_monthly",
+      title: "PROMTI PRO",
+      type: "subscription",
+      amount: 199,
+      currency: "UAH",
+      interval: "month",
+      promtiMonthly: 30,
+      priorityQueue: true,
+      premiumStyles: true,
+      veoDiscountPercent: 20,
+      unlimited: false,
+      isActive: true,
+      description: "30 Promti щомісяця, пріоритет у черзі, premium styles, знижка на Veo.",
+      subscriptionDays: 30,
+    },
+  },
   providers: {
     fal: { enabled: true },
     openai: { enabled: true },
+    google: { enabled: true },
   },
 };
 
@@ -365,6 +408,14 @@ function loadSettings() {
         ...DEFAULT_SETTINGS.providers.openai,
         ...((savedSettings.providers || {}).openai || {}),
       },
+      google: {
+        ...DEFAULT_SETTINGS.providers.google,
+        ...((savedSettings.providers || {}).google || {}),
+      },
+    },
+    subscriptionPlans: {
+      ...DEFAULT_SETTINGS.subscriptionPlans,
+      ...(savedSettings.subscriptionPlans || {}),
     },
   };
   _settingsCacheTime = now;
@@ -373,6 +424,29 @@ function loadSettings() {
 
 function invalidateSettingsCache() {
   _settingsCache = null;
+}
+
+function getGoogleGenAiApiKey() {
+  return process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_API_KEY || "";
+}
+
+function isVeoConfigured() {
+  return Boolean(GoogleGenAI && getGoogleGenAiApiKey());
+}
+
+function getGoogleGenAiClient() {
+  const apiKey = getGoogleGenAiApiKey();
+  if (!GoogleGenAI) throw new Error("GOOGLE_GENAI_SDK_NOT_INSTALLED");
+  if (!apiKey) throw new Error("GOOGLE_GENAI_NOT_CONFIGURED");
+  return new GoogleGenAI({ apiKey });
+}
+
+function getSubscriptionPlans() {
+  return loadSettings().subscriptionPlans || {};
+}
+
+function getSubscriptionPlan(planKey) {
+  return getSubscriptionPlans()[planKey] || null;
 }
 
 // ─── JSON HELPERS ─────────────────────────────────────────────────────────────
@@ -947,7 +1021,7 @@ async function upsertAnalyticsUser(ctx, user, overrides = {}) {
   const totalGenerations = Number(
     overrides.totalGenerations !== undefined
       ? overrides.totalGenerations
-      : (user?.generations || 0) + (user?.seedanceGenerations || 0) + (user?.klingGenerations || 0)
+      : (user?.generations || 0) + (user?.seedanceGenerations || 0) + (user?.klingGenerations || 0) + (user?.veoGenerations || 0)
   );
   const totalSpent = Number(
     overrides.totalSpent !== undefined
@@ -981,7 +1055,7 @@ function queueAnalyticsUserTouch(ctx, user, overrides = {}) {
 }
 
 function getUserTotalGenerations(user) {
-  return Number(user?.generations || 0) + Number(user?.seedanceGenerations || 0) + Number(user?.klingGenerations || 0);
+  return Number(user?.generations || 0) + Number(user?.seedanceGenerations || 0) + Number(user?.klingGenerations || 0) + Number(user?.veoGenerations || 0);
 }
 
 function createGenerationId(userId, prefix = "gen") {
@@ -1166,8 +1240,8 @@ const DEFAULT_BUTTON_LABELS = sanitizeTextTree({
   photo_create: "✨ Створити фото",
   photo_ai_prompt: "🤖 AI промт для фото",
   photo_saved_prompts: "⭐ Мої промти",
-  video_seedance: "🎬 Seedance",
   video_kling: "🎥 Kling",
+  video_veo: "🎞 Veo",
   video_ai_prompt: "🤖 AI промт для відео",
   video_saved_prompts: "⭐ Мої промти",
   infographic_png: "🧾 Інфографіка PNG",
@@ -1179,28 +1253,29 @@ const DEFAULT_BUTTON_LABELS = sanitizeTextTree({
 
 const DEFAULT_BUTTON_HINTS = sanitizeTextTree({
   main_photo:
-    "🖼 Меню фото\n\n" +
-    "Обери режим:\n" +
-    "🖼 Редагувати фото — надішли своє фото + промт, змінимо стиль\n" +
-    "✨ Створити фото — напиши ідею, створю фото з нуля\n" +
-    "🤖 AI промт — підкажу промт на основі твого фото\n\n" +
-    "💡 Ідеї: t.me/promteamai",
+    "🖼 Фото\n\n" +
+    "Створення та редагування AI-фото.\n" +
+    "Основний провайдер: fal.ai / nano-banana-2.\n" +
+    "В окремих premium-інструментах може використовуватись OpenAI image model.\n\n" +
+    "Надішли selfie або фото — бот створить результат у заданій естетиці.",
   main_video:
-    "🎬 Меню відео\n\n" +
-    "🎬 Seedance — реалістична анімація фото\n" +
-    "🎥 Kling — більш кінематографічний результат\n\n" +
-    "💡 Ідеї: t.me/promteamai",
+    "🎬 Відео\n\n" +
+    "Обери модель:\n" +
+    "🎥 Kling — кінематографічна анімація фото через fal.ai.\n" +
+    "🎞 Veo — premium video через Google Gemini API / Veo.\n\n" +
+    "Kling дешевший.\n" +
+    "Veo дорожчий, але більше підходить для premium editorial / fashion / storytelling відео.",
   main_ai_studio:
     "🧠 AI Studio\n\n" +
-    "Тут зібрані готові ідеї для генерацій:\n" +
-    "🔥 Тренди ChatGPT — вірусні формати та ідеї\n" +
-    "📚 Бібліотека стилів — готові фото-стилі для селфі та портретів\n" +
-    "🔮 Dynamic стилі — серії з варіантами ракурсів і сюжетів",
+    "Готові тренди, стилі та prompt-сценарії.\n" +
+    "Тут є static styles, dynamic styles і ChatGPT trends.\n" +
+    "Частина інструментів працює через OpenAI, частина — через fal.ai або Google Veo.",
   main_infographics:
     "🧾 Інфографіки\n\n" +
-    "Обери, що хочеш створити:\n" +
-    "🧾 Інфографіка PNG — готовий візуал для поста, реклами або каруселі\n" +
-    "🔷 SVG логотип — чистий масштабований логотип у SVG",
+    "Інструменти через OpenAI:\n" +
+    "🧾 Інфографіка PNG — OpenAI image model.\n" +
+    "🔷 SVG логотип — OpenAI text/SVG model.\n\n" +
+    "Підходить для постів, каруселей, презентацій, чек-листів, схем і брендингу.",
   photo_edit:
     "✏️ Режим редагування фото\n\n" +
     "Напиши, як хочеш змінити фото, потім надішли селфі.\n" +
@@ -1212,31 +1287,59 @@ const DEFAULT_BUTTON_HINTS = sanitizeTextTree({
   photo_ai_prompt:
     "🤖 AI промт для фото\n\n" +
     "Надішли фото, і я підготую короткий промт для генерації.",
-  video_seedance:
-    "🎬 Seedance\n\n" +
-    "Ця модель добре підходить для природного руху, волосся, погляду та міміки.",
   video_kling:
     "🎥 Kling\n\n" +
-    "Ця модель краще підходить для кінематографічної анімації та драматичнішого руху.",
+    "Кінематографічна анімація фото через fal.ai / Kling.\n" +
+    "Підходить для fashion/editorial відео, плавної камери, драматичного руху, Reels/TikTok/Shorts.\n\n" +
+    "Вартість: 8 Promti ✨.\n" +
+    "Формат: 9:16.\n" +
+    "Орієнтовний час: 1–8 хв.",
+  video_veo:
+    "🎞 Veo\n\n" +
+    "Premium AI-відео через Google Gemini API / Veo.\n" +
+    "Підходить для fashion/editorial сцен, storytelling, рекламних роликів і більш природної динаміки.\n\n" +
+    "⚠️ Це дорожча модель, ніж Kling.\n" +
+    "Вартість: 20 Promti ✨.\n" +
+    "Формат: 9:16.",
   video_ai_prompt:
     "🤖 AI промт для відео\n\n" +
     "Надішли фото або коротке відео, і я підготую короткий промт для анімації.",
   infographic_png:
     "🧾 Інфографіка PNG\n\n" +
-    "Надішли текстовий опис або фото з підписом. Я зберу з цього готову інфографіку.",
+    "Створюється через OpenAI image model.\n" +
+    "Можна надіслати текст або фото з поясненням.\n" +
+    "Підходить для постів, каруселей, презентацій, освітніх матеріалів, чек-листів і візуальних пояснень.\n\n" +
+    "Вартість: 2 Promti ✨.",
   infographic_svg:
     "🔷 SVG логотип\n\n" +
-    "Напиши короткий бриф: назва бренду, сфера, стиль, кольори, символи. Я поверну чистий SVG-файл.",
+    "Створюється через OpenAI text/SVG model.\n" +
+    "Бот генерує чистий SVG-файл для сайту, брендингу, презентацій або подальшого редагування.\n\n" +
+    "Надішли короткий бриф:\n" +
+    "назва бренду, сфера, стиль, кольори, символи.\n\n" +
+    "Вартість: 3 Promti ✨.",
+  ai_studio_trends:
+    "🔥 Тренди ChatGPT\n\n" +
+    "Працюють через OpenAI text/vision model.\n" +
+    "Можуть аналізувати фото або текст і повертати prompt, опис, ідею, аналіз або готовий текст.",
+  ai_studio_library:
+    "📚 Бібліотека стилів\n\n" +
+    "Готові AI-фото стилі.\n" +
+    "Кожен стиль має свій provider/model у налаштуваннях.\n" +
+    "Зазвичай використовується fal.ai / nano-banana-2.",
+  ai_studio_dynamic:
+    "🔮 Dynamic стилі\n\n" +
+    "Серії стилів із варіантами: зодіак, архетипи, образи, ракурси, сюжети.\n" +
+    "Кожен variant має окремий prompt.",
 });
 
 const DEFAULT_CONTENT = sanitizeTextTree({
-  welcomeText:  "Привіт ✨\n\nОбери що хочеш зробити:\n🖼 Фото — генерація фото по стилях\n🎬 Відео — анімація фото у відео\n\n🎁 3 Promti ✨ безкоштовно при старті",
-  infoText:     "PROMTI AI Bot\n\n🖼 Фото:\n10/99грн · 20/179грн · 30/249грн · 50/399грн\n\n🎬 Seedance:\n3/199грн · 5/349грн · 10/599грн\n\n🎥 Kling:\n3/299грн · 5/499грн · 10/899грн",
-  helpText:     "Допомога:\n\n🖼 Фото:\n1. Натисни 🖼 Фото\n2. Обери стиль\n3. Надішли фото\n\n🎬 Відео:\n1. Натисни 🎬 Відео\n2. Обери модель\n3. Надішли фото для анімації",
+  welcomeText:  "Привіт ✨\n\nОбери, що хочеш зробити:\n🖼 Фото — генерація та редагування AI-фото\n🎬 Відео — Kling або premium Veo\n🧾 Інфографіки — створення через OpenAI\n🧠 AI Studio — готові стилі, тренди й prompt-сценарії\n\n🎁 1 тестове AI-фото безкоштовно при старті",
+  infoText:     "PROMTI AI Bot\n\n🖼 Фото:\nAI-фото та редагування стилів — 1 Promti ✨\n\n🎥 Kling:\nКінематографічна анімація фото через fal.ai / Kling — 8 Promti ✨\n\n🎞 Veo Premium:\nPremium AI-відео через Google Gemini API / Veo — 20 Promti ✨\n\n🧾 OpenAI tools:\nІнфографіка PNG — 2 Promti ✨\nSVG логотип — 3 Promti ✨",
+  helpText:     "Допомога:\n\n🖼 Фото:\n1. Натисни 🖼 Фото\n2. Обери стиль або свій prompt\n3. Надішли фото\n\n🎬 Відео:\n1. Натисни 🎬 Відео\n2. Обери 🎥 Kling або 🎞 Veo\n3. Надішли фото або текстовий prompt\n\n🧾 Інфографіки:\nНадішли текст або фото з поясненням — бот створить готовий візуал через OpenAI.",
   supportText:  "Напиши в підтримку: https://t.me/promteamai?direct",
   ideaText:     "💡 Ідеї для промтів:\n\n🖼 Фото:\n• \"portrait in Renaissance style\"\n• \"cyberpunk neon portrait\"\n\n🎬 Відео:\n• \"hair gently flowing in wind\"\n• \"eyes slowly opening, cinematic\"",
   support_link: "https://t.me/promteamai?direct",
-  pricesText:   "💰 PROMTI AI — Ціни\n\n💎 Валюта: Promti ✨\n1 Promti ✨ = від 6.7 до 9.9 грн\n\n📦 Пакети:\n10 Promti ✨ — 99 грн (9.9 грн/✨)\n30 Promti ✨ — 249 грн (8.3 грн/✨)\n60 Promti ✨ — 449 грн (7.5 грн/✨)\n150 Promti ✨ — 999 грн (6.7 грн/✨) 🔥\n\n💰 Ціни послуг:\n🖼 Фото — 1 Promti ✨\n🎬 Seedance відео — 5 Promti ✨\n🎥 Kling відео — 8 Promti ✨\n\n🎁 3 Promti ✨ безкоштовно при реєстрації!\n👫 +5 Promti ✨ за кожного друга який оплатить",
+  pricesText:   "💰 PROMTI AI — Ціни\n\nPromti ✨ — це внутрішня валюта бота.\n\n🎁 При старті:\n1 тестове AI-фото безкоштовно\n\n📦 Пакети:\n10 Promti ✨ — 99 грн\n30 Promti ✨ — 249 грн\n60 Promti ✨ — 449 грн\n150 Promti ✨ — 999 грн\n\n🖼 Фото:\nAI-фото — 1 Promti ✨\n\n🧾 OpenAI tools:\nІнфографіка PNG через OpenAI image model — 2 Promti ✨\nSVG логотип через OpenAI — 3 Promti ✨\n\n🎬 Відео:\nKling через fal.ai — 8 Promti ✨\nVeo Premium через Google Gemini API — 20 Promti ✨\n\n💎 Підписка:\nPROMTI PRO — 199 грн / місяць\n+30 Promti ✨ щомісяця\n+пріоритет у черзі\n+premium styles\n+знижка на Veo\n\nВажливо:\nVeo — premium video model, тому має окрему вартість.\nПідписка не є безлімітом.\n\n👫 +5 Promti ✨ за друга після його першої оплати",
   buttonLabels: DEFAULT_BUTTON_LABELS,
   buttonHints: DEFAULT_BUTTON_HINTS,
   promptLibrary: {},
@@ -1249,7 +1352,7 @@ const DEFAULT_VIDEO_PRESETS = sanitizeTextTree({
   seedance: {
     id: "seedance",
     title: "Seedance",
-    description: "Базовий preset для Seedance відео",
+    description: "Legacy preset для Seedance. Більше не показується користувачам.",
     provider: "fal",
     model: "bytedance/seedance-2.0/fast",
     type: "video",
@@ -1257,21 +1360,51 @@ const DEFAULT_VIDEO_PRESETS = sanitizeTextTree({
     promptTemplate: "cinematic motion, smooth animation, realistic movement",
     previewVideo: null,
     exampleVideos: [],
-    isActive: true,
+    isActive: false,
+    legacyDisabled: true,
     stats: {},
   },
   kling: {
     id: "kling",
     title: "Kling",
-    description: "Базовий preset для Kling відео",
+    description: "Кінематографічне відео через fal.ai / Kling. Основна модель для image-to-video.",
     provider: "fal",
     model: "fal-ai/kling-video/v3/pro",
     type: "video",
     price: 8,
-    promptTemplate: "cinematic video, fluid motion, high quality animation",
+    promptTemplate: "cinematic video, fluid motion, high quality animation, natural camera movement",
     previewVideo: null,
     exampleVideos: [],
     isActive: true,
+    stats: {},
+  },
+  veo: {
+    id: "veo",
+    title: "Veo Premium",
+    description: "Premium video generation через Google Gemini API / Veo. Дорожча модель для більш кінематографічних відео.",
+    provider: "google",
+    model: "veo-3.0-fast-generate-001",
+    type: "video",
+    price: 20,
+    promptTemplate: "premium cinematic realistic motion, editorial video, natural camera movement, luxury social media visual",
+    previewVideo: null,
+    exampleVideos: [],
+    isActive: true,
+    stats: {},
+  },
+  veo_lite: {
+    id: "veo_lite",
+    title: "Veo Lite",
+    description: "Доступніший тестовий Veo через Google Gemini API.",
+    provider: "google",
+    model: "veo-3.1-lite-generate-preview",
+    type: "video",
+    price: 12,
+    promptTemplate: "smooth cinematic motion, realistic short video, vertical social media format",
+    previewVideo: null,
+    exampleVideos: [],
+    isActive: false,
+    adminOnly: true,
     stats: {},
   },
 });
@@ -1386,11 +1519,16 @@ if (!content.promptCategories || typeof content.promptCategories !== "object" ||
 if (!content.chatgptTrendLibrary || typeof content.chatgptTrendLibrary !== "object" || Array.isArray(content.chatgptTrendLibrary)) content.chatgptTrendLibrary = {};
 if (typeof content.welcomeText === "string") {
   content.welcomeText = content.welcomeText
-    .replaceAll("1 фото безкоштовно", "3 Promti ✨ безкоштовно")
-    .replaceAll("1 Promti ✨ безкоштовно при старті", "3 Promti ✨ безкоштовно при старті");
+    .replaceAll("3 Promti ✨ безкоштовно при старті", "🎁 1 тестове AI-фото безкоштовно при старті")
+    .replaceAll("3 Promti ✨ безкоштовно", "🎁 1 тестове AI-фото безкоштовно при старті")
+    .replaceAll("1 фото безкоштовно", "🎁 1 тестове AI-фото безкоштовно при старті")
+    .replaceAll("1 Promti ✨ безкоштовно при старті", "🎁 1 тестове AI-фото безкоштовно при старті");
 }
 if (typeof content.pricesText === "string") {
-  content.pricesText = content.pricesText.replaceAll("1 Promti ✨ безкоштовно при реєстрації", "3 Promti ✨ безкоштовно при реєстрації");
+  content.pricesText = content.pricesText
+    .replaceAll("3 Promti ✨ безкоштовно при старті", "1 тестове AI-фото безкоштовно")
+    .replaceAll("3 Promti ✨ безкоштовно при реєстрації", "1 тестове AI-фото безкоштовно")
+    .replaceAll("1 Promti ✨ безкоштовно при реєстрації", "1 тестове AI-фото безкоштовно");
 }
 saveJson(PROMPTS_PATH, prompts);
 saveJson(CONTENT_PATH, content);
@@ -1475,6 +1613,8 @@ const JOB_TIMEOUT_MS = 10 * 60 * 1000;
 function enqueueGeneration(userId, taskFn, type = "photo", ctx = null) {
   return new Promise((resolve, reject) => {
     const queue = type === "video" ? videoQueue : photoQueue;
+    const user = getUser(userId);
+    const priority = isAdmin(userId) ? 100 : hasPriorityQueueAccess(user) ? 10 : 0;
 
     const wrappedTask = () => {
       const timeoutPromise = new Promise((_, rej) =>
@@ -1483,7 +1623,14 @@ function enqueueGeneration(userId, taskFn, type = "photo", ctx = null) {
       return Promise.race([taskFn(), timeoutPromise]);
     };
 
-    queue.push({ userId, taskFn: wrappedTask, resolve, reject, ctx, notifiedPosition: 0 });
+    const job = { userId, taskFn: wrappedTask, resolve, reject, ctx, notifiedPosition: 0, priority };
+    if (!priority || queue.length === 0) {
+      queue.push(job);
+    } else {
+      const insertAt = queue.findIndex((queuedJob) => Number(queuedJob.priority || 0) < priority);
+      if (insertAt === -1) queue.push(job);
+      else queue.splice(insertAt, 0, job);
+    }
     processQueue();
   });
 }
@@ -1575,6 +1722,14 @@ function getTodayDate() { return new Date().toISOString().slice(0, 10); }
 function checkDailyVideoLimit(user, model) {
   const cfg   = loadSettings();
   const today = getTodayDate();
+  if (model === "veo") {
+    const limit = cfg.dailyVeoLimit;
+    if (limit === 0) return null;
+    if (user.dailyVeoDate !== today) { user.dailyVeoDate = today; user.dailyVeoCount = 0; }
+    const used = user.dailyVeoCount || 0;
+    if (used >= limit) return `❌ Денний ліміт Veo: ${limit} відео/день.\nVeo — premium-модель, тому має окремий ліміт.`;
+    return null;
+  }
   const limit = model === "kling" ? cfg.dailyKlingLimit : cfg.dailySeedanceLimit;
   if (limit === 0) return null;
   if (user.dailyVideoDate !== today) { user.dailyVideoDate = today; user.dailySeedanceCount = 0; user.dailyKlingCount = 0; }
@@ -1601,6 +1756,11 @@ function incrementDailyAi(user) {
 
 function incrementDailyVideo(user, model) {
   const today = getTodayDate();
+  if (model === "veo") {
+    if (user.dailyVeoDate !== today) { user.dailyVeoDate = today; user.dailyVeoCount = 0; }
+    user.dailyVeoCount = (user.dailyVeoCount || 0) + 1;
+    return;
+  }
   if (user.dailyVideoDate !== today) { user.dailyVideoDate = today; user.dailySeedanceCount = 0; user.dailyKlingCount = 0; }
   if (model === "kling") user.dailyKlingCount = (user.dailyKlingCount || 0) + 1;
   else user.dailySeedanceCount = (user.dailySeedanceCount || 0) + 1;
@@ -1626,6 +1786,33 @@ async function notifyAdminsError(message) {
 
 // ─── ЮЗЕР HELPERS ─────────────────────────────────────────────────────────────
 function isAdmin(userId) { return ADMINS.includes(userId); }
+
+function isSubscriptionActive(user) {
+  const expiresAt = user?.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt).getTime() : 0;
+  return user?.subscriptionStatus === "active" && expiresAt > Date.now();
+}
+
+function hasPriorityQueueAccess(user) {
+  if (!user) return false;
+  const plan = getSubscriptionPlan(user.subscriptionPlan);
+  return isSubscriptionActive(user) && Boolean(plan?.priorityQueue);
+}
+
+function canUseFreePhotoCredit(user, type) {
+  return type === "photo" && Number(user?.freePhotoCredits || 0) > 0;
+}
+
+function useFreePhotoCredit(user) {
+  if (Number(user?.freePhotoCredits || 0) <= 0) return false;
+  user.freePhotoCredits = Number(user.freePhotoCredits || 0) - 1;
+  return true;
+}
+
+function refundFreePhotoCredit(user, reason = "unknown") {
+  user.freePhotoCredits = Number(user?.freePhotoCredits || 0) + 1;
+  saveUsersSync();
+  console.warn(`FREE PHOTO CREDIT REFUNDED: ${reason}`);
+}
 function ensureSession(ctx) { if (!ctx.session) ctx.session = {}; }
 
 function resetState(ctx) {
@@ -1661,12 +1848,13 @@ function getUser(id) {
   if (!users[id]) {
     users[id] = {
       id,
-      promti: START_PROMTI_BONUS,
+      promti: 0,
+      freePhotoCredits: START_FREE_PHOTO_CREDITS,
       purchasedPromti: 0,
-      generations: 0, seedanceGenerations: 0, klingGenerations: 0,
+      generations: 0, seedanceGenerations: 0, klingGenerations: 0, veoGenerations: 0,
       totalSpent: 0, username: "", firstName: "",
       referredBy: null, referralCount: 0, banned: false,
-      dailyVideoDate: null, dailySeedanceCount: 0, dailyKlingCount: 0,
+      dailyVideoDate: null, dailySeedanceCount: 0, dailyKlingCount: 0, dailyVeoDate: null, dailyVeoCount: 0,
       dailyAiDate: null, dailyAiCount: 0,
       lastPaymentRequest: null, pendingOrderReference: null, lastPaidAt: null,
       sourcePromptKey: null,
@@ -1677,6 +1865,11 @@ function getUser(id) {
       pendingPurchasePromptKey: null,
       pendingPurchaseStyleRef: null,
       lastPurchaseAttributedOrderReference: null,
+      subscriptionPlan: null,
+      subscriptionStatus: "none",
+      subscriptionStartedAt: null,
+      subscriptionExpiresAt: null,
+      subscriptionPromtiGrantedAt: null,
       savedPrompts: [],
       createdAt: new Date().toISOString(),
     };
@@ -1688,6 +1881,15 @@ function getUser(id) {
     delete users[id].videoGenerations;
   }
   if (!Array.isArray(users[id].savedPrompts)) users[id].savedPrompts = [];
+  if (users[id].freePhotoCredits === undefined) users[id].freePhotoCredits = 0;
+  if (users[id].veoGenerations === undefined) users[id].veoGenerations = 0;
+  if (users[id].dailyVeoDate === undefined) users[id].dailyVeoDate = null;
+  if (users[id].dailyVeoCount === undefined) users[id].dailyVeoCount = 0;
+  if (users[id].subscriptionPlan === undefined) users[id].subscriptionPlan = null;
+  if (users[id].subscriptionStatus === undefined) users[id].subscriptionStatus = "none";
+  if (users[id].subscriptionStartedAt === undefined) users[id].subscriptionStartedAt = null;
+  if (users[id].subscriptionExpiresAt === undefined) users[id].subscriptionExpiresAt = null;
+  if (users[id].subscriptionPromtiGrantedAt === undefined) users[id].subscriptionPromtiGrantedAt = null;
   if (users[id].sourceDynamicSeriesId === undefined) users[id].sourceDynamicSeriesId = null;
   if (users[id].sourceDynamicVariantId === undefined) users[id].sourceDynamicVariantId = null;
   if (users[id].lastGeneratedStyleRef === undefined) users[id].lastGeneratedStyleRef = null;
@@ -1766,7 +1968,7 @@ function saveAiPromptCacheSync() {
 function saveTempJobsSync() { saveJson(TEMP_JOBS_PATH, tempJobs); }
 function saveFailedCommandsSync() { saveJson(FAILED_COMMANDS_PATH, failedCommands); }
 
-function getUserVideoTotal(user) { return (user.seedanceGenerations || 0) + (user.klingGenerations || 0); }
+function getUserVideoTotal(user) { return (user.seedanceGenerations || 0) + (user.klingGenerations || 0) + (user.veoGenerations || 0); }
 function isPaymentCreditedStatus(status) { return String(status || "").toLowerCase() === "credited"; }
 
 function truncateForLog(value, maxLength = 240) {
@@ -2250,6 +2452,8 @@ function normalizeVideoPreset(item = {}, key = "") {
     previewVideo: item.previewVideo || null,
     exampleVideos: Array.isArray(item.exampleVideos) ? item.exampleVideos.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS) : [],
     isActive: item.isActive !== false,
+    adminOnly: item.adminOnly === true,
+    legacyDisabled: item.legacyDisabled === true,
     stats: typeof item.stats === "object" && item.stats ? item.stats : { clicks: 0, generations: 0, purchases: 0 },
   };
 }
@@ -3433,10 +3637,12 @@ function stripBase64DataUrl(dataUrl = "") {
   return String(dataUrl).replace(/^data:image\/[^;]+;base64,/, "");
 }
 
-function buildOpenAiImageFile(imageBase64, fileName = `promti_${Date.now()}.png`) {
+async function buildOpenAiImageFile(imageBase64, fileName = `promti_${Date.now()}.png`) {
   const buffer = Buffer.from(stripBase64DataUrl(imageBase64), "base64");
-  const blob = new Blob([buffer], { type: "image/png" });
-  return new File([blob], fileName, { type: "image/png" });
+  if (typeof toFile !== "function") {
+    throw new Error("OPENAI_TOFILE_UNAVAILABLE");
+  }
+  return await toFile(buffer, fileName, { type: "image/png" });
 }
 
 function extractOpenAiImageResult(response, emptyCode = "OPENAI_IMAGE_EMPTY") {
@@ -3522,7 +3728,7 @@ async function generateImageWithOpenAI({ prompt, imageBase64, mode, model }) {
     };
   }
 
-  const imageFile = buildOpenAiImageFile(imageBase64);
+  const imageFile = await buildOpenAiImageFile(imageBase64);
   const response = await openai.images.edit({
     model: selectedModel,
     image: imageFile,
@@ -3575,6 +3781,82 @@ function extractSvgMarkup(rawText = "") {
   return match ? match[0].trim() : "";
 }
 
+function getFriendlyProviderErrorMessage(provider, tool = "") {
+  if (provider === "openai") {
+    return "❌ OpenAI-інструмент тимчасово недоступний.\nPromti ✨ повернено на баланс.\nСпробуй пізніше або обери інший режим.";
+  }
+  if (provider === "google") {
+    return "❌ Veo тимчасово недоступний.\nGoogle Gemini API key не налаштований.\nPromti ✨ не списано.";
+  }
+  if (provider === "fal") {
+    return "❌ Генерація фото/відео через fal.ai тимчасово недоступна.\nPromti ✨ повернено на баланс.";
+  }
+  if (tool === "file") {
+    return "❌ Не вдалося обробити фото.\nСпробуй інше фото у кращій якості.";
+  }
+  if (tool === "timeout") {
+    return "⏳ Генерація тривала занадто довго.\nPromti ✨ повернено на баланс.\nСпробуй ще раз трохи пізніше.";
+  }
+  return "❌ Інструмент тимчасово недоступний.\nСпробуй пізніше.";
+}
+
+async function generateVideoWithVeo({
+  prompt,
+  imageBase64 = null,
+  model,
+  aspectRatio = "9:16",
+  resolution = "720p",
+}) {
+  const ai = getGoogleGenAiClient();
+  const selectedModel = model || loadSettings().defaultVeoModel || "veo-3.0-fast-generate-001";
+  const payload = {
+    model: selectedModel,
+    prompt,
+    config: {
+      aspectRatio,
+      resolution,
+    },
+  };
+
+  if (imageBase64) {
+    payload.image = {
+      imageBytes: stripBase64DataUrl(imageBase64),
+      mimeType: "image/png",
+    };
+  }
+
+  let operation;
+  if (ai?.models?.generateVideos) {
+    operation = await ai.models.generateVideos(payload);
+  } else {
+    throw new Error("VEO_GENERATE_VIDEOS_UNAVAILABLE");
+  }
+
+  const startedAt = Date.now();
+  const timeoutMs = Number(loadSettings().veoTimeoutMs || 600000);
+
+  while (!operation?.done) {
+    if (Date.now() - startedAt > timeoutMs) throw new Error("VEO_TIMEOUT");
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+    if (ai?.operations?.getVideosOperation) {
+      operation = await ai.operations.getVideosOperation({ operation });
+    } else if (ai?.operations?.get) {
+      operation = await ai.operations.get({ operation });
+    } else {
+      throw new Error("VEO_OPERATION_POLL_UNAVAILABLE");
+    }
+  }
+
+  const generatedVideo =
+    operation?.response?.generatedVideos?.[0]?.video ||
+    operation?.result?.generatedVideos?.[0]?.video ||
+    operation?.generatedVideos?.[0]?.video ||
+    null;
+
+  if (!generatedVideo) throw new Error("VEO_EMPTY_RESULT");
+  return generatedVideo;
+}
+
 async function runInfographicPngFlow({ ctx, user, userId, textInput = "", imageBase64 = null }) {
   const cfg = loadSettings();
   const tool = getActiveOpenAiTool("infographic");
@@ -3582,6 +3864,10 @@ async function runInfographicPngFlow({ ctx, user, userId, textInput = "", imageB
   const generationId = createGenerationId(userId, "infographic");
   const model = tool?.model || cfg.defaultInfographicImageModel || "gpt-image-1";
   let charged = false;
+
+  if (!openai || !process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_NOT_CONFIGURED");
+  }
 
   if (!isAdmin(userId)) {
     if ((user.promti || 0) < pricePromti) {
@@ -3610,7 +3896,7 @@ async function runInfographicPngFlow({ ctx, user, userId, textInput = "", imageB
   });
 
   try {
-    await ctx.reply("⏳ Створюю інфографіку... (~30-60 сек)");
+    await ctx.reply("⏳ Створюю інфографіку через OpenAI image model... (~30–60 сек)");
     const result = await generateImageWithOpenAI({
       prompt: tool?.systemPrompt
         ? `${tool.systemPrompt}\n\n${(tool.userPromptTemplate || "{{input}}").replace("{{input}}", textInput || "Use the attached image and create an infographic.")}`
@@ -3644,7 +3930,25 @@ async function runInfographicPngFlow({ ctx, user, userId, textInput = "", imageB
       userId,
       type: "infographic_png",
       error: e,
-      context: { model, hasImage: !!imageBase64 },
+      context: {
+        provider: "openai",
+        model,
+        mode: imageBase64 ? "edit" : "create",
+        generationId,
+        hasImage: !!imageBase64,
+        responseBody: e?.response?.data ? truncateForLog(e.response.data, 400) : "",
+        stack: e?.stack ? truncateForLog(e.stack, 500) : "",
+      },
+    });
+    console.error("INFOGRAPHIC PNG ERROR:", {
+      userId,
+      provider: "openai",
+      model,
+      mode: imageBase64 ? "edit" : "create",
+      generationId,
+      message: e.message,
+      stack: e.stack,
+      responseBody: e?.response?.data || null,
     });
     queueLogEvent({
       user_id: userId,
@@ -3695,7 +3999,7 @@ async function runSvgLogoFlow({ ctx, user, userId, promptText }) {
   });
 
   try {
-    await ctx.reply("⏳ Створюю SVG логотип... (~20-40 сек)");
+    await ctx.reply("⏳ Створюю SVG логотип через OpenAI... (~20–40 сек)");
     const response = await openai.responses.create({
       model,
       input: [
@@ -3738,7 +4042,24 @@ async function runSvgLogoFlow({ ctx, user, userId, promptText }) {
       userId,
       type: "svg_logo",
       error: e,
-      context: { model },
+      context: {
+        provider: "openai",
+        model,
+        mode: "create",
+        generationId,
+        responseBody: e?.response?.data ? truncateForLog(e.response.data, 400) : "",
+        stack: e?.stack ? truncateForLog(e.stack, 500) : "",
+      },
+    });
+    console.error("SVG LOGO ERROR:", {
+      userId,
+      provider: "openai",
+      model,
+      mode: "create",
+      generationId,
+      message: e.message,
+      stack: e.stack,
+      responseBody: e?.response?.data || null,
     });
     queueLogEvent({
       user_id: userId,
@@ -4187,7 +4508,7 @@ const photoMenu = () => Markup.keyboard([
   [getButtonLabel("back")]
 ]).resize();
 const videoMenu     = () => Markup.keyboard([
-  [getButtonLabel("video_seedance"), getButtonLabel("video_kling")],
+  [getButtonLabel("video_kling"), getButtonLabel("video_veo")],
   [getButtonLabel("video_ai_prompt"), getButtonLabel("video_saved_prompts")],
   [getButtonLabel("main_balance")],
   [getButtonLabel("back")]
@@ -4209,6 +4530,11 @@ const seedanceMenu  = () => Markup.keyboard([
   [getButtonLabel("back_video")]
 ]).resize();
 const klingMenu     = () => Markup.keyboard([
+  ["⚡ Авто анімація", "🎬 Анімація + промт"],
+  ["🎥 Відео з тексту"],
+  [getButtonLabel("back_video")]
+]).resize();
+const veoMenu = () => Markup.keyboard([
   ["⚡ Авто анімація", "🎬 Анімація + промт"],
   ["🎥 Відео з тексту"],
   [getButtonLabel("back_video")]
@@ -5653,6 +5979,7 @@ function openVideoModelFlow(ctx, style, source = "video_menu") {
   clearPromptAttribution(ctx);
   ctx.session.mode = "video";
   ctx.session.style = style;
+  ctx.session.videoModel = style;
   ctx.session.customType = null;
   ctx.session.awaitingCustomPrompt = false;
   ctx.session.customPrompt = null;
@@ -5661,18 +5988,30 @@ function openVideoModelFlow(ctx, style, source = "video_menu") {
   const user = getUser(ctx.from.id);
 
   if (style === "seedance") {
-    if (cfg.seedanceEnabled === false) {
-      return ctx.reply(cfg.seedanceComingSoonText || "🎬 Seedance тимчасово недоступний. Скоро повернеться! Спробуй 🎥 Kling.", videoMenu());
-    }
+    return ctx.reply("Seedance більше недоступний.\nОбери 🎥 Kling або 🎞 Veo.", videoMenu());
+  }
+
+  if (style === "veo") {
+    queueLogEvent({
+      user_id: ctx.from.id,
+      event: "click_animate_veo",
+      value: 1,
+      style_id: ctx.session.currentPromptKey || ctx.session.sourcePromptKey || user.sourcePromptKey || "",
+      extra: { source },
+    });
     return ctx.reply(
-      "🎬 Seedance 2.0\n\n" +
-      "Спеціалізується на анімації об'єктів, природи, мультиплікації та фантастичних сцен.\n\n" +
-      "⚡ Авто анімація — надішли фото, оживлю автоматично\n" +
-      "🎬 Анімація + промт — надішли фото зі своїм описом руху\n" +
-      "🎥 Відео з тексту — створи відео з нуля по промту\n\n" +
-      "⛔️ Для людей і портретів краще використовувати Kling\n\n" +
-      "💡 Ідеї: t.me/promteamai",
-      seedanceMenu()
+      "🎞 Veo Premium\n\n" +
+      "Premium AI-відео через Google Gemini API / Veo.\n" +
+      "Це дорожча модель, ніж Kling, але вона краще підходить для кінематографічних fashion/editorial відео, storytelling і premium social media visuals.\n\n" +
+      "Вартість: 20 Promti ✨.\n" +
+      "Формат: 9:16.\n" +
+      "Тривалість: до 8 секунд.\n" +
+      "Орієнтовний час: 1–8 хв.\n\n" +
+      "Обери режим:\n" +
+      "⚡ Авто анімація\n" +
+      "🎬 Анімація + промт\n" +
+      "🎥 Відео з тексту",
+      veoMenu()
     );
   }
 
@@ -5685,16 +6024,20 @@ function openVideoModelFlow(ctx, style, source = "video_menu") {
   });
   return ctx.reply(
     "🎥 Kling\n\n" +
-    "📸 Фото → Відео — надішли фото + промт, оживлю!\n" +
-    "✍️ Текст → Відео — напиши промт, створю кінематографічне відео\n\n" +
-    "Приклад: \"cinematic close-up, soft bokeh\"\n\n" +
-    "💡 Ідеї: t.me/promteamai",
+    "Кінематографічна анімація фото через fal.ai / Kling.\n" +
+    "Підходить для fashion/editorial відео, плавної камери, драматичного руху, Reels/TikTok/Shorts.\n\n" +
+    "Вартість: 8 Promti ✨.\n" +
+    "Формат: 9:16.\n" +
+    "Орієнтовний час: 1–8 хв.",
     klingMenu()
   );
 }
 
 bot.hears("🎥 Kling", (ctx) => {
   return openVideoModelFlow(ctx, "kling", "video_menu");
+});
+bot.hears("🎞 Veo", (ctx) => {
+  return openVideoModelFlow(ctx, "veo", "video_menu");
 });
 
 // ─── AI ПРОМТ ─────────────────────────────────────────────────────────────────

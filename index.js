@@ -413,6 +413,22 @@ function backupJsonFile(filePath, label = path.basename(filePath, ".json")) {
   }
 }
 
+function cleanupManagedBackups(retentionMs = 7 * 24 * 60 * 60 * 1000) {
+  const backupDir = ensureBackupDir();
+  const cutoff = Date.now() - retentionMs;
+  let removed = 0;
+  for (const fileName of fs.readdirSync(backupDir)) {
+    const fullPath = path.join(backupDir, fileName);
+    try {
+      if (fs.statSync(fullPath).mtimeMs < cutoff) {
+        fs.unlinkSync(fullPath);
+        removed += 1;
+      }
+    } catch {}
+  }
+  return removed;
+}
+
 function repairGarbledJson(defaultValue, currentValue, stats = { replaced: 0 }) {
   const cleanDefault = sanitizeTextTree(defaultValue);
   const cleanCurrent = sanitizeTextTree(currentValue);
@@ -1417,6 +1433,29 @@ let dynamicPackages = loadPackages();
 function getPackages()         { return dynamicPackages; }
 function saveDynamicPackages() { saveJson(PACKAGES_PATH, dynamicPackages); }
 
+function getTempPackageCreatedAt(key, pack = null) {
+  if (pack && Number(pack.createdAt || 0) > 0) return Number(pack.createdAt);
+  const match = /^custom_(\d+)$/.exec(String(key || ""));
+  return match ? Number(match[1]) : 0;
+}
+
+function cleanupTemporaryPackages(ttlMs = 86400000) {
+  const now = Date.now();
+  let removed = 0;
+  let changed = false;
+  for (const [key, pack] of Object.entries(dynamicPackages || {})) {
+    if (!pack?.temporary) continue;
+    const createdAt = getTempPackageCreatedAt(key, pack);
+    if (!createdAt || now - createdAt > ttlMs) {
+      delete dynamicPackages[key];
+      removed += 1;
+      changed = true;
+    }
+  }
+  if (changed) saveDynamicPackages();
+  return removed;
+}
+
 // ─── АТОМАРНИЙ LOCK ОПЛАТ ─────────────────────────────────────────────────────
 let creditedSet = new Set(loadJson(PAYMENT_LOCK_PATH, []));
 function markAsCredited(ref) { creditedSet.add(ref); saveJson(PAYMENT_LOCK_PATH, [...creditedSet]); }
@@ -1720,7 +1759,10 @@ function saveUsersSync() { saveJson(USERS_PATH, users); }
 function savePrompts()  { saveJson(PROMPTS_PATH,  prompts);  }
 function saveContent()  { saveJson(CONTENT_PATH,  content);  }
 function savePayments() { saveJson(PAYMENTS_PATH, payments); }
-function saveAiPromptCacheSync() { saveJson(AI_PROMPT_CACHE_PATH, aiPromptCache); }
+function saveAiPromptCacheSync() {
+  trimAiPromptCache();
+  saveJson(AI_PROMPT_CACHE_PATH, aiPromptCache);
+}
 function saveTempJobsSync() { saveJson(TEMP_JOBS_PATH, tempJobs); }
 function saveFailedCommandsSync() { saveJson(FAILED_COMMANDS_PATH, failedCommands); }
 
@@ -1818,6 +1860,8 @@ function cleanupOldData() {
     failedCommands: 0,
     tempJobs: 0,
     tempFiles: 0,
+    tempPackages: 0,
+    managedBackups: 0,
   };
 
   try {
@@ -1831,6 +1875,8 @@ function cleanupOldData() {
       }
     }
     if (changed) saveAiPromptCacheSync();
+    cleaned.aiPromptCache += trimAiPromptCache();
+    if (cleaned.aiPromptCache > 0) saveAiPromptCacheSync();
   } catch (e) {
     console.error("AI PROMPT CACHE CLEANUP ERROR:", e.message);
   }
@@ -1871,6 +1917,18 @@ function cleanupOldData() {
     }
   } catch (e) {
     console.error("TMP FILES CLEANUP ERROR:", e.message);
+  }
+
+  try {
+    cleaned.tempPackages = cleanupTemporaryPackages(Number(cfg.tempJobsTtlMs || 86400000));
+  } catch (e) {
+    console.error("TEMP PACKAGES CLEANUP ERROR:", e.message);
+  }
+
+  try {
+    cleaned.managedBackups = cleanupManagedBackups();
+  } catch (e) {
+    console.error("MANAGED BACKUPS CLEANUP ERROR:", e.message);
   }
 
   cleanupSessionsStorage(Number(cfg.sessionCleanupTtlMs || 86400000));
@@ -2670,6 +2728,22 @@ function markPromptPurchase(user, orderReference) {
   return markGeneratedStylePurchase(user, orderReference);
 }
 
+function refundChargedPromti(user, chargedPromtiAmount, fallbackAmount, reason = "unknown") {
+  const charged = Number(chargedPromtiAmount || 0);
+  const fallback = Number(fallbackAmount || 0);
+  const refundAmount = charged > 0 ? charged : fallback;
+  if (charged <= 0) {
+    console.warn(`PROMTI REFUND FALLBACK: reason=${reason} charged=${chargedPromtiAmount} fallback=${fallbackAmount}`);
+  }
+  if (refundAmount <= 0) {
+    console.warn(`PROMTI REFUND SKIPPED: reason=${reason} refundAmount=${refundAmount}`);
+    return 0;
+  }
+  user.promti = (user.promti || 0) + refundAmount;
+  saveUsersSync();
+  return refundAmount;
+}
+
 function buildPromptStyleCardText(style, options = {}) {
   const { admin = false, userId = null, botUsername = "Promtiai_bot" } = options;
   const trendMark = style.isTrending ? "🔥 Тренд\n" : "";
@@ -3198,7 +3272,22 @@ function startVideoProgress(ctx) {
 
 // ─── AI ПРОМТ ─────────────────────────────────────────────────────────────────
 function saveAiPromptCache() {
+  trimAiPromptCache();
   saveJson(AI_PROMPT_CACHE_PATH, aiPromptCache);
+}
+
+function trimAiPromptCache(maxEntries = 5000) {
+  const entries = Object.entries(aiPromptCache || {});
+  if (entries.length <= maxEntries) return 0;
+  entries.sort((a, b) => Number(b[1]?.createdAt || 0) - Number(a[1]?.createdAt || 0));
+  const keep = new Set(entries.slice(0, maxEntries).map(([key]) => key));
+  let removed = 0;
+  for (const [key] of entries) {
+    if (keep.has(key)) continue;
+    delete aiPromptCache[key];
+    removed += 1;
+  }
+  return removed;
 }
 
 function buildAiPromptCacheKey(imageBase64, mode, model) {
@@ -3350,6 +3439,27 @@ function buildOpenAiImageFile(imageBase64, fileName = `promti_${Date.now()}.png`
   return new File([blob], fileName, { type: "image/png" });
 }
 
+function extractOpenAiImageResult(response, emptyCode = "OPENAI_IMAGE_EMPTY") {
+  const image = response?.data?.[0] || null;
+  const base64 = image?.b64_json || null;
+  const url = image?.url || null;
+  if (base64) {
+    return {
+      base64,
+      buffer: Buffer.from(base64, "base64"),
+      url: null,
+    };
+  }
+  if (url) {
+    return {
+      base64: null,
+      buffer: null,
+      url,
+    };
+  }
+  throw new Error(emptyCode);
+}
+
 async function generateImageWithFal({ prompt, imageBase64, mode, model, settings }) {
   const cfg = settings || loadSettings();
   if (!process.env.FAL_KEY) throw new Error("FAL_NOT_CONFIGURED");
@@ -3404,11 +3514,9 @@ async function generateImageWithOpenAI({ prompt, imageBase64, mode, model }) {
       prompt,
       size: "1536x1024",
     });
-    const base64 = response?.data?.[0]?.b64_json || null;
-    if (!base64) throw new Error("OPENAI_IMAGE_EMPTY");
+    const result = extractOpenAiImageResult(response, "OPENAI_IMAGE_EMPTY");
     return {
-      base64,
-      buffer: Buffer.from(base64, "base64"),
+      ...result,
       provider: "openai",
       model: selectedModel,
     };
@@ -3421,11 +3529,9 @@ async function generateImageWithOpenAI({ prompt, imageBase64, mode, model }) {
     prompt,
     size: "1536x1024",
   });
-  const base64 = response?.data?.[0]?.b64_json || null;
-  if (!base64) throw new Error("OPENAI_IMAGE_EDIT_EMPTY");
+  const result = extractOpenAiImageResult(response, "OPENAI_IMAGE_EDIT_EMPTY");
   return {
-    base64,
-    buffer: Buffer.from(base64, "base64"),
+    ...result,
     provider: "openai",
     model: selectedModel,
   };
@@ -3513,9 +3619,11 @@ async function runInfographicPngFlow({ ctx, user, userId, textInput = "", imageB
       mode: imageBase64 ? "edit" : "create",
       model,
     });
-    if (!result?.buffer) throw new Error("INFOGRAPHIC_EMPTY_RESULT");
+    if (!result?.buffer && !result?.url) throw new Error("INFOGRAPHIC_EMPTY_RESULT");
     await tgSendWithRetry(() => ctx.replyWithDocument(
-      { source: result.buffer, filename: `promti_infographic_${Date.now()}.png` },
+      result.buffer
+        ? { source: result.buffer, filename: `promti_infographic_${Date.now()}.png` }
+        : { url: result.url, filename: `promti_infographic_${Date.now()}.png` },
       { caption: "🧾 Інфографіка PNG готова" }
     ));
     queueLogEvent({
@@ -3650,15 +3758,18 @@ async function runSvgLogoFlow({ ctx, user, userId, promptText }) {
 
 // ─── WAYFORPAY ────────────────────────────────────────────────────────────────
 function buildOrderReference(userId, packKey) {
-  return `tg_${userId}_${packKey}_${Date.now()}`;
+  return `tg_${userId}__${packKey}__${Date.now()}`;
 }
 
 function parseOrderReference(ref) {
-  // ✅ Формат: tg_{userId}_{packKey}_{timestamp}
-  // packKey може бути: promti_pack10, custom_1776681162229, photo_pack20 і т.д.
-  const m = /^tg_(\d+)_(.+)_(\d+)$/.exec(ref || "");
-  if (!m) return null;
-  return { userId: Number(m[1]), packKey: m[2] };
+  const raw = String(ref || "");
+  const modern = /^tg_(\d+)__(.+)__(\d+)$/.exec(raw);
+  if (modern) return { userId: Number(modern[1]), packKey: modern[2] };
+
+  // Backward compatibility for old refs: tg_{userId}_{packKey}_{timestamp}
+  const legacy = /^tg_(\d+)_(.+)_(\d+)$/.exec(raw);
+  if (!legacy) return null;
+  return { userId: Number(legacy[1]), packKey: legacy[2] };
 }
 
 function signWfpPurchase({ merchantAccount, merchantDomainName, orderReference, orderDate, amount, currency, productName, productCount, productPrice }) {
@@ -5274,7 +5385,7 @@ bot.hears("🎨 Трендові стилі", (ctx) => {
   });
   return sendPromptLibraryPage(ctx, 0, false);
 });
-bot.hears("🧾 Інфографіки", (ctx) => {
+bot.hears(["🧾 Інфографіки", getButtonLabel("main_infographics")], (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   return ctx.reply(getButtonHint("main_infographics"), infographicMenu());
 });
@@ -5294,7 +5405,7 @@ bot.hears("⭐ Мої промти", (ctx) => {
   }
   return ctx.reply("⭐ Твої збережені промти:", keyboard);
 });
-bot.hears("🧾 Інфографіка PNG", (ctx) => {
+bot.hears(["🧾 Інфографіка PNG", getButtonLabel("infographic_png")], (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   resetState(ctx);
   ctx.session.mode = "infographic";
@@ -5303,7 +5414,7 @@ bot.hears("🧾 Інфографіка PNG", (ctx) => {
   touchSessionState(ctx);
   return ctx.reply(getButtonHint("infographic_png"), infographicMenu());
 });
-bot.hears("🔷 SVG логотип", (ctx) => {
+bot.hears(["🔷 SVG логотип", getButtonLabel("infographic_svg")], (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   resetState(ctx);
   ctx.session.mode = "infographic";
@@ -6323,6 +6434,7 @@ bot.on("text", async (ctx, next) => {
         amount: amount,
         priceText: `${amount} грн`,
         temporary: true,
+        createdAt: Date.now(),
       };
       saveDynamicPackages(); // ✅ зберігаємо на диск щоб callback міг знайти пакет навіть після рестарту
       await ctx.reply(
@@ -6364,6 +6476,8 @@ bot.on("text", async (ctx, next) => {
     }
 
     if (ctx.session.mode === "chatgpt_trend" && ctx.session.chatgptTrendKey) {
+      const user = touchUser(ctx);
+      const userId = ctx.from.id;
       const trend = getChatgptTrend(ctx.session.chatgptTrendKey);
       if (!trend || !trend.isActive) return ctx.reply("❌ Trend недоступний. Обери інший.", aiStudioMenu());
       if (trend.inputType === "photo") return ctx.reply("Для цього trend потрібно надіслати саме фото.", aiStudioMenu());
@@ -6761,8 +6875,10 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       } catch (e) {
         stopProgress();
         userGenerating.delete(userId);
-        const refundCost = videoStyle === "kling" ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance;
-        if (!isAdmin(userId) && chargedFromBalance) { user.promti = (user.promti || 0) + refundCost; saveUsersSync(); }
+        const fallbackVideoRefund = videoStyle === "kling" ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance;
+        if (!isAdmin(userId) && chargedFromBalance) {
+          refundChargedPromti(user, chargedPromtiAmount, fallbackVideoRefund, `video:${videoStyle}`);
+        }
         appendLog({ type: "video", model: videoStyle, userId, prompt, success: false, error: e.message, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
         if (!analyticsGenerationLogged && analyticsGenerationId) {
           queueAnalyticsGeneration({
@@ -6995,11 +7111,15 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     if (!isAdmin(userId)) {
       if (chargedFromBalance) {
         if (mode === "video") {
-          user.promti = (user.promti || 0) + (chargedPromtiAmount || ((ctx.session?.style === "kling") ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance));
+          refundChargedPromti(
+            user,
+            chargedPromtiAmount,
+            (ctx.session?.style === "kling") ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance,
+            `video_outer:${ctx.session?.style || "seedance"}`
+          );
         } else {
-          user.promti = (user.promti || 0) + (chargedPromtiAmount || PROMTI_PRICES.photo);
+          refundChargedPromti(user, chargedPromtiAmount, PROMTI_PRICES.photo, "photo_outer");
         }
-        saveUsersSync();
       }
     }
     if (!analyticsGenerationLogged && analyticsGenerationId) {
@@ -7118,7 +7238,8 @@ app.post("/api/admin/upload-image",
 );
 function toAdminBool(value, fallback = true) {
   if (value === undefined) return fallback;
-  return value === true || value === "true" || value === 1 || value === "1" || value === "on";
+  const normalized = String(value).trim().toLowerCase();
+  return value === true || normalized === "true" || value === 1 || normalized === "1" || normalized === "on";
 }
 
 function safeAdminArray(value) {
@@ -7556,8 +7677,9 @@ app.post("/payment",
       user.totalSpent            = (user.totalSpent || 0) + Number(data.amount || 0);
       user.pendingOrderReference = null;
       user.lastPaidAt            = new Date().toISOString();
+      const purchaseStyleRef = user.pendingPurchaseStyleRef || (user.pendingPurchasePromptKey ? buildStaticStyleRef(user.pendingPurchasePromptKey) : "");
       const purchasePromptKey = user.pendingPurchasePromptKey;
-      markPromptPurchase(user, data.orderReference);
+      markGeneratedStylePurchase(user, data.orderReference);
       saveUsersSync(); savePayments();
       if (!hasLoggedPaymentAnalytics(paymentRecord, "credited")) {
         await trackAnalyticsPayment({
@@ -7574,7 +7696,7 @@ app.post("/payment",
         user_id: userId,
         event: "payment_success",
         value: Number(data.amount || 0),
-        style_id: purchasePromptKey || user.lastGeneratedPromptKey || user.sourcePromptKey || "",
+        style_id: purchaseStyleRef || purchasePromptKey || user.lastGeneratedStyleRef || user.lastGeneratedPromptKey || user.sourcePromptKey || "",
         extra: {
           plan: packKey,
           amount: Number(data.amount || 0),
@@ -7682,7 +7804,9 @@ function runBackup() {
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     for (const f of fs.readdirSync(BACKUP_DIR)) {
       const full = path.join(BACKUP_DIR, f);
-      if (fs.statSync(full).mtimeMs < cutoff) fs.unlinkSync(full);
+      const stat = fs.statSync(full);
+      if (!stat.isFile()) continue;
+      if (stat.mtimeMs < cutoff) fs.unlinkSync(full);
     }
     console.log(`💾 Backup done: ${ts}`);
   } catch (e) { console.error("BACKUP ERROR:", e.message); }
@@ -7692,8 +7816,8 @@ setInterval(runBackup, 6 * 60 * 60 * 1000);
 setInterval(() => {
   try {
     const result = cleanupOldData();
-    if (result.aiPromptCache || result.failedCommands || result.tempJobs || result.tempFiles) {
-      console.log(`🧹 Cleanup: cache=${result.aiPromptCache} failed=${result.failedCommands} tempJobs=${result.tempJobs} tmpFiles=${result.tempFiles}`);
+    if (result.aiPromptCache || result.failedCommands || result.tempJobs || result.tempFiles || result.tempPackages || result.managedBackups) {
+      console.log(`🧹 Cleanup: cache=${result.aiPromptCache} failed=${result.failedCommands} tempJobs=${result.tempJobs} tmpFiles=${result.tempFiles} tempPackages=${result.tempPackages} managedBackups=${result.managedBackups}`);
     }
   } catch (e) {
     console.error("CLEANUP INTERVAL ERROR:", e.message);
@@ -7707,8 +7831,8 @@ bot.launch({
   .then(() => {
     console.log("🔥 Бот запущений (v5 fixed)");
     const cleanupResult = cleanupOldData();
-    if (cleanupResult.aiPromptCache || cleanupResult.failedCommands || cleanupResult.tempJobs || cleanupResult.tempFiles) {
-      console.log(`🧹 Startup cleanup: cache=${cleanupResult.aiPromptCache} failed=${cleanupResult.failedCommands} tempJobs=${cleanupResult.tempJobs} tmpFiles=${cleanupResult.tempFiles}`);
+    if (cleanupResult.aiPromptCache || cleanupResult.failedCommands || cleanupResult.tempJobs || cleanupResult.tempFiles || cleanupResult.tempPackages || cleanupResult.managedBackups) {
+      console.log(`🧹 Startup cleanup: cache=${cleanupResult.aiPromptCache} failed=${cleanupResult.failedCommands} tempJobs=${cleanupResult.tempJobs} tmpFiles=${cleanupResult.tempFiles} tempPackages=${cleanupResult.tempPackages} managedBackups=${cleanupResult.managedBackups}`);
     }
     runBackup();
   })

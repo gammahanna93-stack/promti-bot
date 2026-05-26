@@ -627,11 +627,14 @@ function loadLandingContent() {
 
 let landingContent = loadLandingContent();
 
-if (landingContent?.locales?.uk?.hero?.trust === "1 Promti ✨ безкоштовно при старті") {
-  landingContent.locales.uk.hero.trust = "3 Promti ✨ безкоштовно при старті";
+if (landingContent?.locales?.uk?.hero?.trust === "1 Promti ✨ безкоштовно при старті" || landingContent?.locales?.uk?.hero?.trust === "3 Promti ✨ безкоштовно при старті") {
+  landingContent.locales.uk.hero.trust = "🎁 1 тестове AI-фото безкоштовно";
 }
-if (landingContent?.locales?.uk?.ctaSection?.title === "Спробуй зараз і отримай перший Promti ✨ безкоштовно") {
-  landingContent.locales.uk.ctaSection.title = "Спробуй зараз і отримай перші 3 Promti ✨ безкоштовно";
+if (
+  landingContent?.locales?.uk?.ctaSection?.title === "Спробуй зараз і отримай перший Promti ✨ безкоштовно" ||
+  landingContent?.locales?.uk?.ctaSection?.title === "Спробуй зараз і отримай перші 3 Promti ✨ безкоштовно"
+) {
+  landingContent.locales.uk.ctaSection.title = "🎁 1 тестове AI-фото безкоштовно";
 }
 saveJson(LANDING_CONTENT_PATH, landingContent);
 
@@ -1970,6 +1973,53 @@ function saveFailedCommandsSync() { saveJson(FAILED_COMMANDS_PATH, failedCommand
 
 function getUserVideoTotal(user) { return (user.seedanceGenerations || 0) + (user.klingGenerations || 0) + (user.veoGenerations || 0); }
 function isPaymentCreditedStatus(status) { return String(status || "").toLowerCase() === "credited"; }
+function getSelectedVideoStyle(ctx) {
+  const style = String(ctx?.session?.style || ctx?.session?.videoModel || "").trim().toLowerCase();
+  if (style === "seedance") return "seedance";
+  if (style === "veo" || style === "veo_lite") return style;
+  return style === "kling" ? "kling" : "";
+}
+function getVideoPromptLabel(style) {
+  if (style === "veo" || style === "veo_lite") return "🎞 Veo";
+  if (style === "kling") return "🎥 Kling";
+  return "🎬 Відео";
+}
+function getVideoStartMessage(style) {
+  if (style === "veo" || style === "veo_lite") {
+    return "⏳ Створюю premium video через Google Veo...\nМодель: Google Gemini API / Veo.\nЦе може зайняти 1–8 хв.";
+  }
+  return "⏳ Створюю відео через fal.ai / Kling...\nЦе може зайняти 1–8 хв.";
+}
+function getVideoCost(style, cfg = loadSettings()) {
+  if (style === "veo") return Number(cfg.veoPricePromti || PROMTI_PRICES.veo || 20);
+  if (style === "veo_lite") return Number(cfg.veoLitePricePromti || 12);
+  return Number(cfg.klingPricePromti || PROMTI_PRICES.kling || 8);
+}
+function getBalanceText(user) {
+  const cfg = loadSettings();
+  const lines = [
+    "📊 Баланс:",
+    `🎁 Тестове AI-фото: ${Number(user?.freePhotoCredits || 0)}`,
+    `Promti ✨: ${Number(user?.promti || 0)}`,
+  ];
+  if (isSubscriptionActive(user)) {
+    lines.push(`💎 PROMTI PRO: активна до ${String(user.subscriptionExpiresAt || "").slice(0, 10)}`);
+  }
+  lines.push("");
+  lines.push("💰 Ціни:");
+  lines.push(`🖼 AI-фото — ${PROMTI_PRICES.photo} Promti ✨`);
+  lines.push(`🎥 Kling — ${Number(cfg.klingPricePromti || PROMTI_PRICES.kling)} Promti ✨`);
+  lines.push(`🎞 Veo — ${Number(cfg.veoPricePromti || PROMTI_PRICES.veo)} Promti ✨`);
+  lines.push(`🧾 Інфографіка PNG — ${Number(cfg.infographicPricePromti || 2)} Promti ✨`);
+  lines.push(`🔷 SVG логотип — ${Number(cfg.svgLogoPricePromti || 3)} Promti ✨`);
+  lines.push("");
+  lines.push(`📅 Kling сьогодні: ${Number(user?.dailyKlingCount || 0)}/${Number(cfg.dailyKlingLimit || 0) || "∞"}`);
+  lines.push(`📅 Veo сьогодні: ${Number(user?.dailyVeoCount || 0)}/${Number(cfg.dailyVeoLimit || 0) || "∞"}`);
+  if (Number(user?.seedanceGenerations || 0) > 0) {
+    lines.push(`🕰 Legacy Seedance: ${Number(user.seedanceGenerations || 0)}`);
+  }
+  return lines.join("\n");
+}
 
 function truncateForLog(value, maxLength = 240) {
   const text = typeof value === "string" ? value : JSON.stringify(value || "");
@@ -4206,11 +4256,16 @@ function getBotStats() {
   return {
     totalUsers:       all.length,
     activeUsers:      all.filter(u => u.generations > 0 || getUserVideoTotal(u) > 0).length,
+    payingUsers:      all.filter(u => (u.totalSpent || 0) > 0).length,
     bannedUsers:      all.filter(u => u.banned).length,
     totalPhotoGen:    all.reduce((s, u) => s + (u.generations          || 0), 0),
     totalSeedanceGen: all.reduce((s, u) => s + (u.seedanceGenerations  || 0), 0),
     totalKlingGen:    all.reduce((s, u) => s + (u.klingGenerations     || 0), 0),
+    totalVeoGen:      all.reduce((s, u) => s + (u.veoGenerations       || 0), 0),
     totalReferrals:   all.reduce((s, u) => s + (u.referralCount        || 0), 0),
+    totalFreePhotoCreditsRemaining: all.reduce((s, u) => s + (u.freePhotoCredits || 0), 0),
+    activeSubscriptions: all.filter((u) => isSubscriptionActive(u)).length,
+    expiredSubscriptions: all.filter((u) => u.subscriptionStatus === "active" && !isSubscriptionActive(u)).length,
     totalRevenue:     payments.filter(p => isPaymentCreditedStatus(p.status)).reduce((s, p) => s + (Number(p.amount) || 0), 0),
     totalPaidOrders:  payments.filter(p => isPaymentCreditedStatus(p.status)).length,
     queueLength:      generationQueue.length,
@@ -4227,12 +4282,15 @@ function getBotStats() {
     hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
     hasOpenAiKey:    !!process.env.OPENAI_API_KEY,
     hasFalKey:       !!process.env.FAL_KEY,
+    hasGeminiKey:    !!getGoogleGenAiApiKey(),
+    veoConfigured:   isVeoConfigured(),
     hasWfp:          !!WAYFORPAY.merchantAccount,
     hasGoogleSheets: isAnalyticsEnabled(),
     defaultImageProvider: cfg.defaultImageProvider,
     defaultImageModel: cfg.defaultImageModel,
     defaultOpenAIImageModel: cfg.defaultOpenAIImageModel,
     defaultPromptModel: cfg.defaultPromptModel,
+    defaultVeoModel: cfg.defaultVeoModel,
     aiPromptCacheEnabled: cfg.aiPromptCacheEnabled !== false,
     promptLibraryCount,
     chatgptTrendsCount,
@@ -4587,11 +4645,11 @@ bot.start(async (ctx) => {
     style_id: promptSourceKey,
     extra: { source: payload.startsWith("prompt_") ? `style_${promptSourceKey}` : startSource },
   });
-  if (isNew && START_PROMTI_BONUS > 0) {
+  if (isNew && START_FREE_PHOTO_CREDITS > 0) {
     queueLogEvent({
       user_id: ctx.from.id,
-      event: "free_promti_claimed",
-      value: START_PROMTI_BONUS,
+      event: "free_photo_granted",
+      value: START_FREE_PHOTO_CREDITS,
       style_id: promptSourceKey,
       extra: { source: startSource },
     });
@@ -5076,12 +5134,13 @@ bot.command("userinfo", (ctx) => {
   const cfg = loadSettings();
   return ctx.reply(
     `👤 ID: ${u.id} ${getUserSegment(u)}\n@${u.username || "-"} | ${u.firstName || "-"}\n\n` +
-    `💎 Баланс Promti ✨: ${u.promti || 0}\n\n` +
-    `⚡ Фото: ${u.generations || 0}\n🎬 Seedance: ${u.seedanceGenerations || 0}\n🎥 Kling: ${u.klingGenerations || 0}\n\n` +
+    `💎 Баланс Promti ✨: ${u.promti || 0}\n🎁 Тестове AI-фото: ${u.freePhotoCredits || 0}\n\n` +
+    `⚡ Фото: ${u.generations || 0}\n🎥 Kling: ${u.klingGenerations || 0}\n🎞 Veo: ${u.veoGenerations || 0}\n🕰 Legacy Seedance: ${u.seedanceGenerations || 0}\n\n` +
     `💰 Витрачено: ${u.totalSpent || 0} грн\n👫 Рефералів: ${u.referralCount || 0}\n` +
     `🚫 Бан: ${u.banned ? "так" : "ні"}\n📅 З: ${(u.createdAt || "").slice(0, 10)}\n\n` +
-    `📊 Сьогодні Seedance: ${u.dailySeedanceCount || 0}/${cfg.dailySeedanceLimit}\n` +
-    `📊 Сьогодні Kling: ${u.dailyKlingCount || 0}/${cfg.dailyKlingLimit}`
+    `📊 Сьогодні Kling: ${u.dailyKlingCount || 0}/${cfg.dailyKlingLimit}\n` +
+    `📊 Сьогодні Veo: ${u.dailyVeoCount || 0}/${cfg.dailyVeoLimit || 1}\n` +
+    `💎 Підписка: ${isSubscriptionActive(u) ? `активна до ${String(u.subscriptionExpiresAt || "").slice(0, 10)}` : "немає"}`
   );
 });
 
@@ -5179,14 +5238,14 @@ function buildAnalyticsText() {
 
   const totalUsers = all.length;
   const payingUsers = all.filter((user) => (user.totalSpent || 0) > 0).length;
-  const activeUsers = all.filter((user) => (user.generations || 0) > 0 || (user.seedanceGenerations || 0) > 0 || (user.klingGenerations || 0) > 0).length;
+  const activeUsers = all.filter((user) => (user.generations || 0) > 0 || (user.seedanceGenerations || 0) > 0 || (user.klingGenerations || 0) > 0 || (user.veoGenerations || 0) > 0).length;
   const conversion = totalUsers > 0 ? ((payingUsers / totalUsers) * 100).toFixed(1) : 0;
   const activeConversion = activeUsers > 0 ? ((payingUsers / activeUsers) * 100).toFixed(1) : 0;
 
   const totalRevenue = paid.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const avgCheck = payingUsers > 0 ? Math.round(totalRevenue / payingUsers) : 0;
   const triedNoPayment = all.filter((user) =>
-    ((user.generations || 0) > 0 || (user.seedanceGenerations || 0) > 0 || (user.klingGenerations || 0) > 0) &&
+    ((user.generations || 0) > 0 || (user.seedanceGenerations || 0) > 0 || (user.klingGenerations || 0) > 0 || (user.veoGenerations || 0) > 0) &&
     (user.totalSpent || 0) === 0
   ).length;
   const repeatBuyers = all.filter((user) => paid.filter((payment) => payment.userId == user.id).length > 1).length;
@@ -5296,6 +5355,7 @@ bot.hears("📊 Статус бота", (ctx) => {
     `🤖 Статус бота\n\n` +
     `${s.hasOpenAiKey    ? "✅" : "❌"} OPENAI_API_KEY\n` +
     `${s.hasFalKey       ? "✅" : "❌"} FAL_KEY\n` +
+    `${s.hasGeminiKey    ? "✅" : "❌"} GEMINI_API_KEY\n` +
     `${s.hasWfp          ? "✅" : "❌"} WayForPay\n` +
     `${s.hasGoogleSheets ? "✅" : "❌"} Google Sheets\n` +
     `${s.hasAnthropicKey ? "✅" : "❌"} Anthropic fallback\n` +
@@ -5305,6 +5365,7 @@ bot.hears("📊 Статус бота", (ctx) => {
     `🖼 defaultImageModel: ${s.defaultImageModel}\n` +
     `🎨 defaultOpenAIImageModel: ${s.defaultOpenAIImageModel}\n` +
     `✍️ defaultPromptModel: ${s.defaultPromptModel}\n` +
+    `🎞 defaultVeoModel: ${s.defaultVeoModel}\n` +
     `🗃 aiPromptCacheEnabled: ${s.aiPromptCacheEnabled ? "true" : "false"}\n` +
     `🎨 prompt library: ${s.promptLibraryCount}\n` +
     `🔥 chatgpt trends: ${s.chatgptTrendsCount}\n\n` +
@@ -5312,12 +5373,33 @@ bot.hears("📊 Статус бота", (ctx) => {
     `📊 Статистика:\n` +
     `👥 Користувачів: ${s.totalUsers} (🚫${s.bannedUsers} забанено)\n` +
     `🆕 New: ${s.segments.new} | 🔥 Active: ${s.segments.active} | 💳 Paying: ${s.segments.paying} | 🐳 Whale: ${s.segments.whales}\n` +
+    `💎 Платних користувачів: ${s.payingUsers} | активні підписки: ${s.activeSubscriptions}\n` +
     `🖼 Фото: ${s.totalPhotoGen}\n` +
-    `🎬 Seedance: ${s.totalSeedanceGen}\n` +
     `🎥 Kling: ${s.totalKlingGen}\n` +
+    `🎞 Veo: ${s.totalVeoGen}\n` +
+    `🕰 Legacy Seedance: ${s.totalSeedanceGen}\n` +
+    `🎁 Тестові AI-фото в юзерів: ${s.totalFreePhotoCreditsRemaining}\n` +
     `👫 Рефералів: ${s.totalReferrals}\n` +
     `💰 Зароблено: ${s.totalRevenue} грн\n` +
     `🧾 Оплат: ${s.totalPaidOrders}`,
+    adminMenu()
+  );
+});
+
+bot.command("models", (ctx) => {
+  touchUser(ctx);
+  if (!isAdmin(ctx.from.id)) return ctx.reply("⛔ Access denied");
+  const cfg = loadSettings();
+  const sub = getSubscriptionPlan("promti_pro_monthly");
+  return ctx.reply(
+    `🤖 AI Models Status\n\n` +
+    `🖼 Фото:\nProvider: ${cfg.defaultImageProvider || "fal"}\nModel: ${cfg.defaultImageModel || "fal-ai/nano-banana-2"}\nFAL_KEY: ${process.env.FAL_KEY ? "✅" : "❌"}\n\n` +
+    `🧾 Інфографіка:\nProvider: OpenAI\nModel: ${cfg.defaultInfographicImageModel || "gpt-image-1"}\nOPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "✅" : "❌"}\nPrice: ${cfg.infographicPricePromti || 2} Promti ✨\n\n` +
+    `🔷 SVG:\nProvider: OpenAI\nModel: ${cfg.defaultSvgModel || "gpt-4.1-mini"}\nOPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "✅" : "❌"}\nPrice: ${cfg.svgLogoPricePromti || 3} Promti ✨\n\n` +
+    `🎥 Kling:\nProvider: fal.ai\nModel: fal-ai/kling-video/v3/pro\nFAL_KEY: ${process.env.FAL_KEY ? "✅" : "❌"}\nPrice: ${cfg.klingPricePromti || PROMTI_PRICES.kling} Promti ✨\n\n` +
+    `🎞 Veo:\nProvider: Google Gemini API\nModel: ${cfg.defaultVeoModel || "veo-3.0-fast-generate-001"}\nGEMINI_API_KEY: ${getGoogleGenAiApiKey() ? "✅" : "❌"}\nPrice: ${cfg.veoPricePromti || PROMTI_PRICES.veo} Promti ✨\nDaily limit: ${cfg.dailyVeoLimit || 1}\n\n` +
+    `Seedance:\nStatus: disabled / legacy only\n\n` +
+    `💎 Subscription:\nPROMTI PRO: ${sub?.isActive ? "active" : "inactive"}\nPrice: ${sub?.amount || 199} UAH\nMonthly Promti: ${sub?.promtiMonthly || 30}\nUnlimited: no`,
     adminMenu()
   );
 });
@@ -5497,12 +5579,12 @@ bot.hears("⚙️ Налаштування", (ctx) => {
     `📷 Фото rate limit: ${cfg.photoRateLimitMs / 1000}сек\n` +
     `🎬 Відео rate limit: ${cfg.videoRateLimitMs / 1000}сек\n` +
     `🤖 AI промт rate limit: ${cfg.aiPromptRateLimitMs / 1000}сек\n\n` +
-    `⏱ Таймаути:\nФото: ${cfg.photoTimeoutMs / 1000}с | Seedance: ${cfg.seedanceTimeoutMs / 1000}с | Kling: ${cfg.klingTimeoutMs / 1000}с\n\n` +
-    `🎬 Seedance: ${cfg.seedanceDurationSec}сек, ${cfg.seedanceAspectRatio}\n` +
-    `🎥 Kling: ${cfg.klingDurationSec}сек, ${cfg.klingAspectRatio}\n\n` +
+    `⏱ Таймаути:\nФото: ${cfg.photoTimeoutMs / 1000}с | Kling: ${cfg.klingTimeoutMs / 1000}с | Veo: ${cfg.veoTimeoutMs / 1000}с\n\n` +
+    `🎥 Kling: ${cfg.klingDurationSec}сек, ${cfg.klingAspectRatio}\n` +
+    `🎞 Veo: ${cfg.veoDurationSec}сек, ${cfg.veoAspectRatio}, ${cfg.veoResolution}\n\n` +
     `👥 maxWorkers: ${cfg.maxWorkers}\n` +
-    `📅 Денний ліміт Seedance: ${cfg.dailySeedanceLimit} (0=∞)\n` +
-    `📅 Денний ліміт Kling: ${cfg.dailyKlingLimit} (0=∞)\n\n` +
+    `📅 Денний ліміт Kling: ${cfg.dailyKlingLimit} (0=∞)\n` +
+    `📅 Денний ліміт Veo: ${cfg.dailyVeoLimit} (0=∞)\n\n` +
     `🤖 AI промт: ${cfg.aiPromptEnabled ? "✅" : "❌"}\n` +
     `🎬 Відео: ${cfg.videoEnabled ? "✅" : "❌"}\n\n` +
     `Для швидкого mobile-first редагування відкрий Settings у PROMTI Control.`,
@@ -5539,8 +5621,8 @@ bot.hears("↩️ Назад до відео", (ctx) => {
   ctx.session.mode = "video";
   return ctx.reply(
     "🎬 Меню відео\n\n" +
-    "🎬 Seedance — ByteDance модель, реалістична анімація\n" +
-    "🎥 Kling — кінематографічна якість відео\n\n" +
+    "🎥 Kling — основна модель для image-to-video через fal.ai\n" +
+    "🎞 Veo — premium video через Google Gemini API\n\n" +
     "💡 Ідеї: t.me/promteamai",
     videoMenu()
   );
@@ -5562,6 +5644,7 @@ bot.hears("💬 Своя сума", async (ctx) => {
 
 bot.hears(["✨ Купити Promti ✨", "✨ Купити Promti", "💳 Купити Promti"], (ctx) => {
   const user = touchUser(ctx);
+  const cfg = loadSettings();
   if (isAdmin(ctx.from.id)) return ctx.reply("✅ Адмін — безкоштовно.", adminMenu());
   queueLogEvent({
     user_id: ctx.from.id,
@@ -5586,9 +5669,11 @@ bot.hears(["✨ Купити Promti ✨", "✨ Купити Promti", "💳 Ку�
     `150 Promti ✨ — 999 грн (6.7 грн/✨) 🔥\n\n` +
     `💰 Ціни послуг:\n` +
     `🖼 Фото — 1 Promti ✨\n` +
-    `🎬 Seedance — 5 Promti ✨\n` +
-    `🎥 Kling — 8 Promti ✨\n\n` +
-    `🎁 При реєстрації: ${START_PROMTI_BONUS} Promti ✨ безкоштовно`,
+    `🎥 Kling — ${PROMTI_PRICES.kling} Promti ✨\n` +
+    `🎞 Veo — ${PROMTI_PRICES.veo} Promti ✨\n` +
+    `🧾 Інфографіка PNG — ${cfg.infographicPricePromti || 2} Promti ✨\n` +
+    `🔷 SVG логотип — ${cfg.svgLogoPricePromti || 3} Promti ✨\n\n` +
+    `🎁 При старті: 1 тестове AI-фото безкоштовно`,
     Markup.inlineKeyboard([
       [Markup.button.callback("10 Promti ✨ — 99 грн",  "buy_pack_promti_pack10")],
       [Markup.button.callback("30 Promti ✨ — 249 грн", "buy_pack_promti_pack30")],
@@ -5622,7 +5707,7 @@ bot.hears("👫 Запросити друга", async (ctx) => {
     `  Запрошено друзів: ${count}\n` +
     `  Зароблено: +${earned} Promti ✨\n\n` +
     `🔗 Твоє посилання:\n${refLink}\n\n` +
-    `💡 Поділись з друзями — вони отримають ${START_PROMTI_BONUS} Promti ✨ безкоштовно при реєстрації!`,
+    `💡 Поділись з друзями — вони отримають 1 тестове AI-фото безкоштовно при старті!`,
     mainMenu()
   );
 });
@@ -5633,16 +5718,8 @@ bot.hears("📊 Баланс", (ctx) => {
   const user = touchUser(ctx);
   if (isAdmin(ctx.from.id)) return ctx.reply("📊 Адмін: безліміт ✅", adminMenu());
   const botUsername = ctx.botInfo?.username || "Promtiai_bot";
-  const cfg = loadSettings();
   return ctx.reply(
-    `📊 Твій баланс: ${user.promti || 0} Promti ✨\n\n` +
-    `💰 Ціни послуг:\n` +
-    `🖼 Фото — 1 Promti ✨\n` +
-    `🎬 Seedance — 5 Promti ✨\n` +
-    `🎥 Kling — 8 Promti ✨\n\n` +
-    `📅 Seedance сьогодні: ${user.dailySeedanceCount || 0}/${cfg.dailySeedanceLimit}\n` +
-    `📅 Kling сьогодні: ${user.dailyKlingCount || 0}/${cfg.dailyKlingLimit}\n\n` +
-    `👫 Запрошено друзів: ${user.referralCount || 0}\n` +
+    `${getBalanceText(user)}\n\n👫 Запрошено друзів: ${user.referralCount || 0}\n` +
     `🔗 https://t.me/${botUsername}?start=ref_${user.id}`,
     mainMenu()
   );
@@ -5788,22 +5865,26 @@ bot.hears("✨ Створити фото", (ctx) => {
 bot.hears("🎬 Seedance", (ctx) => {
   return openVideoModelFlow(ctx, "seedance", "video_menu");
 });
+bot.hears("Seedance", (ctx) => {
+  touchUser(ctx);
+  return ctx.reply("Seedance більше недоступний.\nОбери 🎥 Kling або 🎞 Veo.", videoMenu());
+});
 
 bot.hears("⚡ Авто анімація", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
-  if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
+  if (!style || style === "seedance") return ctx.reply("Спочатку обери модель: 🎥 Kling або 🎞 Veo", videoMenu());
   ctx.session.videoInputMode = "image";
   ctx.session.customType = `custom_video_${style}`;
   ctx.session.awaitingCustomPrompt = false;
   ctx.session.customPrompt = null;
   touchSessionState(ctx);
-  const menu = style === "kling" ? klingMenu() : seedanceMenu();
+  const menu = style === "kling" ? klingMenu() : veoMenu();
   const defaultPrompt = prompts[style] || "cinematic motion, smooth animation";
-  const isSeeedance = style === "seedance";
+  const isVeoStyle = style === "veo" || style === "veo_lite";
   return ctx.reply(
     `⚡ Авто анімація\n\nНадішли фото — оживлю з дефолтним промтом:\n📝 "${defaultPrompt}"\n\n` +
-    (isSeeedance ? "⛔️ Лише для об'єктів та природи (не людей)\n👉 Для людей — використовуй Kling\n\n" : "") +
+    (isVeoStyle ? "💎 Premium-режим Veo: краще підходить для editorial/storytelling сцен.\n\n" : "") +
     `✍️ Хочеш свій промт? Напиши його перед фото.`,
     menu
   );
@@ -5812,18 +5893,18 @@ bot.hears("⚡ Авто анімація", (ctx) => {
 bot.hears("🎬 Анімація + промт", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
-  if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
+  if (!style || style === "seedance") return ctx.reply("Спочатку обери модель: 🎥 Kling або 🎞 Veo", videoMenu());
   ctx.session.videoInputMode = "image";
   ctx.session.customType = `custom_video_${style}`;
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   touchSessionState(ctx);
-  const menu = style === "kling" ? klingMenu() : seedanceMenu();
-  const isSeedanceStyle = style === "seedance";
+  const menu = style === "kling" ? klingMenu() : veoMenu();
+  const isVeoStyle = style === "veo" || style === "veo_lite";
   return ctx.reply(
     `🎬 Анімація + промт\n\nНапиши промт, потім надішли фото.\n\n` +
-    (isSeedanceStyle
-      ? `Приклад: "gentle swaying in wind, soft light"\n\n⛔️ Лише для об'єктів та природи — не людей\n👉 Для анімації людей — Kling\n\n`
+    (isVeoStyle
+      ? `Приклад: "premium editorial motion, soft camera drift"\n\n`
       : `Приклад: "cinematic close-up, eyes slowly opening"\n\n`) +
     `💡 t.me/promteamai`,
     menu
@@ -5833,13 +5914,13 @@ bot.hears("🎬 Анімація + промт", (ctx) => {
 bot.hears("🎥 Відео з тексту", (ctx) => {
   touchUser(ctx); ensureSession(ctx);
   const style = ctx.session.style;
-  if (!style) return ctx.reply("Спочатку обери модель: 🎬 Seedance або 🎥 Kling", videoMenu());
+  if (!style || style === "seedance") return ctx.reply("Спочатку обери модель: 🎥 Kling або 🎞 Veo", videoMenu());
   ctx.session.videoInputMode = "text";
   ctx.session.customType = `custom_video_${style}`;
   ctx.session.awaitingCustomPrompt = true;
   ctx.session.customPrompt = null;
   touchSessionState(ctx);
-  const menu = style === "kling" ? klingMenu() : seedanceMenu();
+  const menu = style === "kling" ? klingMenu() : veoMenu();
   return ctx.reply(
     `🎥 Відео з тексту\n\nНапиши детальний промт — створю відео з нуля!\n\nПриклад: "cinematic portrait of woman, wind in hair, golden hour"\n\n💡 t.me/promteamai`,
     menu
@@ -6003,9 +6084,9 @@ function openVideoModelFlow(ctx, style, source = "video_menu") {
       "🎞 Veo Premium\n\n" +
       "Premium AI-відео через Google Gemini API / Veo.\n" +
       "Це дорожча модель, ніж Kling, але вона краще підходить для кінематографічних fashion/editorial відео, storytelling і premium social media visuals.\n\n" +
-      "Вартість: 20 Promti ✨.\n" +
+      `Вартість: ${cfg.veoPricePromti || PROMTI_PRICES.veo} Promti ✨.\n` +
       "Формат: 9:16.\n" +
-      "Тривалість: до 8 секунд.\n" +
+      `Тривалість: до ${cfg.veoDurationSec || 8} секунд.\n` +
       "Орієнтовний час: 1–8 хв.\n\n" +
       "Обери режим:\n" +
       "⚡ Авто анімація\n" +
@@ -6026,7 +6107,7 @@ function openVideoModelFlow(ctx, style, source = "video_menu") {
     "🎥 Kling\n\n" +
     "Кінематографічна анімація фото через fal.ai / Kling.\n" +
     "Підходить для fashion/editorial відео, плавної камери, драматичного руху, Reels/TikTok/Shorts.\n\n" +
-    "Вартість: 8 Promti ✨.\n" +
+    `Вартість: ${cfg.klingPricePromti || PROMTI_PRICES.kling} Promti ✨.\n` +
     "Формат: 9:16.\n" +
     "Орієнтовний час: 1–8 хв.",
     klingMenu()
@@ -6072,10 +6153,10 @@ bot.hears("🤖 AI промт для відео", (ctx) => {
   ensureSession(ctx);
   clearPromptAttribution(ctx);
   ctx.session.mode = "video";
-  if (!ctx.session.style) ctx.session.style = "seedance";
+  if (!ctx.session.style || ctx.session.style === "seedance") ctx.session.style = "kling";
   ctx.session.awaitingAiPrompt = "video"; ctx.session.awaitingCustomPrompt = false; ctx.session.customPrompt = null;
   touchSessionState(ctx);
-  const label = ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance";
+  const label = getVideoPromptLabel(ctx.session.style);
   return ctx.reply(getButtonHint("video_ai_prompt", `🤖 AI промт для відео (${label})\n\nНадішли:\n📸 Фото — опишу рух\n🎬 Відео до 10 сек — проаналізую рух\n\nПромт: макс. 10 слів.`), videoMenu());
 });
 
@@ -6173,8 +6254,8 @@ bot.action("upsell_promti", async (ctx) => {
       `150 Promti ✨ — 999 грн 🔥\n\n` +
       `💰 Ціни послуг:\n` +
       `🖼 Фото — 1 Promti ✨\n` +
-      `🎬 Seedance — 5 Promti ✨\n` +
-      `🎥 Kling — 8 Promti ✨`,
+      `🎥 Kling — ${PROMTI_PRICES.kling} Promti ✨\n` +
+      `🎞 Veo — ${PROMTI_PRICES.veo} Promti ✨`,
       Markup.inlineKeyboard([
         [Markup.button.callback("10 Promti ✨ — 99 грн",  "buy_pack_promti_pack10")],
         [Markup.button.callback("30 Promti ✨ — 249 грн", "buy_pack_promti_pack30")],
@@ -6189,10 +6270,10 @@ bot.action("upsell_promti", async (ctx) => {
 bot.action("upsell_video_seedance", async (ctx) => {
   try {
     await ctx.answerCbQuery();
-    return openVideoModelFlow(ctx, "seedance", "post_photo_upsell");
+    return openVideoModelFlow(ctx, "kling", "post_photo_upsell");
   } catch (e) {
     console.error("UPSELL VIDEO SEEDANCE:", e.message);
-    try { await ctx.reply("❌ Не вдалося відкрити Seedance. Спробуй ще раз.", videoMenu()); } catch {}
+    try { await ctx.reply("❌ Не вдалося відкрити відеорежим. Спробуй ще раз.", videoMenu()); } catch {}
   }
 });
 
@@ -6555,7 +6636,7 @@ bot.action(/^savedprompt_use_(.+)$/, async (ctx) => {
     ctx.session.awaitingCustomPrompt = false;
     ctx.session.lastStateAt = Date.now();
     if (item.mode === "video") {
-      if (!ctx.session.style) ctx.session.style = "seedance";
+      if (!ctx.session.style || ctx.session.style === "seedance") ctx.session.style = "kling";
       ctx.session.customType = `custom_video_${ctx.session.style}`;
     } else {
       ctx.session.photoMode = "edit";
@@ -6598,7 +6679,7 @@ const ALL_BUTTONS = [
   "⚡ Авто анімація","🎬 Анімація + промт","🎥 Відео з тексту",
   "🤖 AI промт для фото","🤖 AI промт для відео",
   "✨ Купити Promti ✨","✨ Купити Promti","💳 Купити Promti","💬 Своя сума",
-  "🎬 Seedance","🎥 Kling",
+  "🎬 Seedance","🎥 Kling","🎞 Veo",
   "↩️ Назад","↩️ Назад до відео","↩️ Назад до фото",
   "📊 Статус бота","👤 Мій ID","👥 Користувачі","💳 Останні оплати","🎨 Бібліотека стилів","📈 Аналітика",
   "📦 Пакети","✏️ Змінити текст","📝 Поточні тексти","⚙️ Налаштування",
@@ -6791,7 +6872,7 @@ bot.on("text", async (ctx, next) => {
       clearPromptAttribution(ctx);
       ctx.session.customPrompt = text;
       const style = ctx.session.style;
-      const menu = style === "kling" ? klingMenu() : seedanceMenu();
+      const menu = style === "kling" ? klingMenu() : veoMenu();
       return ctx.reply(`✅ Промт збережено: "${text}"\nТепер надішли фото 📸`, menu);
     }
 
@@ -6801,7 +6882,7 @@ bot.on("text", async (ctx, next) => {
       ctx.session.awaitingCustomPrompt = false;
       const videoInputMode = ctx.session.videoInputMode || "image";
       const style = ctx.session.style;
-      const menu = style === "kling" ? klingMenu() : seedanceMenu();
+      const menu = style === "kling" ? klingMenu() : veoMenu();
 
       if (videoInputMode === "text") {
         const user = getUser(ctx.from.id);
@@ -6999,9 +7080,9 @@ bot.on("photo", async (ctx) => {
       const suggested = await generateAiPrompt(image, aiMode, ctx);
       if (!suggested) return ctx.reply("❌ Не вдалося згенерувати промт. Спробуй ✍️ Свій промт.", aiMode === "video" ? videoMenu() : photoMenu());
       ctx.session.customPrompt     = suggested;
-      ctx.session.customType       = aiMode === "video" ? `custom_video_${ctx.session.style || "seedance"}` : "custom_photo";
+      ctx.session.customType       = aiMode === "video" ? `custom_video_${getSelectedVideoStyle(ctx) || "kling"}` : "custom_photo";
       ctx.session.awaitingCustomPrompt = false;
-      const label = aiMode === "video" ? (ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance") : "🖼 Фото";
+      const label = aiMode === "video" ? getVideoPromptLabel(getSelectedVideoStyle(ctx) || "kling") : "🖼 Фото";
       return ctx.reply(
         `🤖 AI промт для ${label}:\n\n📝 <code>${escapeHtml(suggested)}</code>\n\nНадішли фото ще раз — промт буде застосовано.`,
         { parse_mode: "HTML", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("✅ Застосувати", `apply_ai_prompt_${aiMode}`)], [Markup.button.callback("🔄 Новий варіант", `regen_ai_prompt_${aiMode}`)], [Markup.button.callback("💾 Зберегти промт", `save_ai_prompt_${aiMode}`)]]).reply_markup }
@@ -7040,6 +7121,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
   const cfg = loadSettings();
   let chargedFromBalance = false;
   let chargedPromtiAmount = 0;
+  let usedFreePhotoCredit = false;
   const startMs          = Date.now();
   let analyticsGenerationId = "";
   let analyticsStyleId = "";
@@ -7051,17 +7133,24 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
 
     // ══ ВІДЕО ══
     if (mode === "video") {
-      const videoStyle = ctx.session.style;
-      if (!videoStyle) { userGenerating.delete(userId); return ctx.reply("Обери модель: 🎬 Seedance або 🎥 Kling", videoMenu()); }
+      const videoStyle = getSelectedVideoStyle(ctx);
+      if (!videoStyle) { userGenerating.delete(userId); return ctx.reply("Обери модель: 🎥 Kling або 🎞 Veo", videoMenu()); }
+      if (videoStyle === "seedance") { userGenerating.delete(userId); return ctx.reply("Seedance більше недоступний.\nОбери 🎥 Kling або 🎞 Veo.", videoMenu()); }
       if (ctx.session.awaitingCustomPrompt) { userGenerating.delete(userId); return ctx.reply("Спочатку напиши промт текстом.", videoMenu()); }
-      analyticsGenerationId = createGenerationId(userId, videoStyle === "kling" ? "kling" : "video");
+      analyticsGenerationId = createGenerationId(userId, videoStyle);
       analyticsStyleId = videoStyle;
       analyticsGenerationType = "video";
+      const videoInputMode = ctx.session.videoInputMode || "image";
+      const videoCost = getVideoCost(videoStyle, cfg);
+      const usingVeo = videoStyle === "veo" || videoStyle === "veo_lite";
 
       if (!isAdmin(userId)) {
         const dailyErr = checkDailyVideoLimit(user, videoStyle);
         if (dailyErr) { userGenerating.delete(userId); return ctx.reply(dailyErr, videoMenu()); }
-        const videoCost = videoStyle === "kling" ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance;
+        if (usingVeo && !isVeoConfigured()) {
+          userGenerating.delete(userId);
+          return ctx.reply("❌ Veo тимчасово недоступний.\nGoogle Gemini API key не налаштований.\nPromti ✨ не списано.", videoMenu());
+        }
         if ((user.promti || 0) < videoCost) {
           userGenerating.delete(userId);
           queueLogEvent({
@@ -7074,7 +7163,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           });
           return ctx.reply(
             `❌ Недостатньо Promti ✨\n\nПотрібно: ${videoCost} Promti ✨\nБаланс: ${user.promti || 0} Promti ✨\n\n💳 Купи пакет Promti`,
-            videoStyle === "kling" ? klingMenu() : seedanceMenu()
+            usingVeo ? veoMenu() : klingMenu()
           );
         }
         user.promti -= videoCost; chargedFromBalance = true; saveUsersSync();
@@ -7082,9 +7171,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       }
 
       const prompt       = ctx.session.customPrompt || prompts[videoStyle];
-      const videoInputMode = ctx.session.videoInputMode || "image";
       const stopProgress = startVideoProgress(ctx);
-      const modeLabel = videoInputMode === "text" ? "з тексту" : "з фото";
       if (videoStyle === "kling") {
         queueLogEvent({
           user_id: userId,
@@ -7094,37 +7181,43 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           generation_id: analyticsGenerationId,
           extra: { input: videoInputMode },
         });
+      } else {
+        queueLogEvent({
+          user_id: userId,
+          event: "veo_started",
+          value: 1,
+          style_id: videoStyle,
+          generation_id: analyticsGenerationId,
+          extra: { input: videoInputMode, model: cfg.defaultVeoModel || "veo-3.0-fast-generate-001" },
+        });
       }
-      await ctx.reply(`⏳ Генерую ${videoStyle === "seedance" ? "Seedance" : "Kling"} відео ${modeLabel}...\nЦе займе 1-8 хв ⌛`);
+      await ctx.reply(getVideoStartMessage(videoStyle));
 
       const image = videoInputMode === "text" ? null : await getImage(ctx, photo.file_id);
 
       try {
         let videoUrl = null;
-        if (videoStyle === "seedance") {
-          if (videoInputMode === "text") {
-            const result = await falWithRetry(
-              "bytedance/seedance-2.0/fast/text-to-video",
-              { prompt, generate_audio: false },
-              cfg.seedanceTimeoutMs
-            );
-            videoUrl = result?.data?.video?.url;
-          } else {
-            const imageUrl = await uploadImageToFal(image);
-            console.log("SEEDANCE INPUT:", { prompt: prompt?.slice(0, 50), image_url: imageUrl });
-            if (!imageUrl || imageUrl.startsWith("data:")) {
-              throw new Error("imageUrl invalid or fallback base64 — upload failed");
-            }
-            const result = await falWithRetry(
-              "bytedance/seedance-2.0/fast/image-to-video",
-              {
-                prompt: prompt || "cinematic motion, smooth animation",
-                image_url: imageUrl,
-                generate_audio: false,
-              },
-              cfg.seedanceTimeoutMs
-            );
-            videoUrl = result?.data?.video?.url;
+        let videoSource = null;
+        if (usingVeo) {
+          const veoResult = await generateVideoWithVeo({
+            prompt,
+            imageBase64: videoInputMode === "text" ? null : image,
+            model: videoStyle === "veo_lite"
+              ? (cfg.defaultVeoLiteModel || "veo-3.1-lite-generate-preview")
+              : (cfg.defaultVeoModel || "veo-3.0-fast-generate-001"),
+            aspectRatio: cfg.veoAspectRatio || "9:16",
+            resolution: cfg.veoResolution || "720p",
+          });
+          videoSource = veoResult;
+          videoUrl =
+            veoResult?.uri ||
+            veoResult?.url ||
+            veoResult?.downloadUri ||
+            veoResult?.downloadUrl ||
+            veoResult?.fileUri ||
+            "";
+          if (!videoUrl && veoResult?.videoBytes) {
+            videoSource = { source: Buffer.from(veoResult.videoBytes, "base64") };
           }
         } else {
           if (videoInputMode === "text") {
@@ -7160,10 +7253,10 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         }
 
         stopProgress();
-        if (!videoUrl) throw new Error("fal не повернув відео");
+        if (!videoUrl && !videoSource?.source) throw new Error(usingVeo ? "VEO_EMPTY_RESULT" : "FAL_EMPTY_VIDEO");
 
         if (!isAdmin(userId)) incrementDailyVideo(user, videoStyle);
-        if (videoStyle === "seedance") user.seedanceGenerations = (user.seedanceGenerations || 0) + 1;
+        if (usingVeo) user.veoGenerations = (user.veoGenerations || 0) + 1;
         else user.klingGenerations = (user.klingGenerations || 0) + 1;
         saveUsersSync();
         userGenerating.delete(userId);
@@ -7178,7 +7271,16 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           status: "success",
         });
         analyticsGenerationLogged = true;
-        if (videoStyle === "kling") {
+        if (usingVeo) {
+          queueLogEvent({
+            user_id: userId,
+            event: "veo_success",
+            value: 1,
+            style_id: videoStyle,
+            generation_id: analyticsGenerationId,
+            extra: { input: videoInputMode, model: cfg.defaultVeoModel || "veo-3.0-fast-generate-001" },
+          });
+        } else {
           queueLogEvent({
             user_id: userId,
             event: "kling_success",
@@ -7194,10 +7296,14 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
         });
 
         const caption = isAdmin(userId)
-          ? `🎬 Відео готове ✨\nМодель: ${videoStyle}\nАдмін: безліміт ✅`
-          : `🎬 Відео готове ✨\nЗалишилось: ${user.promti || 0} Promti ✨`;
+          ? `${usingVeo ? "🎞 Veo video готове ✨" : "🎥 Kling video готове ✨"}\nМодель: ${usingVeo ? "Google Veo" : "Kling"}\nАдмін: безліміт ✅`
+          : `${usingVeo ? "🎞 Veo video готове ✨" : "🎥 Kling video готове ✨"}\nМодель: ${usingVeo ? "Google Veo" : "Kling"}.\nСписано: ${chargedPromtiAmount || videoCost} Promti ✨.`;
 
-        await tgSendWithRetry(() => ctx.replyWithVideo({ url: videoUrl }, { caption }));
+        if (videoSource?.source) {
+          await tgSendWithRetry(() => ctx.replyWithVideo(videoSource, { caption }));
+        } else {
+          await tgSendWithRetry(() => ctx.replyWithVideo({ url: videoUrl }, { caption }));
+        }
 
         if (!isAdmin(userId) && (user.promti || 0) <= 5) {
           queueLogEvent({
@@ -7218,9 +7324,8 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       } catch (e) {
         stopProgress();
         userGenerating.delete(userId);
-        const fallbackVideoRefund = videoStyle === "kling" ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance;
         if (!isAdmin(userId) && chargedFromBalance) {
-          refundChargedPromti(user, chargedPromtiAmount, fallbackVideoRefund, `video:${videoStyle}`);
+          refundChargedPromti(user, chargedPromtiAmount, getVideoCost(videoStyle, cfg), `video:${videoStyle}`);
         }
         appendLog({ type: "video", model: videoStyle, userId, prompt, success: false, error: e.message, durationMs: Date.now() - startMs, createdAt: new Date().toISOString() });
         if (!analyticsGenerationLogged && analyticsGenerationId) {
@@ -7233,7 +7338,16 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           });
           analyticsGenerationLogged = true;
         }
-        if (videoStyle === "kling") {
+        if (usingVeo) {
+          queueLogEvent({
+            user_id: userId,
+            event: "veo_error",
+            value: 0,
+            style_id: videoStyle,
+            generation_id: analyticsGenerationId,
+            extra: { input: videoInputMode, error: e.message, model: cfg.defaultVeoModel || "veo-3.0-fast-generate-001" },
+          });
+        } else {
           queueLogEvent({
             user_id: userId,
             event: "kling_error",
@@ -7289,7 +7403,20 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     analyticsStyleId = generationStyleRef || promptKeyForStats || ctx.session.currentPromptKey || ctx.session.sourcePromptKey || user.sourcePromptKey || "custom";
 
     if (!isAdmin(userId)) {
-      if ((user.promti || 0) < photoCost) {
+      if (canUseFreePhotoCredit(user, "photo")) {
+        usedFreePhotoCredit = useFreePhotoCredit(user);
+        if (usedFreePhotoCredit) {
+          saveUsersSync();
+          queueLogEvent({
+            user_id: userId,
+            event: "free_photo_used",
+            value: 1,
+            style_id: analyticsStyleId,
+            generation_id: analyticsGenerationId,
+            extra: { type: "photo" },
+          });
+        }
+      } else if ((user.promti || 0) < photoCost) {
         userGenerating.delete(userId);
         queueLogEvent({
           user_id: userId,
@@ -7303,11 +7430,12 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
           `❌ Недостатньо Promti ✨\n\nПотрібно: ${photoCost} Promti ✨\nБаланс: ${user.promti || 0} Promti ✨\n\n💳 Купи пакет Promti`,
           photoMenu()
         );
+      } else {
+        user.promti -= photoCost;
+        chargedFromBalance = true;
+        chargedPromtiAmount = photoCost;
+        saveUsersSync();
       }
-      user.promti -= photoCost;
-      chargedFromBalance = true;
-      chargedPromtiAmount = photoCost;
-      saveUsersSync();
     }
 
     let imageResult = null;
@@ -7397,7 +7525,9 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       totalSpent: user.totalSpent || 0,
     });
 
-    const caption = isAdmin(userId) ? "Готово ✨\nАдмін: безліміт ✅" : `Готово ✨\nЗалишилось: ${user.promti || 0} Promti ✨`;
+    const caption = isAdmin(userId)
+      ? "Готово ✨\nАдмін: безліміт ✅"
+      : `Готово ✨\n${usedFreePhotoCredit ? `🎁 Тестове AI-фото використано\n` : ""}Залишилось: ${user.promti || 0} Promti ✨`;
     try {
       if (imageResult?.buffer) {
         await tgSendWithRetry(() => ctx.replyWithDocument(
@@ -7432,7 +7562,7 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
     await ctx.reply(
       "Що далі?",
       Markup.inlineKeyboard([
-        [Markup.button.callback("🔁 Ще варіант", "dynamic_retry_photo"), Markup.button.callback("🎬 Оживити фото", "upsell_video_seedance")],
+        [Markup.button.callback("🔁 Ще варіант", "dynamic_retry_photo"), Markup.button.callback("🎬 Оживити фото", "upsell_video_kling")],
         [Markup.button.callback("💎 Купити Promti", "upsell_promti"), Markup.button.url("📤 Поділитися стилем", `https://t.me/${shareBotUsername}?start=${sharePayload}`)],
       ])
     );
@@ -7452,13 +7582,23 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       },
     });
     if (!isAdmin(userId)) {
-      if (chargedFromBalance) {
+      if (usedFreePhotoCredit && mode !== "video") {
+        refundFreePhotoCredit(user, "photo_generation_error");
+        queueLogEvent({
+          user_id: userId,
+          event: "free_photo_refunded",
+          value: 1,
+          style_id: analyticsStyleId || "custom",
+          generation_id: analyticsGenerationId,
+          extra: { reason: e.message || "photo_error" },
+        });
+      } else if (chargedFromBalance) {
         if (mode === "video") {
           refundChargedPromti(
             user,
             chargedPromtiAmount,
-            (ctx.session?.style === "kling") ? PROMTI_PRICES.kling : PROMTI_PRICES.seedance,
-            `video_outer:${ctx.session?.style || "seedance"}`
+            getVideoCost(getSelectedVideoStyle(ctx) || "kling", cfg),
+            `video_outer:${getSelectedVideoStyle(ctx) || "kling"}`
           );
         } else {
           refundChargedPromti(user, chargedPromtiAmount, PROMTI_PRICES.photo, "photo_outer");
@@ -7476,8 +7616,16 @@ async function _processGeneration(ctx, user, userId, mode, photo) {
       analyticsGenerationLogged = true;
     }
     notifyAdminsError(`${mode === "video" ? "VIDEO" : "PHOTO"} ERROR: user ${userId}\n${e.message}`).catch(() => {});
-    if (e.message === "FAL_TIMEOUT") return ctx.reply("⏱ Занадто довго. Спробуй ще раз.");
-    return ctx.reply("❌ Помилка генерації. Спробуй ще раз.");
+    if (e.message === "FAL_TIMEOUT" || e.message === "JOB_HARD_TIMEOUT" || e.message === "VEO_TIMEOUT") {
+      return ctx.reply("⏳ Генерація тривала занадто довго.\nPromti ✨ повернено на баланс.\nСпробуй ще раз трохи пізніше.");
+    }
+    if (mode === "video" && (getSelectedVideoStyle(ctx) === "veo" || getSelectedVideoStyle(ctx) === "veo_lite")) {
+      return ctx.reply("❌ Не вдалося створити Veo video.\nPromti ✨ повернено на баланс.\nСпробуй пізніше або обери Kling.");
+    }
+    if (mode === "video") {
+      return ctx.reply("❌ Не вдалося створити Kling video.\nPromti ✨ повернено на баланс.\nСпробуй пізніше або обери інший режим.");
+    }
+    return ctx.reply("❌ Генерація фото/відео через fal.ai тимчасово недоступна.\nPromti ✨ повернено на баланс.");
   }
 }
 
@@ -7510,9 +7658,9 @@ bot.on(["video", "video_note"], async (ctx) => {
     const suggested = await generateAiPrompt(frameBase64, "video", ctx);
     if (!suggested) return ctx.reply("❌ Не вдалося згенерувати промт. Спробуй надіслати фото.", videoMenu());
     ctx.session.customPrompt     = suggested;
-    ctx.session.customType       = `custom_video_${ctx.session.style || "seedance"}`;
+    ctx.session.customType       = `custom_video_${getSelectedVideoStyle(ctx) || "kling"}`;
     ctx.session.awaitingCustomPrompt = false;
-    const label = ctx.session.style === "kling" ? "🎥 Kling" : "🎬 Seedance";
+    const label = getVideoPromptLabel(getSelectedVideoStyle(ctx) || "kling");
     return ctx.reply(
       `🤖 AI промт для ${label}:\n\n📝 <code>${escapeHtml(suggested)}</code>\n\n✅ Промт збережено. Надішли фото для генерації відео 📸`,
       { parse_mode: "HTML", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("✅ Застосувати", "apply_ai_prompt_video")], [Markup.button.callback("🔄 Новий варіант", "regen_ai_prompt_video")], [Markup.button.callback("💾 Зберегти промт", "save_ai_prompt_video")]]).reply_markup }

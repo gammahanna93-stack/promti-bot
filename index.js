@@ -1526,13 +1526,37 @@ if (typeof content.welcomeText === "string") {
     .replaceAll("3 Promti ✨ безкоштовно", "🎁 1 тестове AI-фото безкоштовно при старті")
     .replaceAll("1 фото безкоштовно", "🎁 1 тестове AI-фото безкоштовно при старті")
     .replaceAll("1 Promti ✨ безкоштовно при старті", "🎁 1 тестове AI-фото безкоштовно при старті");
+  if (content.welcomeText.includes("3 Promti") || content.welcomeText.includes("Seedance")) {
+    content.welcomeText = DEFAULT_CONTENT.welcomeText;
+  }
+}
+if (typeof content.infoText === "string" && (content.infoText.includes("Seedance") || content.infoText.includes("10/99грн"))) {
+  content.infoText = DEFAULT_CONTENT.infoText;
+}
+if (typeof content.helpText === "string" && content.helpText.includes("Обери модель") && content.helpText.includes("Надішли фото для анімації")) {
+  content.helpText = DEFAULT_CONTENT.helpText;
+}
+if (typeof content.ideaText === "string" && content.ideaText.includes("hair gently flowing in wind") && !content.ideaText.includes("\"hair gently flowing in wind\"")) {
+  content.ideaText = DEFAULT_CONTENT.ideaText;
 }
 if (typeof content.pricesText === "string") {
   content.pricesText = content.pricesText
     .replaceAll("3 Promti ✨ безкоштовно при старті", "1 тестове AI-фото безкоштовно")
     .replaceAll("3 Promti ✨ безкоштовно при реєстрації", "1 тестове AI-фото безкоштовно")
     .replaceAll("1 Promti ✨ безкоштовно при реєстрації", "1 тестове AI-фото безкоштовно");
+  if (content.pricesText.includes("Seedance") || content.pricesText.includes("1 Promti ✨ = від 6.7 до 9.9 грн")) {
+    content.pricesText = DEFAULT_CONTENT.pricesText;
+  }
 }
+if (content.buttonLabels?.video_seedance) delete content.buttonLabels.video_seedance;
+if (!content.buttonLabels?.video_veo) content.buttonLabels.video_veo = DEFAULT_BUTTON_LABELS.video_veo;
+if (!content.buttonLabels?.ai_studio_dynamic) content.buttonLabels.ai_studio_dynamic = DEFAULT_BUTTON_LABELS.ai_studio_dynamic;
+if (typeof content.buttonHints?.main_video === "string" && content.buttonHints.main_video.includes("Seedance")) {
+  content.buttonHints.main_video = DEFAULT_BUTTON_HINTS.main_video;
+}
+if (typeof content.buttonHints?.video_seedance === "string") delete content.buttonHints.video_seedance;
+if (!content.buttonHints?.video_veo) content.buttonHints.video_veo = DEFAULT_BUTTON_HINTS.video_veo;
+if (!content.buttonHints?.ai_studio_dynamic) content.buttonHints.ai_studio_dynamic = DEFAULT_BUTTON_HINTS.ai_studio_dynamic;
 saveJson(PROMPTS_PATH, prompts);
 saveJson(CONTENT_PATH, content);
 dynamicStyleLibrary = normalizeDynamicPromptsStore(dynamicStyleLibrary);

@@ -3486,6 +3486,18 @@ async function getImage(ctx, fileId, maxRetries = 3) {
   throw lastErr;
 }
 
+async function getTelegramFileStream(fileId) {
+  const safeFileId = String(fileId || "").trim();
+  if (!safeFileId) throw new Error("MISSING_FILE_ID");
+  if (!process.env.BOT_TOKEN) throw new Error("BOT_TOKEN_NOT_CONFIGURED");
+
+  const file = await bot.telegram.getFile(safeFileId);
+  if (!file?.file_path) throw new Error("TELEGRAM_FILE_NOT_FOUND");
+
+  const url = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+  return axios.get(url, { responseType: "stream", timeout: 30000 });
+}
+
 async function tgSendWithRetry(fn, maxRetries = 3) {
   let lastErr = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -7751,6 +7763,22 @@ app.post("/api/admin/upload-image",
     }
   }
 );
+app.get("/api/admin/media", requireAdminAuth, async (req, res) => {
+  try {
+    const upstream = await getTelegramFileStream(req.query?.ref);
+    res.setHeader("Content-Type", upstream.headers["content-type"] || "image/jpeg");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    upstream.data.on("error", (error) => {
+      console.error("ADMIN MEDIA STREAM ERROR:", error.message);
+      if (!res.headersSent) res.status(502).json({ ok: false, error: "MEDIA_STREAM_FAILED" });
+      else res.destroy(error);
+    });
+    upstream.data.pipe(res);
+  } catch (e) {
+    console.error("ADMIN MEDIA ERROR:", e.message);
+    res.status(404).json({ ok: false, error: "MEDIA_NOT_FOUND" });
+  }
+});
 function toAdminBool(value, fallback = true) {
   if (value === undefined) return fallback;
   const normalized = String(value).trim().toLowerCase();

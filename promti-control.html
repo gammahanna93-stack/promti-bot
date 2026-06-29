@@ -344,7 +344,7 @@
       <section id="section-settings" class="section">
         <div class="section-head">
           <div class="title">
-            <h3>вљ™пёЏ Settings</h3>
+            <h3>⚙️ Settings</h3>
             <p>Ключові параметри без потреби редагувати код напряму.</p>
           </div>
           <button id="saveSettingsButton" class="button button-primary">💾 Зберегти settings</button>
@@ -499,7 +499,31 @@
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function resolveAdminImageSrc(value = "") {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      if (/^https?:/i.test(raw)) {
+        try {
+          const url = new URL(raw);
+          if (url.pathname.startsWith("/uploads/")) return `${url.pathname}${url.search}${url.hash}`;
+        } catch {}
+        return raw;
+      }
+      if (/^(data:image\/|blob:|\/\/)/i.test(raw)) return raw;
+      if (raw.startsWith("/")) return raw;
+      if (/^uploads\//i.test(raw)) return `/${raw}`;
+      return `/api/admin/media?ref=${encodeURIComponent(raw)}`;
+    }
+
+    function imageTag(value, className = "", alt = "image") {
+      const src = resolveAdminImageSrc(value);
+      if (!src) return "";
+      const classAttr = className ? ` class="${escapeHtml(className)}"` : "";
+      return `<img${classAttr} src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy">`;
     }
 
     function setStatus(node, text, type = "success") {
@@ -659,6 +683,12 @@
       return data;
     }
 
+    function parseBoolValue(value, fallback = false) {
+      if (value === undefined || value === null || value === "") return fallback;
+      const normalized = String(value).trim().toLowerCase();
+      return normalized === "true" || normalized === "1" || normalized === "on";
+    }
+
     function renderStaticList() {
       const list = document.getElementById("staticList");
       list.innerHTML = "";
@@ -677,8 +707,8 @@
               <span class="badge">${Number(item.price || 1)} Promti ✨</span>
             </div>
           </div>
-          ${item.previewImage ? `<img class="preview" src="${escapeHtml(item.previewImage)}" alt="${escapeHtml(item.title)}">` : ""}
-          ${(item.exampleImages || []).length ? `<div class="example-grid">${item.exampleImages.slice(0, 6).map((url) => `<img src="${escapeHtml(url)}" alt="example">`).join("")}</div>` : ""}
+          ${item.previewImage ? imageTag(item.previewImage, "preview", item.title) : ""}
+          ${(item.exampleImages || []).length ? `<div class="example-grid">${item.exampleImages.slice(0, 6).map((url) => imageTag(url, "", "example")).join("")}</div>` : ""}
           <div class="badges">
             <span class="badge">${item.isActive ? "active" : "inactive"}</span>
             <span class="badge">${item.isTrending ? "trending" : "regular"}</span>
@@ -774,8 +804,8 @@
               <span class="badge">${Number(item.price || 1)} Promti ✨</span>
             </div>
           </div>
-          ${item.previewImage ? `<img class="preview" src="${escapeHtml(item.previewImage)}" alt="${escapeHtml(item.title)}">` : ""}
-          ${(item.exampleImages || []).length ? `<div class="example-grid">${item.exampleImages.slice(0, 6).map((url) => `<img src="${escapeHtml(url)}" alt="example">`).join("")}</div>` : ""}
+          ${item.previewImage ? imageTag(item.previewImage, "preview", item.title) : ""}
+          ${(item.exampleImages || []).length ? `<div class="example-grid">${item.exampleImages.slice(0, 6).map((url) => imageTag(url, "", "example")).join("")}</div>` : ""}
           <div class="badges">
             <span class="badge">${item.isActive ? "active" : "inactive"}</span>
             <span class="badge">${item.isTrending ? "trending" : "regular"}</span>
@@ -952,42 +982,6 @@
       return Object.entries(state.dashboard.content || {})
         .filter(([key, value]) => typeof value === "string" && !CONTENT_SKIP_KEYS.has(key))
         .sort((a, b) => a[0].localeCompare(b[0]));
-    }
-
-    function renderContent() {
-      const wrap = document.getElementById("contentFields");
-      wrap.innerHTML = "";
-
-      getEditableContentEntries().forEach(([key, value]) => {
-        const field = document.createElement("label");
-        field.className = "field";
-        field.innerHTML = `
-          <span>${escapeHtml(CONTENT_LABELS[key] || key)}</span>
-          <textarea data-content-key="${escapeHtml(key)}">${escapeHtml(value)}</textarea>
-        `;
-        wrap.appendChild(field);
-      });
-
-      const buttonGroup = document.createElement("div");
-      buttonGroup.className = "card";
-      buttonGroup.style.padding = "16px";
-      buttonGroup.innerHTML = `<div class="title"><h3>Тексти Telegram-кнопок</h3><p>Тут можна перейменувати кнопки в самому боті без зміни коду.</p></div>`;
-      const inner = document.createElement("div");
-      inner.className = "grid";
-      inner.style.marginTop = "12px";
-
-      Object.entries(BUTTON_LABEL_KEYS).forEach(([key, label]) => {
-        const value = state.dashboard.content?.buttonLabels?.[key.replace(/^buttonLabels\./, "")] || "";
-        const field = document.createElement("label");
-        field.className = "field";
-        field.innerHTML = `
-          <span>${escapeHtml(label)}</span>
-          <input data-content-key="${escapeHtml(key)}" value="${escapeHtml(value)}">
-        `;
-        inner.appendChild(field);
-      });
-      buttonGroup.appendChild(inner);
-      wrap.appendChild(buttonGroup);
     }
 
     function renderContent() {
@@ -1198,8 +1192,8 @@
           const payload = collectFormData(editor);
           payload.price = Number(payload.price || 1);
           payload.sortOrder = Number(payload.sortOrder || 0);
-          payload.isActive = payload.isActive === "true";
-          payload.isTrending = payload.isTrending === "true";
+          payload.isActive = parseBoolValue(payload.isActive, true);
+          payload.isTrending = parseBoolValue(payload.isTrending, false);
           payload.exampleImages = listFromTextarea(payload.exampleImages);
           payload.exampleLabels = listFromTextarea(payload.exampleLabels);
           const method = saveStaticRef === "new" ? "POST" : "PUT";
@@ -1230,7 +1224,7 @@
           const editor = document.getElementById("dynamicEditor");
           const payload = collectFormData(editor);
           payload.price = Number(payload.price || 1);
-          payload.isTrending = payload.isTrending === "true";
+          payload.isTrending = parseBoolValue(payload.isTrending, false);
           payload.exampleImages = listFromTextarea(payload.exampleImages);
           payload.variants = (state.dashboard.dynamicStyles.find((item) => item.id === saveDynamicRef) || {}).variants || [];
           const method = saveDynamicRef === "new" ? "POST" : "PUT";
@@ -1328,7 +1322,7 @@
           const targetEditor = typeLabel === "video" ? document.getElementById("videoEditor") : document.getElementById("toolEditor");
           const payload = collectFormData(targetEditor);
           payload.price = Number(payload.price || 0);
-          payload.isActive = payload.isActive === "true";
+          payload.isActive = parseBoolValue(payload.isActive, true);
           if (typeLabel === "video") {
             payload.exampleVideos = listFromTextarea(payload.exampleVideos);
           } else {

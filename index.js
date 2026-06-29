@@ -2237,8 +2237,53 @@ function toAbsolutePublicUrl(value = "") {
   return raw;
 }
 
+function extractMediaReference(value = "") {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) {
+    for (let index = value.length - 1; index >= 0; index -= 1) {
+      const extracted = extractMediaReference(value[index]);
+      if (extracted) return extracted;
+    }
+    return "";
+  }
+  if (typeof value === "object") {
+    const directFields = [
+      "url",
+      "imageUrl",
+      "image_url",
+      "src",
+      "href",
+      "media",
+      "photo",
+      "file",
+      "fileId",
+      "file_id",
+      "fileID",
+      "telegramFileId",
+      "telegram_file_id",
+      "previewImage",
+      "previewPhoto",
+      "path",
+    ];
+    for (const field of directFields) {
+      const extracted = extractMediaReference(value[field]);
+      if (extracted) return extracted;
+    }
+    const nestedPhoto = Array.isArray(value.photo) ? value.photo[value.photo.length - 1] : value.photo;
+    const nestedFile = nestedPhoto || value.document || value.image || value.thumbnail;
+    const extracted = extractMediaReference(nestedFile);
+    if (extracted) return extracted;
+  }
+  return "";
+}
+
+function normalizeMediaReference(value = "") {
+  return extractMediaReference(value);
+}
+
 function toTelegramMediaRef(value = "") {
-  const raw = String(value || "").trim();
+  const raw = normalizeMediaReference(value);
   if (!raw) return "";
   if (raw.startsWith("/uploads/")) return toAbsolutePublicUrl(raw);
   return raw;
@@ -2250,7 +2295,10 @@ function normalizePromptLibraryItem(item = {}, key = "") {
     : Array.isArray(item.exampleImages)
       ? item.exampleImages
       : [];
-  const examplePhotos = rawExamplePhotos.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
+  const examplePhotos = rawExamplePhotos
+    .map((item) => normalizeMediaReference(item))
+    .filter(Boolean)
+    .slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
   const exampleLabels = Array.isArray(item.exampleLabels)
     ? item.exampleLabels
         .map((label) => String(label || "").trim())
@@ -2263,7 +2311,7 @@ function normalizePromptLibraryItem(item = {}, key = "") {
     description: item.description || "",
     prompt: item.prompt || "",
     category: item.category || "other",
-    previewPhoto: item.previewPhoto || item.previewImage || null,
+    previewPhoto: normalizeMediaReference(item.previewPhoto || item.previewImage) || null,
     examplePhotos,
     exampleLabels,
     provider: item.provider || "fal",
@@ -2378,8 +2426,11 @@ function normalizeDynamicVariant(seriesId, variant = {}, index = 0) {
     title: variant.title || `Variant ${index + 1}`,
     subtitle: variant.subtitle || "",
     variantPrompt: variant.variantPrompt || variant.prompt || "",
-    previewImage: variant.previewImage || variant.previewPhoto || null,
-    exampleImages: rawExampleImages.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS),
+    previewImage: normalizeMediaReference(variant.previewImage || variant.previewPhoto) || null,
+    exampleImages: rawExampleImages
+      .map((item) => normalizeMediaReference(item))
+      .filter(Boolean)
+      .slice(0, MAX_PROMPT_EXAMPLE_PHOTOS),
     isActive: variant.isActive !== false,
     stats: typeof variant.stats === "object" && variant.stats ? variant.stats : { clicks: 0, generations: 0, purchases: 0 },
   };
@@ -2402,8 +2453,11 @@ function normalizeDynamicStyleSeries(item = {}, key = "") {
     price: Number(item.price || item.pricePromti || 1),
     isActive: item.isActive !== false,
     isTrending: Boolean(item.isTrending),
-    previewImage: item.previewImage || item.previewPhoto || null,
-    exampleImages: rawExampleImages.filter(Boolean).slice(0, MAX_PROMPT_EXAMPLE_PHOTOS),
+    previewImage: normalizeMediaReference(item.previewImage || item.previewPhoto) || null,
+    exampleImages: rawExampleImages
+      .map((entry) => normalizeMediaReference(entry))
+      .filter(Boolean)
+      .slice(0, MAX_PROMPT_EXAMPLE_PHOTOS),
     templatePrompt: item.templatePrompt || item.template || "",
     variants: Array.isArray(item.variants) ? item.variants.map((variant, index) => normalizeDynamicVariant(seriesId, variant, index)) : [],
     stats: typeof item.stats === "object" && item.stats ? item.stats : { clicks: 0, generations: 0, purchases: 0 },
@@ -3496,6 +3550,21 @@ async function getTelegramFileStream(fileId) {
 
   const url = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
   return axios.get(url, { responseType: "stream", timeout: 30000 });
+}
+
+async function getAdminMediaStream(ref) {
+  const raw = normalizeMediaReference(ref);
+  if (!raw) throw new Error("MISSING_MEDIA_REF");
+  if (!process.env.BOT_TOKEN) throw new Error("BOT_TOKEN_NOT_CONFIGURED");
+
+  const telegramFileUrlMatch = raw.match(/^https?:\/\/api\.telegram\.org\/file\/bot[^/]+\/(.+)$/i);
+  if (telegramFileUrlMatch) {
+    const filePath = telegramFileUrlMatch[1];
+    const url = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${filePath}`;
+    return axios.get(url, { responseType: "stream", timeout: 30000 });
+  }
+
+  return getTelegramFileStream(raw);
 }
 
 async function tgSendWithRetry(fn, maxRetries = 3) {
@@ -7765,7 +7834,7 @@ app.post("/api/admin/upload-image",
 );
 app.get("/api/admin/media", requireAdminAuth, async (req, res) => {
   try {
-    const upstream = await getTelegramFileStream(req.query?.ref);
+    const upstream = await getAdminMediaStream(req.query?.ref);
     res.setHeader("Content-Type", upstream.headers["content-type"] || "image/jpeg");
     res.setHeader("Cache-Control", "private, max-age=3600");
     upstream.data.on("error", (error) => {
@@ -7788,7 +7857,7 @@ function toAdminBool(value, fallback = true) {
 function safeAdminArray(value) {
   if (Array.isArray(value)) {
     return value
-      .map((item) => String(item || "").trim())
+      .map((item) => normalizeMediaReference(item))
       .filter(Boolean)
       .slice(0, MAX_PROMPT_EXAMPLE_PHOTOS);
   }

@@ -503,10 +503,50 @@
         .replace(/'/g, "&#39;");
     }
 
+    function extractImageRef(value = "") {
+      if (!value) return "";
+      if (typeof value === "string") return value.trim();
+      if (Array.isArray(value)) {
+        for (let index = value.length - 1; index >= 0; index -= 1) {
+          const extracted = extractImageRef(value[index]);
+          if (extracted) return extracted;
+        }
+        return "";
+      }
+      if (typeof value === "object") {
+        const fields = [
+          "url",
+          "imageUrl",
+          "image_url",
+          "src",
+          "href",
+          "media",
+          "photo",
+          "file",
+          "fileId",
+          "file_id",
+          "fileID",
+          "telegramFileId",
+          "telegram_file_id",
+          "previewImage",
+          "previewPhoto",
+          "path",
+        ];
+        for (const field of fields) {
+          const extracted = extractImageRef(value[field]);
+          if (extracted) return extracted;
+        }
+      }
+      return "";
+    }
+
     function resolveAdminImageSrc(value = "") {
-      const raw = String(value || "").trim();
+      const raw = extractImageRef(value);
       if (!raw) return "";
       if (/^https?:/i.test(raw)) {
+        if (/^https?:\/\/api\.telegram\.org\/file\/bot/i.test(raw)) {
+          return `/api/admin/media?ref=${encodeURIComponent(raw)}`;
+        }
         try {
           const url = new URL(raw);
           if (url.pathname.startsWith("/uploads/")) return `${url.pathname}${url.search}${url.hash}`;
